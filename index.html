@@ -15,6 +15,7 @@
     <div class="container" style="max-width: 600px;">
         <h3 class="text-center mb-4">🔥 สั่งอาหารบุฟเฟต์</h3>
 
+        <!-- ส่วนที่ 1: ข้อมูลโต๊ะและแพ็กเกจ -->
         <div class="card p-3">
             <h5>1. ข้อมูลโต๊ะและแพ็กเกจ</h5>
             <div class="mb-3">
@@ -32,6 +33,7 @@
             </div>
         </div>
 
+        <!-- ส่วนที่ 2: เลือกเตาและน้ำซุป -->
         <div class="card p-3">
             <h5>2. เลือกเตาและน้ำซุป</h5>
             <div class="mb-3">
@@ -52,18 +54,21 @@
             </div>
         </div>
 
+        <!-- ส่วนที่ 3: รายการเมนูอาหาร -->
         <div class="card p-3">
             <h5>3. เลือกรายการอาหาร</h5>
             <div id="menuContainer" class="text-muted">กรุณาเลือกแพ็กเกจด้านบนก่อนเพื่อแสดงรายการอาหาร...</div>
         </div>
 
+        <!-- ปุ่มยืนยันคำสั่งซื้อ -->
         <button class="btn btn-danger w-100 py-3 fs-5 mb-5" onclick="submitOrder()">🚀 ยืนยันการสั่งอาหาร</button>
     </div>
 
     <script>
-        // 🔴 นำ Web App URL ของคุณที่ลงท้ายด้วย /exec มาใส่แทนที่ข้อความด้านล่างนี้
+        // 🔴 นำ Web App URL ที่ลงท้ายด้วย /exec ของคุณมาใส่ตรงนี้
         const API_URL = "https://script.google.com/macros/s/AKfycbw8evmdw3z6vEEchV71qHjUIeO37iyEWmjFDArfhNoiFvo9Yr8TeM-QY-oEszfoJuYt/exec";
 
+        // ฟังก์ชันดึงเมนู
         function loadMenu() {
             const packagePrice = document.getElementById("packageSelect").value;
             const menuContainer = document.getElementById("menuContainer");
@@ -71,24 +76,80 @@
             if (!packagePrice) return;
             menuContainer.innerHTML = "กำลังโหลดเมนู...";
 
-            // ส่งข้อมูลไปยัง Google Apps Script
             fetch(API_URL, {
                 method: "POST",
-                mode: "no-cors",
                 headers: { "Content-Type": "text/plain" },
                 body: JSON.stringify({ action: "getMenu", packagePrice: packagePrice })
             })
-            .then(() => {
-                alert("โหลดข้อมูลแพ็กเกจ " + packagePrice + " เรียบร้อย!");
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    if (data.menu.length === 0) {
+                        menuContainer.innerHTML = "ไม่พบรายการเมนูในแพ็กเกจนี้";
+                        return;
+                    }
+                    
+                    let html = '<div class="list-group">';
+                    data.menu.forEach(item => {
+                        html += `<div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${item.name}</strong><br>
+                                        <small class="text-muted">${item.category}</small>
+                                    </div>
+                                    <span>${item.price > 0 ? item.price + ' บาท' : 'รวมในแพ็กเกจ'}</span>
+                                 </div>`;
+                    });
+                    html += '</div>';
+                    menuContainer.innerHTML = html;
+                } else {
+                    menuContainer.innerHTML = "เกิดข้อผิดพลาดในการโหลดเมนู";
+                }
             })
             .catch(err => {
                 console.error(err);
-                menuContainer.innerHTML = "เกิดข้อผิดพลาดในการโหลดเมนู";
+                menuContainer.innerHTML = "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้";
             });
         }
 
+        // ฟังก์ชันส่งออเดอร์
         function submitOrder() {
-            alert("ฟังก์ชันบันทึกออเดอร์พร้อมใช้งานแล้ว!");
+            const tableNo = document.getElementById("tableNo").value;
+            const packageName = document.getElementById("packageSelect").value;
+            
+            if (!tableNo) {
+                alert("กรุณาระบุหมายเลขโต๊ะก่อนครับ");
+                return;
+            }
+            if (!packageName) {
+                alert("กรุณาเลือกแพ็กเกจก่อนครับ");
+                return;
+            }
+
+            const orderData = {
+                tableNo: tableNo,
+                packageName: packageName,
+                stoveSetup: document.getElementById("stoveSelect").value,
+                soupSetup: document.getElementById("soupSelect").value,
+                totalPrice: 0 
+            };
+
+            fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({ action: "saveOrder", orderData: orderData })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert("สั่งอาหารสำเร็จ! รหัสออเดอร์: " + data.orderId);
+                } else {
+                    alert("เกิดข้อผิดพลาดในการบันทึกออเดอร์");
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
+            });
         }
     </script>
 </body>
