@@ -1,67 +1,204 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>สั่งอาหารบุฟเฟต์</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding: 15px; font-family: sans-serif; }
-        .list-group-item { border-radius: 8px; margin-bottom: 5px; }
-    </style>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>สมัครสมาชิกบุฟเฟต์</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Sarabun', sans-serif; background: #f1f2f6; margin: 0; padding: 20px 15px; color: #2f3542; display: flex; justify-content: center; align-items: center; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
+    .card { background: white; padding: 30px 20px; border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.08); width: 100%; max-width: 380px; text-align: center; }
+    .profile-wrapper { position: relative; display: inline-block; margin-bottom: 12px; }
+    .profile-img { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; border: 3px solid #06C755; box-shadow: 0 4px 10px rgba(6, 199, 85, 0.2); }
+    h2 { margin: 5px 0; font-size: 20px; font-weight: 700; color: #2f3542; }
+    p.subtitle { color: #747d8c; font-size: 14px; margin: 0 0 20px 0; }
+    .form-group { text-align: left; margin-bottom: 15px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #57606f; margin-bottom: 5px; }
+    input { width: 100%; padding: 12px 15px; border: 1px solid #dfe4ea; border-radius: 10px; font-size: 15px; font-family: 'Sarabun', sans-serif; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+    input:focus { border-color: #06C755; box-shadow: 0 0 0 3px rgba(6, 199, 85, 0.15); }
+    .btn-submit { width: 100%; padding: 14px; background-color: #06C755; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; font-family: 'Sarabun', sans-serif; cursor: pointer; box-shadow: 0 4px 12px rgba(6, 199, 85, 0.3); transition: all 0.2s; margin-top: 10px; }
+    .btn-submit:active { transform: scale(0.98); }
+    .btn-submit:disabled { background-color: #ced6e0; box-shadow: none; cursor: not-allowed; }
+    #loadingState { padding: 20px 10px; }
+    .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #06C755; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .already-member { background: #e8faf0; border: 1px solid #06C755; border-radius: 12px; padding: 20px; margin-top: 10px; }
+    .points-badge { font-size: 28px; font-weight: 700; color: #06C755; margin: 10px 0; }
+  </style>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
-    <div class="container" style="max-width: 600px;">
-        <h3 class="text-center mb-4">🔥 เมนูบุฟเฟต์</h3>
-        
-        <div class="card p-3 mb-3">
-            <label class="form-label">เลือกแพ็กเกจ:</label>
-            <select id="packageSelect" class="form-select" onchange="loadMenu()">
-                <option value="" selected disabled>-- เลือกแพ็กเกจ --</option>
-                <option value="99">99 บาท</option>
-                <option value="119">119 บาท</option>
-                <option value="159">159 บาท</option>
-            </select>
-        </div>
 
-        <div id="menuContainer">เลือกแพ็กเกจเพื่อดูเมนู...</div>
+  <div class="card">
+    <div id="loadingState">
+      <div class="spinner"></div>
+      <p id="loadingText" style="color: #0984e3; margin: 0; font-weight: bold; font-size: 14px;">กำลังเตรียมระบบ...</p>
     </div>
 
-    <script>
-        // 🔴 อย่าลืมเปลี่ยนเป็นลิงก์ของคุณที่ลงท้ายด้วย /exec
-        const API_URL = "https://script.google.com/macros/s/AKfycbw8evmdw3z6vEEchV71qHjUIeO37iyEWmjFDArfhNoiFvo9Yr8TeM-QY-oEszfoJuYt/exec";
+    <div id="registerForm" style="display: none;">
+      <div class="profile-wrapper">
+        <img id="profileImage" class="profile-img" src="" alt="Profile">
+      </div>
+      <h2 id="displayName">คุณ...</h2>
+      <p class="subtitle">สมัครสมาชิกเพื่อเข้าสู่ระบบสั่งอาหาร</p>
+      <div class="form-group">
+        <label for="phone">เบอร์โทรศัพท์ (10 หลัก)</label>
+        <input type="tel" id="phone" placeholder="08X-XXX-XXXX" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+      </div>
+      <div class="form-group">
+        <label for="name">ชื่อ-นามสกุล / ชื่อเล่น</label>
+        <input type="text" id="name" placeholder="ระบุชื่อของคุณ">
+      </div>
+      <button type="button" id="btnSubmit" class="btn-submit" onclick="window.submitRegister()">สมัครสมาชิก</button>
+    </div>
 
-        function loadMenu() {
-            const packagePrice = document.getElementById("packageSelect").value;
-            const container = document.getElementById("menuContainer");
-            container.innerHTML = "กำลังดึงข้อมูลจาก Google Sheets...";
+    <div id="alreadyMemberState" style="display: none;">
+      <div class="profile-wrapper">
+        <img id="memberProfileImage" class="profile-img" src="" alt="Profile">
+      </div>
+      <h2 id="memberDisplayName">คุณ...</h2>
+      <div class="already-member">
+        <span style="font-size: 14px; color: #2ed573; font-weight: 600;">✅ คุณเป็นสมาชิกอยู่แล้ว</span>
+        <div class="points-badge"><span id="userPoints">0</span> <span style="font-size: 16px; font-weight: normal;">แต้ม</span></div>
+        <p style="font-size: 12px; color: #57606f; margin: 0;">กำลังพาท่านเข้าสู่หน้าสั่งอาหาร...</p>
+      </div>
+      <button type="button" class="btn-submit" style="background:#ff4757; margin-top:20px;" onclick="window.goToCustomerPage()">ไปหน้าสั่งอาหาร</button>
+    </div>
+  </div>
 
-            fetch(API_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" }, // เปลี่ยนเป็น json
-                body: JSON.stringify({ action: "getMenu", packagePrice: packagePrice })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === "success") {
-                    let html = '<ul class="list-group">';
-                    data.menu.forEach(item => {
-                        html += `<li class="list-group-item">
-                                    <strong>${item.name}</strong><br>
-                                    <small class="text-muted">${item.category}</small>
-                                 </li>`;
-                    });
-                    html += '</ul>';
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = "ไม่พบข้อมูล: " + data.message;
-                }
-            })
-            .catch(err => {
-                container.innerHTML = "Error: ไม่สามารถเชื่อมต่อกับ Sheets ได้";
-                console.error(err);
-            });
+  <!-- เปลี่ยนเป็น module เพื่อใช้ Firebase -->
+  <script type="module">
+    // นำเข้า Firebase SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // กำหนดค่าคอนฟิกของ Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+      authDomain: "buffet-system-9b165.firebaseapp.com",
+      projectId: "buffet-system-9b165",
+      storageBucket: "buffet-system-9b165.firebasestorage.app",
+      messagingSenderId: "144497251618",
+      appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+      measurementId: "G-82JK3EL1HL"
+    };
+
+    // เริ่มต้นระบบ Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const LIFF_ID = "2011490016-dCbAfdtG"; 
+    let lineUID = "";
+    const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 24 24' fill='none' stroke='%23ced6e0' stroke-width='1.5'><circle cx='12' cy='8' r='4'/><path d='M20 21a8 8 0 0 0-16 0'/></svg>";
+
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzSlGSP_IGvT9QwssaDDr5-2ZZ_p20xdwk6NVi0W0N2IddxPkNEPDorLvaY8pu5Z4m8/exec"; 
+
+    // ใช้ window. เพื่อให้ปุ่มในหน้า HTML สามารถเรียกใช้งานได้
+    window.goToCustomerPage = function() {
+      window.location.replace(`${WEB_APP_URL}?page=customer&uid=${lineUID}`);
+    }
+
+    // ฟังก์ชันสำหรับกดปุ่มสมัครสมาชิก (เปลี่ยนมาใช้ Firestore)
+    window.submitRegister = async function() {
+      const phone = document.getElementById("phone").value;
+      const name = document.getElementById("name").value;
+      const btn = document.getElementById("btnSubmit");
+
+      if (phone.length !== 10) {
+        alert("กรุณาระบุเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+        return;
+      }
+      if (name.trim() === "") {
+        alert("กรุณาระบุชื่อของคุณ");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "กำลังบันทึกข้อมูล...";
+
+      try {
+        // บันทึกข้อมูลลง Firestore ในตาราง (collection) ชื่อ "members"
+        await setDoc(doc(db, "members", lineUID), {
+          userId: lineUID,
+          phone: phone,
+          name: name,
+          points: 0,
+          role: "member",
+          createdAt: serverTimestamp()
+        });
+        
+        alert("สมัครสมาชิกสำเร็จ! กำลังพาท่านเข้าสู่ระบบสั่งอาหาร");
+        window.goToCustomerPage();
+      } catch (err) {
+        console.error("Firebase Error:", err);
+        alert("เกิดข้อผิดพลาดในการเชื่อมต่อ: " + err.message);
+        btn.disabled = false;
+        btn.innerText = "สมัครสมาชิก";
+      }
+    }
+
+    async function main() {
+      const stepLog = document.getElementById("loadingText");
+      
+      const liffTimeout = setTimeout(() => {
+        document.getElementById("loadingState").innerHTML = 
+          `<h4 style='color:#ff4757; margin-top:0;'>⚠️ หมดเวลาเชื่อมต่อ</h4>
+           <p style='font-size:13px; color:#57606f;'>โค้ดค้างอยู่ที่: <span style="color:red">${stepLog.innerText}</span><br>โปรดนำลิงก์ Web App ไปอัปเดตใน LINE Developers</p>`;
+      }, 7000);
+
+      try {
+        stepLog.innerText = "Step 1: กำลังเริ่มเชื่อมต่อ liff.init() ...";
+        await liff.init({ liffId: LIFF_ID });
+        clearTimeout(liffTimeout);
+
+        stepLog.innerText = "Step 2: เชื่อมต่อสำเร็จ กำลังเช็คล็อกอิน...";
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
         }
-    </script>
+
+        stepLog.innerText = "Step 3: กำลังดึงโปรไฟล์ LINE...";
+        const profile = await liff.getProfile();
+        lineUID = profile.userId;
+
+        const profilePic = profile.pictureUrl || DEFAULT_AVATAR;
+        document.getElementById("profileImage").src = profilePic;
+        document.getElementById("memberProfileImage").src = profilePic;
+        document.getElementById("displayName").innerText = profile.displayName;
+        document.getElementById("memberDisplayName").innerText = profile.displayName;
+        document.getElementById("name").value = profile.displayName;
+
+        stepLog.innerText = "Step 4: กำลังตรวจสอบฐานข้อมูล Firebase...";
+        
+        // ตรวจสอบข้อมูลสมาชิกจาก Firestore
+        const docRef = doc(db, "members", lineUID);
+        const docSnap = await getDoc(docRef);
+
+        document.getElementById("loadingState").style.display = "none";
+        
+        if (docSnap.exists()) {
+          const userData = docSnap.data();
+          document.getElementById("userPoints").innerText = userData.points || 0;
+          document.getElementById("alreadyMemberState").style.display = "block";
+          setTimeout(() => { window.goToCustomerPage(); }, 1500);
+        } else {
+          // ถ้าไม่มีข้อมูล ให้แสดงฟอร์มสมัคร
+          document.getElementById("registerForm").style.display = "block";
+        }
+
+      } catch (err) {
+        clearTimeout(liffTimeout);
+        stepLog.innerHTML = `<span style='color:red;'>ข้อผิดพลาด: ${err.message || err}</span>`;
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', main);
+  </script>
 </body>
 </html>
