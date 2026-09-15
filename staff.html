@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการพนักงาน - บุฟเฟต์</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .table-card { cursor: pointer; transition: 0.2s; }
+        .table-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .bg-free { background-color: #e8f5e9 !important; border-color: #c8e6c9 !important; }
+        .bg-active { background-color: #ffebee !important; border-color: #ffcdd2 !important; }
+        .bill-card { border: 1px solid #dee2e6; padding: 12px; border-radius: 8px; margin-bottom: 10px; background: #f8f9fa; }
+    </style>
+</head>
+<body class="container py-4">
+
+    <h3 class="text-center fw-bold mb-3 text-primary">👨‍🍳 ระบบจัดการพนักงาน / แคชเชียร์</h3>
+
+    <!-- แถบควบคุมกะ (Shift Control Bar) -->
+    <div class="card p-2 shadow-sm mb-4 bg-dark text-white rounded-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <span class="fw-bold me-2">🔑 สถานะกะ:</span>
+                <span id="shiftStatusText" class="badge bg-secondary">กำลังตรวจสอบ...</span>
+                <span id="shiftStaffText" class="ms-2 small text-info"></span>
+            </div>
+            <div class="d-flex gap-1 flex-wrap">
+                <button class="btn btn-sm btn-warning fw-bold" id="btnShiftAction" onclick="handleShiftAction()">เปิดกะ</button>
+                <button class="btn btn-sm btn-outline-light" onclick="openCashFlowModal()">💸 เงินเข้า-ออก</button>
+                <button class="btn btn-sm btn-outline-info" onclick="openBillHistoryModal()">📜 บิลย้อนหลัง</button>
+                <!-- ปุ่มระบบสะสมแต้ม (ใหม่) -->
+                <button class="btn btn-sm btn-success fw-bold text-white shadow-sm" onclick="openMemberModal()">🎁 สมาชิก/สะสมแต้ม</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ส่วนที่ 1: สถานะโต๊ะ -->
+    <div class="card p-3 shadow-sm mb-4 bg-white">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold m-0">📌 สถานะโต๊ะ</h5>
+            <div>
+                <button class="btn btn-sm btn-outline-danger me-1" onclick="changeTableCount(-1)">- โต๊ะ</button>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="changeTableCount(1)">+ โต๊ะ</button>
+                <button class="btn btn-sm btn-secondary" onclick="loadDashboard()">🔄 รีเฟรช</button>
+            </div>
+        </div>
+        <div id="tableGrid" class="row g-2"></div>
+    </div>
+
+    <!-- ส่วนที่ 2: เปิดโต๊ะใหม่ -->
+    <div class="card p-3 shadow-sm mb-4 bg-white">
+        <h5 class="fw-bold mb-3">🛎️ เปิดโต๊ะใหม่</h5>
+        <div class="row g-2">
+            <div class="col-12 col-md-3">
+                <label class="form-label small">เลขโต๊ะ:</label>
+                <input type="text" id="tNo" class="form-control form-control-sm" placeholder="เช่น 1, 2">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small">ผู้ใหญ่ (เต็มราคา):</label>
+                <input type="number" id="pplAdult" class="form-control form-control-sm" value="1" min="0">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small">เด็ก (ครึ่งราคา 50%):</label>
+                <input type="number" id="pplChild" class="form-control form-control-sm" value="0" min="0">
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label small">เลือกแพ็กเกจ:</label>
+                <select id="pkg" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-12 mt-2">
+                <button class="btn btn-success btn-sm w-100 fw-bold" onclick="openNewTable()">✅ เปิดโต๊ะ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ส่วนที่ 3: จัดการโต๊ะที่เลือก (สั่งอาหาร / คิดเงิน) -->
+    <div class="card p-3 shadow-sm mb-4 bg-white border-primary">
+        <h5 class="fw-bold text-primary mb-3">🛠️ จัดการโต๊ะที่เลือก</h5>
+        <input type="text" id="manageTNo" class="form-control mb-2 bg-light fw-bold text-center" readonly value="-- กรุณาคลิกเลือกโต๊ะจากผัง --">
+
+        <!-- ปุ่ม ย้ายโต๊ะ / ยกเลิกโต๊ะ -->
+        <div class="d-flex gap-2 mb-3">
+            <button class="btn btn-sm btn-outline-secondary flex-fill fw-bold" onclick="openMoveTableModal()">🔄 ย้ายโต๊ะ</button>
+            <button class="btn btn-sm btn-outline-danger flex-fill fw-bold" onclick="openVoidTableModal()">❌ ยกเลิกโต๊ะ</button>
+        </div>
+
+        <!-- เพิ่มลูกค้า -->
+        <div class="p-2 bg-light rounded border mb-3">
+            <h6 class="fw-bold small mb-2">👥 ลูกค้ามาเพิ่ม</h6>
+            <div class="input-group input-group-sm">
+                <input type="number" id="addPplAmount" class="form-control" value="1" min="1">
+                <span class="input-group-text">ท่าน</span>
+                <button class="btn btn-outline-secondary" onclick="addPerson()">บันทึกเพิ่มคน</button>
+            </div>
+        </div>
+
+        <!-- สั่งเพิ่มเตา / น้ำซุป -->
+        <div class="p-2 bg-light rounded border mb-3">
+            <h6 class="fw-bold small mb-2">🔥 สั่งเพิ่มเตา / น้ำซุป</h6>
+            <select id="stoveType" class="form-select form-select-sm mb-2" onchange="toggleSoup()">
+                <option value="">-- เลือกประเภทเตา --</option>
+                <option value="เตาหมูกระทะ|50">เตาหมูกระทะ (+50 บ.)</option>
+                <option value="หม้อชาบู|20">หม้อชาบู (+20 บ.)</option>
+            </select>
+            <div id="soupSection" style="display:none;">
+                <select id="soup1" class="form-select form-select-sm mb-1"></select>
+                <div id="soup2Div" style="display:none;">
+                    <select id="soup2" class="form-select form-select-sm mb-1"></select>
+                </div>
+            </div>
+            <button class="btn btn-warning btn-sm w-100 fw-bold mt-2" onclick="orderStove()">🔥 ส่งรายการเตา/ซุป เข้าครัว</button>
+        </div>
+
+        <!-- สั่งอาหาร -->
+        <div class="p-2 bg-light rounded border mb-3">
+            <h6 class="fw-bold small mb-2">🍲 สั่งอาหาร / บริการเสริม</h6>
+            <select id="menuCategory" class="form-select form-select-sm mb-2" onchange="renderMenuGrid()">
+                <option value="all">-- รวมทุกหมวดหมู่ --</option>
+            </select>
+            <div id="menuGrid" class="row g-2 mb-2" style="max-height: 250px; overflow-y: auto;"></div>
+            <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="submitOrder()">📤 ส่งรายการเข้าครัว</button>
+        </div>
+
+        <!-- ปุ่มสรุปยอดบิล -->
+        <button class="btn btn-warning w-100 fw-bold text-dark" onclick="checkBill()">🧾 สรุปยอดบิล / ชำระเงิน</button>
+        <div id="resultArea"></div>
+    </div>
+
+    <!-- ---------------------------------------------------- -->
+    <!-- ส่วนของ Modal ต่างๆ -->
+    <!-- ---------------------------------------------------- -->
+
+    <!-- Modal: ระบบสมาชิกและสะสมแต้ม (ส่วนที่เพิ่มใหม่) -->
+    <div class="modal fade" id="memberPointsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold">🎁 ระบบสมาชิก & สะสมแต้ม</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">เบอร์โทรศัพท์ลูกค้า:</label>
+                        <div class="input-group input-group-sm">
+                            <input type="tel" id="memberPhone" class="form-control" placeholder="08XXXXXXXX" maxlength="10">
+                            <button class="btn btn-primary" onclick="searchMember()">🔍 ค้นหา</button>
+                        </div>
+                    </div>
+
+                    <!-- พื้นที่แสดงข้อมูลสมาชิก -->
+                    <div id="memberInfoSection" class="p-3 bg-light border rounded mb-2" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small text-muted">ชื่อลูกค้า:</span>
+                            <strong id="memberName" class="text-dark">-</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="small text-muted">แต้มสะสมที่มี:</span>
+                            <strong id="memberPoints" class="fs-5 text-danger">0</strong>
+                        </div>
+                        
+                        <hr class="my-2">
+                        
+                        <h6 class="fw-bold small text-success mt-2">➕ สะสมแต้มใหม่</h6>
+                        <div class="row g-2 mb-3">
+                            <div class="col-7">
+                                <input type="number" id="billAmountForPoints" class="form-control form-control-sm" placeholder="ยอดบิล (บาท)" oninput="calcPointsEarned()">
+                            </div>
+                            <div class="col-5">
+                                <div class="input-group input-group-sm">
+                                    <input type="number" id="pointsToEarn" class="form-control text-center fw-bold text-success bg-white" value="0" readonly>
+                                    <span class="input-group-text">แต้ม</span>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-sm btn-outline-success w-100 fw-bold" onclick="addMemberPoints()">บันทึกรับแต้ม</button>
+                            </div>
+                        </div>
+
+                        <hr class="my-2">
+
+                        <h6 class="fw-bold small text-warning mt-2">⭐ แลกแต้มเป็นส่วนลด</h6>
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <input type="number" id="pointsToRedeem" class="form-control form-control-sm" placeholder="จำนวนแต้มที่ใช้">
+                            </div>
+                            <div class="col-5">
+                                <button class="btn btn-sm btn-warning w-100 fw-bold" onclick="redeemMemberPoints()">ยืนยันแลกแต้ม</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: เปิดกะ -->
+    <div class="modal fade" id="openShiftModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold">🟢 เปิดกะทำงานใหม่</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">ชื่อพนักงานเปิดกะ:</label>
+                        <input type="text" id="shiftStaffInput" class="form-control form-control-sm" placeholder="ระบุชื่อของคุณ">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">เงินทอนเริ่มต้นในลิ้นชัก (บาท):</label>
+                        <input type="number" id="shiftStartingCashInput" class="form-control form-control-sm" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="button" class="btn btn-success btn-sm fw-bold" onclick="confirmOpenShift()">เปิดกะ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: ปิดกะ -->
+    <div class="modal fade" id="closeShiftModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold">🔴 ปิดกะการทำงาน</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning py-2 small">
+                        กรุณานับเงินสดจริงทั้งหมดที่มีอยู่ในลิ้นชัก ณ ตอนนี้ แล้วระบุลงในช่องด้านล่าง
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">เงินสดในลิ้นชักที่นับได้จริง (บาท):</label>
+                        <input type="number" id="actualCashInput" class="form-control form-control-sm" placeholder="0.00">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="button" class="btn btn-danger btn-sm fw-bold" onclick="confirmCloseShift()">ยืนยันปิดกะ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: บันทึกเงินเข้า-ออก (Petty Cash) -->
+    <div class="modal fade" id="cashFlowModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title fw-bold">💸 บันทึกเงินเข้า - เงินออก</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">ประเภทรายการ:</label>
+                        <select id="cfType" class="form-select form-select-sm">
+                            <option value="เงินออก">เงินออก (จ่ายค่าน้ำแข็ง / ของสดเติมด่วน)</option>
+                            <option value="เงินเข้า">เงินเข้า (เติมเงินทอน / อื่นๆ)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">จำนวนเงิน (บาท):</label>
+                        <input type="number" id="cfAmount" class="form-control form-control-sm" placeholder="0.00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">หมายเหตุ / เหตุผล:</label>
+                        <input type="text" id="cfNote" class="form-control form-control-sm" placeholder="เช่น ซื้อน้ำแข็งเพิ่ม">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="button" class="btn btn-info text-white btn-sm fw-bold" onclick="confirmCashFlow()">บันทึก</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: ย้ายโต๊ะ -->
+    <div class="modal fade" id="moveTableModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title fw-bold">🔄 ย้ายโต๊ะ</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">โต๊ะปัจจุบัน:</label>
+                        <input type="text" id="moveOldTable" class="form-control form-control-sm bg-light" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">ย้ายไปโต๊ะใหม่:</label>
+                        <input type="text" id="moveNewTable" class="form-control form-control-sm" placeholder="ระบุเลขโต๊ะปลายทาง">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="confirmMoveTable()">ยืนยันย้ายโต๊ะ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: ยกเลิกโต๊ะ -->
+    <div class="modal fade" id="voidTableModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold">❌ ยกเลิกโต๊ะ (Void)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">เหตุผลที่ยกเลิก:</label>
+                        <input type="text" id="voidReason" class="form-control form-control-sm" placeholder="เช่น ลูกค้าคิวยาว ย้ายร้าน">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ปิด</button>
+                    <button type="button" class="btn btn-danger btn-sm fw-bold" onclick="confirmVoidTable()">ยืนยันยกเลิกโต๊ะ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: ประวัติบิลประจำกะ -->
+    <div class="modal fade" id="billHistoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold">📜 ประวัติบิลที่ชำระแล้ว (กะปัจจุบัน)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped small align-middle">
+                            <thead>
+                                <tr>
+                                    <th>เวลา</th>
+                                    <th>โต๊ะ</th>
+                                    <th>รายละเอียด</th>
+                                    <th>ช่องทาง</th>
+                                    <th class="text-end">ยอดเงิน</th>
+                                </tr>
+                            </thead>
+                            <tbody id="billHistoryTbody">
+                                <tr><td colspan="5" class="text-center">กำลังโหลดข้อมูล...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: แยกชำระเงิน -->
+    <div class="modal fade" id="splitBillModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">💳 แยกชำระเงิน (โต๊ะ <span id="splitTableNo">-</span>)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info text-center py-2 mb-3">
+                        <strong style="font-size: 16px;">ยอดรวมทั้งสิ้น: <span id="splitTotalAmount" class="text-danger fw-bold">0</span> บาท</strong>
+                    </div>
+
+                    <div id="billListContainer"></div>
+
+                    <button type="button" class="btn btn-outline-primary btn-sm w-100 mb-3 fw-bold" onclick="addBillRow()">
+                        + เพิ่มรายการบิลย่อย
+                    </button>
+
+                    <div class="p-2 border rounded bg-light mb-3 small">
+                        <div class="d-flex justify-content-between">
+                            <span>รวมยอดแยกชำระ:</span>
+                            <span id="sumSplitAmount" class="fw-bold">0 บาท</span>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <span>คงเหลือที่ต้องจัดสรร:</span>
+                            <span id="remainingAmount" class="fw-bold text-danger">0 บาท</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="button" class="btn btn-success btn-sm fw-bold" onclick="confirmSplitPayment()">✅ บันทึกการชำระเงิน</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Firebase JS SDK (วางส่วนนี้ไว้ก่อนสคริปต์ควบคุม หากยังไม่ได้ใส่) -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+<script>
+    // Config Firebase ของคุณ (นำมาจาก Firebase Console -> Project Settings)
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Firebase
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    // ตัวแปร Global
+    var currentTableCount = 10;
+    var currentPackageMap = {};
+    var globalMenus = []; 
+    var currentPkgPrice = ""; 
+    var totalTableAmount = 0;
+    var billCounter = 0;
+    
+    // ตัวแปร Modals
+    var currentShift = null; 
+    var splitModalObj = null;
+    var openShiftModalObj = null;
+    var closeShiftModalObj = null;
+    var cashFlowModalObj = null;
+    var moveTableModalObj = null;
+    var voidTableModalObj = null;
+    var billHistoryModalObj = null;
+    var memberPointsModalObj = null;
+
+    window.onload = function() {
+        splitModalObj = new bootstrap.Modal(document.getElementById('splitBillModal'));
+        openShiftModalObj = new bootstrap.Modal(document.getElementById('openShiftModal'));
+        closeShiftModalObj = new bootstrap.Modal(document.getElementById('closeShiftModal'));
+        cashFlowModalObj = new bootstrap.Modal(document.getElementById('cashFlowModal'));
+        moveTableModalObj = new bootstrap.Modal(document.getElementById('moveTableModal'));
+        voidTableModalObj = new bootstrap.Modal(document.getElementById('voidTableModal'));
+        billHistoryModalObj = new bootstrap.Modal(document.getElementById('billHistoryModal'));
+        memberPointsModalObj = new bootstrap.Modal(document.getElementById('memberPointsModal'));
+
+        checkCurrentShift();
+        loadTableCount();
+        loadPackages();
+        loadSoupList();
+        fetchMenuList();
+    };
+
+    /* ---------------------------------------------------- */
+    /* --- ฟังก์ชันระบบสมาชิก & สะสมแต้ม (Firestore) ------- */
+    /* ---------------------------------------------------- */
+    function openMemberModal() {
+        document.getElementById('memberPhone').value = "";
+        document.getElementById('memberInfoSection').style.display = "none";
+        document.getElementById('billAmountForPoints').value = "";
+        document.getElementById('pointsToEarn').value = "0";
+        document.getElementById('pointsToRedeem').value = "";
+        memberPointsModalObj.show();
+    }
+
+    async function searchMember() {
+        var phone = document.getElementById('memberPhone').value.trim();
+        if (phone.length < 9) return alert("กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง");
+
+        document.getElementById('memberInfoSection').style.display = "block";
+        document.getElementById('memberName').innerText = "กำลังค้นหา...";
+        document.getElementById('memberPoints').innerText = "-";
+
+        try {
+            const docRef = await db.collection("members").doc(phone).get();
+            if (docRef.exists) {
+                const member = docRef.data();
+                document.getElementById('memberName').innerText = member.name;
+                document.getElementById('memberPoints').innerText = member.points || 0;
+            } else {
+                if (confirm("ไม่พบเบอร์ลูกค้านี้ในระบบ ต้องการสมัครสมาชิกใหม่หรือไม่?")) {
+                    var newName = prompt("กรุณาระบุชื่อลูกค้าใหม่:");
+                    if (newName) {
+                        registerNewMember(phone, newName);
+                    } else {
+                        document.getElementById('memberInfoSection').style.display = "none";
+                    }
+                } else {
+                    document.getElementById('memberInfoSection').style.display = "none";
+                }
+            }
+        } catch (err) {
+            alert("เกิดข้อผิดพลาดในการค้นหา: " + err.message);
+        }
+    }
+
+    async function registerNewMember(phone, name) {
+        try {
+            await db.collection("members").doc(phone).set({
+                phone: phone,
+                name: name,
+                points: 0,
+                status: "active",
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            alert("สมัครสมาชิกสำเร็จ!");
+            searchMember();
+        } catch (err) {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    function calcPointsEarned() {
+        var amount = parseFloat(document.getElementById('billAmountForPoints').value) || 0;
+        var points = Math.floor(amount / 100); 
+        document.getElementById('pointsToEarn').value = points;
+    }
+
+    async function addMemberPoints() {
+        var phone = document.getElementById('memberPhone').value.trim();
+        var points = parseInt(document.getElementById('pointsToEarn').value) || 0;
+        
+        if (points <= 0) return alert("ไม่มียอดแต้มให้บันทึก (ยอดบิลต้องถึงเกณฑ์)");
+        
+        try {
+            await db.collection("members").doc(phone).update({
+                points: firebase.firestore.FieldValue.increment(points),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            alert("✅ บันทึกสะสมแต้มสำเร็จ!");
+            document.getElementById('billAmountForPoints').value = "";
+            document.getElementById('pointsToEarn').value = "0";
+            searchMember();
+        } catch (err) {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    async function redeemMemberPoints() {
+        var phone = document.getElementById('memberPhone').value.trim();
+        var redeem = parseInt(document.getElementById('pointsToRedeem').value) || 0;
+        var current = parseInt(document.getElementById('memberPoints').innerText) || 0;
+
+        if (redeem <= 0) return alert("กรุณาระบุจำนวนแต้มที่ต้องการแลก");
+        if (redeem > current) return alert("แต้มสะสมของลูกค้าไม่เพียงพอ!");
+
+        if (confirm("ยืนยันการใช้แต้ม " + redeem + " แต้ม?")) {
+            try {
+                await db.collection("members").doc(phone).update({
+                    points: firebase.firestore.FieldValue.increment(-redeem),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                alert("✅ หักแต้มเรียบร้อยแล้ว!");
+                document.getElementById('pointsToRedeem').value = "";
+                searchMember();
+            } catch (err) {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            }
+        }
+    }
+
+    /* ---------------------------------------------------- */
+    /* --- ระบบกะ (Shift Control) ----------------------- */
+    /* ---------------------------------------------------- */
+    async function checkCurrentShift() {
+        try {
+            const snapshot = await db.collection("shifts").where("status", "==", "open").limit(1).get();
+            var statusTxt = document.getElementById('shiftStatusText');
+            var staffTxt = document.getElementById('shiftStaffText');
+            var btnAction = document.getElementById('btnShiftAction');
+
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0];
+                currentShift = { shiftId: doc.id, ...doc.data() };
+                statusTxt.className = "badge bg-success";
+                statusTxt.innerText = "กำลังเปิดกะ (" + currentShift.shiftId + ")";
+                staffTxt.innerText = "พนักงาน: " + currentShift.staffName;
+                btnAction.className = "btn btn-sm btn-danger fw-bold";
+                btnAction.innerText = "ปิดกะ";
+            } else {
+                currentShift = null;
+                statusTxt.className = "badge bg-secondary";
+                statusTxt.innerText = "ยังไม่เปิดกะ";
+                staffTxt.innerText = "";
+                btnAction.className = "btn btn-sm btn-warning fw-bold";
+                btnAction.innerText = "เปิดกะ";
+            }
+        } catch (err) {
+            console.error("Shift error:", err);
+        }
+    }
+
+    function handleShiftAction() {
+        if (currentShift) {
+            closeShiftModalObj.show();
+        } else {
+            openShiftModalObj.show();
+        }
+    }
+
+    async function confirmOpenShift() {
+        var staff = document.getElementById('shiftStaffInput').value.trim();
+        var startCash = parseFloat(document.getElementById('shiftStartingCashInput').value) || 0;
+        if (!staff) return alert("กรุณาระบุชื่อพนักงานเปิดกะ");
+
+        var shiftId = "SHIFT_" + Date.now();
+        try {
+            await db.collection("shifts").doc(shiftId).set({
+                shiftId: shiftId,
+                staffName: staff,
+                startingCash: startCash,
+                status: "open",
+                openedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            alert("🟢 เปิดกะสำเร็จ!");
+            openShiftModalObj.hide();
+            checkCurrentShift();
+        } catch (err) {
+            alert("❌ เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    async function confirmCloseShift() {
+        var actualCash = parseFloat(document.getElementById('actualCashInput').value);
+        if (isNaN(actualCash)) return alert("กรุณาระบุเงินสดจริงในลิ้นชัก");
+
+        try {
+            await db.collection("shifts").doc(currentShift.shiftId).update({
+                actualCash: actualCash,
+                status: "closed",
+                closedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            alert("🔴 ปิดกะเรียบร้อยแล้ว!");
+            closeShiftModalObj.hide();
+            checkCurrentShift();
+        } catch (err) {
+            alert("❌ เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    /* ---------------------------------------------------- */
+    /* --- ระบบเงินเข้า-ออก (Petty Cash) ------------------ */
+    /* ---------------------------------------------------- */
+    function openCashFlowModal() {
+        if (!currentShift) return alert("กรุณาเปิดกะการทำงานก่อนครับ");
+        cashFlowModalObj.show();
+    }
+
+    async function confirmCashFlow() {
+        var type = document.getElementById('cfType').value;
+        var amount = parseFloat(document.getElementById('cfAmount').value) || 0;
+        var note = document.getElementById('cfNote').value.trim();
+
+        if (amount <= 0) return alert("กรุณาระบุจำนวนเงินให้ถูกต้อง");
+
+        try {
+            await db.collection("cash_flows").add({
+                shiftId: currentShift.shiftId,
+                type: type,
+                amount: amount,
+                note: note,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            alert("✅ บันทึกรายการเงินเข้า-ออก เรียบร้อย!");
+            document.getElementById('cfAmount').value = "";
+            document.getElementById('cfNote').value = "";
+            cashFlowModalObj.hide();
+        } catch (err) {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    /* ---------------------------------------------------- */
+    /* --- ระบบประวัติบิลย้อนหลัง -------------------------- */
+    /* ---------------------------------------------------- */
+    async function openBillHistoryModal() {
+        if (!currentShift) return alert("กรุณาเปิดกะก่อนดูประวัติบิลครับ");
+        document.getElementById('billHistoryTbody').innerHTML = '<tr><td colspan="5" class="text-center">กำลังโหลดข้อมูล...</td></tr>';
+        billHistoryModalObj.show();
+
+        try {
+            const snapshot = await db.collection("checkouts")
+                .where("shiftId", "==", currentShift.shiftId)
+                .orderBy("timestamp", "desc")
+                .get();
+
+            var tbody = document.getElementById('billHistoryTbody');
+            if (snapshot.empty) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ยังไม่มีประวัติการชำระเงินในกะนี้</td></tr>';
+                return;
+            }
+
+            var html = "";
+            snapshot.forEach(doc => {
+                var item = doc.data();
+                var timeStr = item.timestamp ? new Date(item.timestamp.toDate()).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : "-";
+                html += '<tr>' +
+                            '<td>' + timeStr + '</td>' +
+                            '<td class="fw-bold">โต๊ะ ' + item.tableNo + '</td>' +
+                            '<td>' + (item.details || "ชำระเงินค่าอาหาร") + '</td>' +
+                            '<td><span class="badge ' + (item.payType === 'เงินสด' ? 'bg-success' : 'bg-primary') + '">' + item.payType + '</span></td>' +
+                            '<td class="text-end fw-bold text-danger">' + (item.netTotal || item.total || 0).toLocaleString() + ' บ.</td>' +
+                        '</tr>';
+            });
+            tbody.innerHTML = html;
+        } catch (err) {
+            document.getElementById('billHistoryTbody').innerHTML = '<tr><td colspan="5" class="text-center text-danger">เกิดข้อผิดพลาด: ' + err.message + '</td></tr>';
+        }
+    }
+
+    /* ---------------------------------------------------- */
+    /* --- ระบบจัดการโต๊ะ & ออเดอร์ (Firestore) ------------ */
+    /* ---------------------------------------------------- */
+    async function openNewTable() {
+        var tNo = document.getElementById('tNo').value.trim();
+        var pplAdult = parseInt(document.getElementById('pplAdult').value) || 0;
+        var pplChild = parseInt(document.getElementById('pplChild').value) || 0;
+        var pkgPrice = parseFloat(document.getElementById('pkg').value) || 0;
+        
+        if(!tNo) return alert("กรุณาระบุเลขโต๊ะ");
+        if(pplAdult + pplChild <= 0) return alert("กรุณาระบุจำนวนลูกค้าอย่างน้อย 1 ท่าน");
+
+        var childPrice = pkgPrice / 2;
+        var totalAmount = (pplAdult * pkgPrice) + (pplChild * childPrice);
+        var detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + pplAdult + " ท่าน, เด็ก " + pplChild + " ท่าน - แพ็กเกจ " + pkgPrice + " บ.)";
+
+        try {
+            await db.collection("tables").doc(tNo).set({
+                tableNo: tNo,
+                status: "ไม่ว่าง",
+                packagePrice: pkgPrice
+            }, { merge: true });
+
+            await db.collection("tables").doc(tNo).collection("orders").add({
+                action: "เปิดโต๊ะ",
+                details: detailText,
+                amount: totalAmount,
+                kitchenStatus: "-",
+                shiftId: currentShift ? currentShift.shiftId : "",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            alert("✅ เปิดโต๊ะ " + tNo + " สำเร็จ!");
+            loadDashboard();
+            selectTable(tNo);
+        } catch (err) {
+            alert("❌ " + err.message);
+        }
+    }
+
+    async function recordAction(data) {
+        try {
+            await db.collection("tables").doc(data.tableNo).collection("orders").add({
+                action: data.action,
+                details: data.details,
+                amount: data.amount,
+                kitchenStatus: data.toKitchen ? "เตรียม" : "-",
+                shiftId: data.shiftId,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            return { status: "success" };
+        } catch (err) {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    async function confirmMoveTable() {
+        var oldTable = document.getElementById('moveOldTable').value;
+        var newTable = document.getElementById('moveNewTable').value.trim();
+        if(!newTable) return alert("กรุณาระบุเลขโต๊ะใหม่");
+
+        try {
+            const oldTableDoc = await db.collection("tables").doc(oldTable).get();
+            if (!oldTableDoc.exists) return alert("ไม่พบข้อมูลโต๊ะเดิม");
+
+            const ordersSnapshot = await db.collection("tables").doc(oldTable).collection("orders").get();
+            
+            // ย้ายข้อมูลไปโต๊ะใหม่
+            await db.collection("tables").doc(newTable).set(oldTableDoc.data());
+            await db.collection("tables").doc(newTable).update({ tableNo: newTable, status: "ไม่ว่าง" });
+
+            const batch = db.batch();
+            ordersSnapshot.forEach(doc => {
+                const newOrderRef = db.collection("tables").doc(newTable).collection("orders").doc(doc.id);
+                batch.set(newOrderRef, doc.data());
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            // คืนค่าโต๊ะเดิมเป็นว่าง
+            await db.collection("tables").doc(oldTable).update({ status: "ว่าง" });
+
+            alert("✅ ย้ายโต๊ะสำเร็จ!");
+            moveTableModalObj.hide();
+            loadDashboard();
+            selectTable(newTable);
+        } catch (err) {
+            alert("เกิดข้อผิดพลาดในการย้ายโต๊ะ: " + err.message);
+        }
+    }
+
+    async function confirmVoidTable() {
+        var tNo = getActiveTable();
+        var reason = document.getElementById('voidReason').value.trim();
+        var staffName = currentShift ? currentShift.staffName : "พนักงาน";
+
+        if(!reason) return alert("กรุณาระบุเหตุผลในการยกเลิกโต๊ะ");
+
+        try {
+            // ลบรายการออเดอร์ในโต๊ะ
+            const ordersSnapshot = await db.collection("tables").doc(tNo).collection("orders").get();
+            const batch = db.batch();
+            ordersSnapshot.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+
+            // ปรับสถานะโต๊ะเป็นว่าง
+            await db.collection("tables").doc(tNo).update({ status: "ว่าง" });
+
+            // บันทึก Log การ Void โต๊ะ
+            await db.collection("void_logs").add({
+                tableNo: tNo,
+                reason: reason,
+                staffName: staffName,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            alert("✅ ยกเลิกโต๊ะเรียบร้อยแล้ว");
+            voidTableModalObj.hide();
+            document.getElementById('resultArea').innerHTML = "";
+            document.getElementById('manageTNo').value = "-- กรุณาคลิกเลือกโต๊ะจากผัง --";
+            document.getElementById('manageTNo').dataset.tno = "";
+            loadDashboard();
+        } catch (err) {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    /* ---------------------------------------------------- */
+    /* --- ฟังก์ชันโหลดข้อมูลทั่วไปจาก Firestore ---------- */
+    /* ---------------------------------------------------- */
+    async function fetchMenuList() {
+        try {
+            const snapshot = await db.collection("menu").get();
+            globalMenus = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                globalMenus.push({
+                    id: doc.id,
+                    name: data.name,
+                    price: parseFloat(data.price) || 0,
+                    category: data.category || "อื่นๆ",
+                    allowed: data.allowedPackage || ""
+                });
+            });
+        } catch (err) {
+            console.error("Error fetching menu:", err);
+        }
+    }
+
+    async function loadTableCount() {
+        try {
+            const doc = await db.collection("settings").doc("Table_Count").get();
+            if (doc.exists) {
+                currentTableCount = parseInt(doc.data().value) || 10;
+            }
+            loadDashboard();
+        } catch (err) {
+            console.error("Error loading table count:", err);
+        }
+    }
+
+    async function changeTableCount(delta) {
+        var newCount = currentTableCount + delta;
+        if(newCount < 1) return;
+        try {
+            await db.collection("settings").doc("Table_Count").set({
+                key: "Table_Count",
+                value: newCount.toString()
+            });
+            currentTableCount = newCount;
+            loadDashboard();
+        } catch (err) {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+
+    async function loadPackages() {
+        try {
+            const snapshot = await db.collection("packages").get();
+            var html = "";
+            snapshot.forEach(doc => {
+                const p = doc.data();
+                html += '<option value="' + p.price + '">' + p.name + ' (' + p.price + ' บ.)</option>';
+            });
+            document.getElementById('pkg').innerHTML = html;
+        } catch (err) {
+            console.error("Error loading packages:", err);
+        }
+    }
+
+    async function loadSoupList() {
+        try {
+            const snapshot = await db.collection("soups").get();
+            var html = "";
+            snapshot.forEach(doc => {
+                const s = doc.data();
+                var pText = s.price > 0 ? " (+" + s.price + " บ.)" : "";
+                html += '<option value="' + s.name + '|' + s.price + '">' + s.name + pText + '</option>';
+            });
+            document.getElementById('soup1').innerHTML = html;
+            document.getElementById('soup2').innerHTML = html;
+        } catch (err) {
+            console.error("Error loading soups:", err);
+        }
+    }
+
+    async function loadDashboard() {
+        try {
+            const snapshot = await db.collection("tables").get();
+            currentPackageMap = {};
+            var activeList = [];
+
+            snapshot.forEach(doc => {
+                const t = doc.data();
+                if (t.status === "ไม่ว่าง") {
+                    activeList.push(t.tableNo);
+                    currentPackageMap[t.tableNo] = t.packagePrice;
+                }
+            });
+
+            var grid = document.getElementById('tableGrid');
+            grid.innerHTML = "";
+            for(var i = 1; i <= currentTableCount; i++) {
+                var tNo = i.toString();
+                var isActive = activeList.includes(tNo);
+                var cardClass = isActive ? "bg-active text-danger" : "bg-free text-success";
+                var statusText = isActive ? "ไม่ว่าง" : "ว่าง";
+                grid.innerHTML += '<div class="col-3"><div class="card table-card text-center p-2 border ' + cardClass + '" onclick="selectTable(\'' + tNo + '\')"><div class="fw-bold">โต๊ะ ' + tNo + '</div><div style="font-size: 11px;">' + statusText + '</div></div></div>';
+            }
+        } catch (err) {
+            console.error("Error loading dashboard:", err);
+        }
+    }
+
+    function selectTable(tNo) {
+        document.getElementById('tNo').value = tNo;
+        document.getElementById('manageTNo').value = "จัดการโต๊ะ: " + tNo;
+        document.getElementById('manageTNo').dataset.tno = tNo;
+        document.getElementById('resultArea').innerHTML = ""; 
+        
+        currentPkgPrice = currentPackageMap[tNo] ? currentPackageMap[tNo].toString() : "";
+        prepareMenuCategories();
+    }
+
+    function prepareMenuCategories() {
+        var categories = [];
+        globalMenus.forEach(function(m) {
+            var allowed = m.allowed ? m.allowed.toString() : "";
+            if(!allowed || allowed.indexOf(currentPkgPrice) !== -1) {
+                var cat = m.category || "อื่นๆ";
+                if(categories.indexOf(cat) === -1) {
+                    categories.push(cat);
+                }
+            }
+        });
+        
+        var catHtml = '<option value="all">-- รวมทุกหมวดหมู่ --</option>';
+        categories.forEach(function(c) {
+            catHtml += '<option value="' + c + '">' + c + '</option>';
+        });
+        document.getElementById('menuCategory').innerHTML = catHtml;
+        renderMenuGrid();
+    }
+
+    function renderMenuGrid() {
+        var selectedCat = document.getElementById('menuCategory').value;
+        var html = "";
+        
+        globalMenus.forEach(function(m, index) {
+            var allowed = m.allowed ? m.allowed.toString() : "";
+            var cat = m.category || "อื่นๆ";
+            
+            if(!allowed || allowed.indexOf(currentPkgPrice) !== -1) {
+                if(selectedCat === "all" || selectedCat === cat) {
+                    var pText = m.price > 0 ? " <small class='text-danger'>(+" + m.price + "฿)</small>" : "";
+                    html += '<div class="col-12">' +
+                                '<div class="d-flex justify-content-between align-items-center p-2 border rounded bg-light">' +
+                                    '<div class="fw-bold text-truncate" style="font-size:14px; max-width: 60%;">' + m.name + pText + '</div>' +
+                                    '<div class="d-flex align-items-center" style="width: 100px;">' +
+                                        '<button class="btn btn-sm btn-outline-secondary px-2" onclick="changeQty(' + index + ', -1)">-</button>' +
+                                        '<input type="number" id="qty_' + index + '" class="form-control form-control-sm text-center mx-1 fw-bold text-primary" value="0" readonly>' +
+                                        '<button class="btn btn-sm btn-outline-secondary px-2" onclick="changeQty(' + index + ', 1)">+</button>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>';
+                }
+            }
+        });
+        document.getElementById('menuGrid').innerHTML = html;
+    }
+
+    function changeQty(index, delta) {
+        var input = document.getElementById('qty_' + index);
+        if(input) {
+            var newVal = parseInt(input.value) + delta;
+            if(newVal >= 0) input.value = newVal;
+        }
+    }
+
+    async function submitOrder() {
+        var tNo = getActiveTable();
+        if(!tNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
+        
+        var selectedItems = [];
+
+        globalMenus.forEach(function(m, index) {
+            var input = document.getElementById('qty_' + index);
+            if(input && parseInt(input.value) > 0) {
+                var qty = parseInt(input.value);
+                selectedItems.push({
+                    name: m.name,
+                    qty: qty,
+                    price: (m.price * qty) || 0
+                });
+                input.value = 0;
+            }
+        });
+
+        if(selectedItems.length === 0) return alert("กรุณาเลือกเมนูอย่างน้อย 1 รายการ โดยกดปุ่ม + ครับ");
+
+        var detailsArr = [];
+        var totalAmount = 0;
+
+        selectedItems.forEach(function(item) {
+            detailsArr.push(item.name + " (x" + item.qty + ")");
+            totalAmount += item.price;
+        });
+
+        var combinedDetails = detailsArr.join(", ");
+
+        var data = {
+            tableNo: tNo, 
+            action: "สั่งอาหาร",
+            details: combinedDetails,
+            amount: totalAmount,
+            toKitchen: true,
+            shiftId: currentShift ? currentShift.shiftId : ""
+        };
+
+        await recordAction(data);
+        alert("✅ ส่งรายการเข้าครัวเรียบร้อย!");
+        checkBill();
+    }
+
+    function getActiveTable() { 
+        return document.getElementById('manageTNo').dataset.tno || ""; 
+    }
+
+    async function addPerson() {
+        var tNo = getActiveTable();
+        if(!tNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
+        var ppl = parseInt(document.getElementById('addPplAmount').value) || 1;
+
+        var data = { 
+            tableNo: tNo, 
+            action: "เพิ่มลูกค้า", 
+            details: "เพิ่มลูกค้า " + ppl + " ท่าน", 
+            amount: 0, 
+            toKitchen: false,
+            shiftId: currentShift ? currentShift.shiftId : ""
+        };
+
+        await recordAction(data);
+        alert("✅ บันทึกเพิ่มคนสำเร็จ!");
+        checkBill();
+    }
+
+    function toggleSoup() {
+        var stove = document.getElementById('stoveType').value;
+        var section = document.getElementById('soupSection');
+        var soup2Div = document.getElementById('soup2Div');
+        if(!stove) return section.style.display = 'none';
+        section.style.display = 'block';
+        soup2Div.style.display = stove.includes("หม้อชาบู") ? 'block' : 'none';
+    }
+
+    async function orderStove() {
+        var tNo = getActiveTable();
+        if(!tNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
+        var stoveVal = document.getElementById('stoveType').value.split('|');
+        if(!stoveVal[0]) return alert("กรุณาเลือกเตา");
+        var s1 = document.getElementById('soup1').value.split('|');
+        var s2 = document.getElementById('soup2').value.split('|');
+        var totalSoup = parseFloat(s1[1]) || 0;
+        var detail = stoveVal[0] + " (" + s1[0];
+        if(stoveVal[0].includes("หม้อชาบู")) { detail += " + " + s2[0]; totalSoup += parseFloat(s2[1]) || 0; }
+        detail += ")";
+
+        var data = { 
+            tableNo: tNo, 
+            action: "สั่งเตา/ซุป", 
+            details: detail, 
+            amount: parseFloat(stoveVal[1]) + totalSoup, 
+            toKitchen: true,
+            shiftId: currentShift ? currentShift.shiftId : ""
+        };
+
+        await recordAction(data);
+        alert("✅ ส่งรายการเตา/ซุป เข้าครัวแล้ว!");
+        document.getElementById('stoveType').value = ""; 
+        toggleSoup();
+        checkBill();
+    }
+
+    /* ---------------------------------------------------- */
+    /* --- เช็กบิล & ชำระเงิน (Firestore) ------------------ */
+    /* ---------------------------------------------------- */
+    async function checkBill() {
+        var tNo = getActiveTable();
+        if(!tNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
+        
+        document.getElementById('resultArea').innerHTML = "<div class='text-center mt-3 text-secondary'>กำลังโหลดยอดบิล...</div>";
+
+        try {
+            const snapshot = await db.collection("tables").doc(tNo).collection("orders").get();
+            totalTableAmount = 0;
+            var history = [];
+
+            snapshot.forEach(doc => {
+                var item = doc.data();
+                item.docId = doc.id;
+                totalTableAmount += (item.amount || 0);
+                history.push(item);
+            });
+
+            var html = '<div class="card p-3 bg-white border shadow-sm mt-3">' +
+                       '<h5 class="text-danger fw-bold mb-3">🧾 ยอดรวมโต๊ะ ' + tNo + ': ' + totalTableAmount.toLocaleString() + ' บาท</h5>' +
+                       '<ul class="small ps-0 mb-3 list-unstyled">';
+            
+            history.forEach(function(item) {
+                var kBadge = item.kitchenStatus === "เตรียม" ? '<span class="badge bg-warning text-dark ms-1">เตรียม</span>' :
+                             item.kitchenStatus === "เสร็จ" ? '<span class="badge bg-success ms-1">เสร็จ</span>' : "";
+                
+                var detailText = item.details ? item.details.split('\n').join(', ') : "";
+                var safeDetailText = detailText.replace(/'/g, "\\'"); 
+                var docId = item.docId;
+
+                var actionBtns = 
+                    '<div class="text-nowrap ms-2">' +
+                        '<button onclick="promptEdit(\'' + docId + '\', \'' + safeDetailText + '\')" class="btn btn-sm btn-outline-primary py-0 px-2 me-1" title="แก้ไขรายละเอียด">✏️</button>' +
+                        '<button onclick="confirmDelete(\'' + docId + '\')" class="btn btn-sm btn-outline-danger py-0 px-2" title="ลบรายการนี้">🗑️</button>' +
+                    '</div>';
+
+                html += '<li class="bill-item d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">' +
+                            '<div><strong>' + item.action + '</strong> - ' + detailText + ' <span class="text-danger fw-bold">(' + item.amount + ' บ.)</span>' + kBadge + '</div>' +
+                            actionBtns +
+                        '</li>';
+            });
+
+            html += '</ul>' +
+                    '<div class="p-2 bg-light rounded border mb-1">' +
+                        '<h6 class="fw-bold mb-2">💳 ส่วนลด & ชำระเงิน</h6>' +
+                        
+                        '<div class="row g-2 mb-2">' +
+                            '<div class="col-6">' +
+                                '<label class="form-label small mb-0 fw-bold">ส่วนลด:</label>' +
+                                '<input type="number" id="discountVal" class="form-control form-control-sm" value="0" min="0" oninput="recalcNetTotal()" placeholder="ใส่ยอดลดจากแต้มได้">' +
+                            '</div>' +
+                            '<div class="col-6">' +
+                                '<label class="form-label small mb-0 fw-bold">ประเภทส่วนลด:</label>' +
+                                '<select id="discountType" class="form-select form-select-sm" onchange="recalcNetTotal()">' +
+                                    '<option value="บาท">บาท (฿)</option>' +
+                                    '<option value="%">เปอร์เซ็นต์ (%)</option>' +
+                                '</select>' +
+                            '</div>' +
+                        '</div>' +
+
+                        '<div class="alert alert-primary py-1 px-2 mb-2 d-flex justify-content-between align-items-center">' +
+                            '<span class="small fw-bold">ยอดสุทธิที่ต้องชำระ:</span>' +
+                            '<span id="netTotalTxt" class="fw-bold fs-6 text-danger">' + totalTableAmount.toLocaleString() + ' บาท</span>' +
+                        '</div>' +
+
+                        '<select id="payType" class="form-select form-select-sm mb-2" onchange="toggleCashInput()">' +
+                            '<option value="เงินโอน">เงินโอน / QR Code</option>' +
+                            '<option value="เงินสด">เงินสด</option>' +
+                        '</select>' +
+
+                        '<div id="cashDiv" style="display:none;" class="mb-2">' +
+                            '<input type="number" id="cashRec" class="form-control form-control-sm mb-1" placeholder="รับเงินมา (บาท)" oninput="calcChange()">' +
+                            '<div class="fw-bold text-success small" id="changeTxt">เงินทอน: 0 บาท</div>' +
+                        '</div>' +
+
+                        '<div class="d-flex gap-2">' +
+                            '<button onclick="payBill(\'' + tNo + '\')" class="btn btn-success flex-grow-1 btn-sm fw-bold">✅ ชำระเต็มจำนวน</button>' +
+                            '<button onclick="openSplitBillModal(\'' + tNo + '\', ' + totalTableAmount + ')" class="btn btn-primary btn-sm fw-bold">💳 แยกชำระเงิน</button>' +
+                        '</div>' +
+                    '</div></div>';
+            document.getElementById('resultArea').innerHTML = html;
+        } catch (err) {
+            document.getElementById('resultArea').innerHTML = "<div class='text-danger text-center'>เกิดข้อผิดพลาดในการเรียกดูบิล: " + err.message + "</div>";
+        }
+    }
+
+    function getCalculatedNetTotal() {
+        var discVal = parseFloat(document.getElementById('discountVal').value) || 0;
+        var discType = document.getElementById('discountType').value;
+        var net = totalTableAmount;
+
+        if (discType === "%") {
+            net = totalTableAmount - (totalTableAmount * (discVal / 100));
+        } else {
+            net = totalTableAmount - discVal;
+        }
+        return net < 0 ? 0 : net;
+    }
+
+    function recalcNetTotal() {
+        var net = getCalculatedNetTotal();
+        document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
+        calcChange();
+    }
+
+    function toggleCashInput() {
+        var p = document.getElementById('payType').value;
+        document.getElementById('cashDiv').style.display = p === "เงินสด" ? 'block' : 'none';
+    }
+
+    function calcChange() {
+        var net = getCalculatedNetTotal();
+        var rec = parseFloat(document.getElementById('cashRec').value) || 0;
+        var change = rec - net;
+        var el = document.getElementById('changeTxt');
+        if(!el) return;
+        if(change >= 0) { el.innerText = "เงินทอน: " + change + " บาท"; el.className = "fw-bold text-success small"; } 
+        else { el.innerText = "ขาดอีก: " + Math.abs(change) + " บาท"; el.className = "fw-bold text-danger small"; }
+    }
+
+    async function payBill(tNo) {
+        var net = getCalculatedNetTotal();
+        var discVal = parseFloat(document.getElementById('discountVal').value) || 0;
+        var discType = document.getElementById('discountType').value;
+        var pType = document.getElementById('payType').value;
+        var rec = parseFloat(document.getElementById('cashRec').value) || net;
+        var change = rec - net;
+
+        if(pType === "เงินสด" && rec < net) return alert("จำนวนเงินที่รับมาไม่พอครับ!");
+
+        var discText = discVal > 0 ? (discVal + " " + discType) : "ไม่มี";
+
+        if(confirm("ยืนยันการรับชำระเงินโต๊ะ " + tNo + "\n- ยอดเดิม: " + totalTableAmount + " บ.\n- ส่วนลด: " + discText + "\n- ยอดสุทธิ: " + net + " บาท?")) {
+            try {
+                // บันทึกการชำระเงินใน Firestore
+                await db.collection("checkouts").add({
+                    tableNo: tNo,
+                    total: totalTableAmount,
+                    discount: discText,
+                    netTotal: net,
+                    payType: pType,
+                    receive: rec,
+                    change: change,
+                    shiftId: currentShift ? currentShift.shiftId : "",
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // เคลียร์ออเดอร์ในโต๊ะออก
+                const ordersSnapshot = await db.collection("tables").doc(tNo).collection("orders").get();
+                const batch = db.batch();
+                ordersSnapshot.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+
+                // ปรับสถานะโต๊ะเป็นว่าง
+                await db.collection("tables").doc(tNo).update({ status: "ว่าง" });
+
+                alert("🔒 ชำระเงินสำเร็จ และปิดโต๊ะเรียบร้อย!");
+                document.getElementById('resultArea').innerHTML = "";
+                document.getElementById('manageTNo').value = "-- กรุณาคลิกเลือกโต๊ะจากผัง --";
+                document.getElementById('manageTNo').dataset.tno = "";
+                loadDashboard();
+            } catch (err) {
+                alert("เกิดข้อผิดพลาดในการชำระเงิน: " + err.message);
+            }
+        }
+    }
+
+    async function confirmDelete(docId) {
+        var tNo = getActiveTable();
+        if(confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการ 'ลบ' รายการนี้?")) {
+            try {
+                await db.collection("tables").doc(tNo).collection("orders").doc(docId).delete();
+                alert("🗑️ ลบรายการเรียบร้อย!");
+                checkBill();
+            } catch (err) {
+                alert("❌ เกิดข้อผิดพลาด: " + err.message);
+            }
+        }
+    }
+
+    async function promptEdit(docId, oldDetails) {
+        var tNo = getActiveTable();
+        var newDetails = prompt("✏️ แก้ไขรายละเอียดรายการ:", oldDetails);
+        if(newDetails !== null && newDetails.trim() !== "") {
+            try {
+                await db.collection("tables").doc(tNo).collection("orders").doc(docId).update({
+                    details: newDetails.trim()
+                });
+                alert("✅ แก้ไขข้อมูลสำเร็จ!");
+                checkBill();
+            } catch (err) {
+                alert("❌ เกิดข้อผิดพลาด: " + err.message);
+            }
+        }
+    }
+
+    /* ---------------------------------------------------- */
+    /* --- ระบบแยกชำระเงิน (Split Payment Modal) -------- */
+    /* ---------------------------------------------------- */
+    function openSplitBillModal(tableNo, totalAmount) {
+        document.getElementById('splitTableNo').textContent = tableNo;
+        document.getElementById('splitTotalAmount').textContent = totalAmount.toLocaleString();
+        totalTableAmount = Number(totalAmount);
+        
+        document.getElementById('billListContainer').innerHTML = '';
+        billCounter = 0;
+        
+        addBillRow(totalTableAmount);
+        splitModalObj.show();
+    }
+
+    function addBillRow(defaultAmount) {
+        if (typeof defaultAmount === 'undefined') defaultAmount = 0;
+        billCounter++;
+        var currentBillId = billCounter;
+        var container = document.getElementById('billListContainer');
+        
+        var card = document.createElement('div');
+        card.id = 'bill-row-' + currentBillId;
+        card.className = 'bill-card';
+
+        var html = '<div class="d-flex justify-content-between align-items-center mb-2">' +
+                        '<strong class="small">บิลย่อยที่ ' + currentBillId + '</strong>';
+        if (container.children.length > 0) {
+            html += '<button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-bold" onclick="removeBillRow(' + currentBillId + ')">ลบ</button>';
+        }
+        html += '</div>' +
+                '<div class="row g-2">' +
+                    '<div class="col-7">' +
+                        '<input type="number" class="form-control form-control-sm bill-amount" placeholder="จำนวนเงิน" value="' + defaultAmount + '" oninput="calculateSplitTotals()">' +
+                    '</div>' +
+                    '<div class="col-5">' +
+                        '<select class="form-select form-select-sm bill-method">' +
+                            '<option value="เงินสด">เงินสด</option>' +
+                            '<option value="เงินโอน">เงินโอน</option>' +
+                        '</select>' +
+                    '</div>' +
+                '</div>';
+
+        card.innerHTML = html;
+        container.appendChild(card);
+        calculateSplitTotals();
+    }
+
+    function removeBillRow(id) {
+        var row = document.getElementById('bill-row-' + id);
+        if(row) row.remove();
+        calculateSplitTotals();
+    }
+
+    function calculateSplitTotals() {
+        var amountInputs = document.querySelectorAll('.bill-amount');
+        var currentSum = 0;
+        for (var i = 0; i < amountInputs.length; i++) {
+            currentSum += Number(amountInputs[i].value) || 0;
+        }
+
+        var remaining = totalTableAmount - currentSum;
+        document.getElementById('sumSplitAmount').textContent = currentSum.toLocaleString() + ' บาท';
+        
+        var remSpan = document.getElementById('remainingAmount');
+        remSpan.textContent = remaining.toLocaleString() + ' บาท';
+        remSpan.className = remaining === 0 ? 'fw-bold text-success' : 'fw-bold text-danger';
+    }
+
+    async function confirmSplitPayment() {
+        var tNo = getActiveTable();
+        var cards = document.querySelectorAll('.bill-card');
+        var billsPayload = [];
+        var currentSum = 0;
+
+        cards.forEach(function(card, idx) {
+            var amount = Number(card.querySelector('.bill-amount').value) || 0;
+            var method = card.querySelector('.bill-method').value;
+            currentSum += amount;
+
+            billsPayload.push({
+                billNo: idx + 1,
+                amount: amount,
+                method: method
+            });
+        });
+
+        if (currentSum !== totalTableAmount) {
+            return alert("⚠️ ยอดเงินรวมแยกชำระต้องเท่ากับยอดรวมทั้งหมด (" + totalTableAmount + " บาท)");
+        }
+
+        try {
+            await db.collection("split_checkouts").add({
+                tableNo: tNo,
+                bills: billsPayload,
+                totalAmount: totalTableAmount,
+                shiftId: currentShift ? currentShift.shiftId : "",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // เคลียร์ออเดอร์ในโต๊ะ
+            const ordersSnapshot = await db.collection("tables").doc(tNo).collection("orders").get();
+            const batch = db.batch();
+            ordersSnapshot.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+
+            // ปรับสถานะโต๊ะเป็นว่าง
+            await db.collection("tables").doc(tNo).update({ status: "ว่าง" });
+
+            alert("✅ บันทึกการชำระเงินและปิดโต๊ะเรียบร้อย!");
+            splitModalObj.hide();
+            document.getElementById('resultArea').innerHTML = "";
+            document.getElementById('manageTNo').value = "-- กรุณาคลิกเลือกโต๊ะจากผัง --";
+            document.getElementById('manageTNo').dataset.tno = "";
+            loadDashboard();
+        } catch (err) {
+            alert("❌ เกิดข้อผิดพลาด: " + err.message);
+        }
+    }
+</script>
+</body>
+</html>
