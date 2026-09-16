@@ -362,93 +362,108 @@
         async function viewBill() {
     document.getElementById('billModal').style.display = 'flex';
     document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#666;'>กำลังดึงข้อมูลบิล...</p>";
-    
+
     try {
-        // 1. แปลงเลขโต๊ะให้รองรับทั้งแบบ ข้อความ "1" และ ตัวเลข 1
-        const tableStr = String(tableNo);
-        const tableNum = isNaN(Number(tableNo)) ? tableNo : Number(tableNo);
+        const tStr = String(tableNo).trim();
+        const tNum = parseInt(tableNo, 10);
+        const transactionsRef = collection(db, "Transactions");
+        let docsList = [];
 
-        // 2. ดึงข้อมูล Transaction โดยรองรับทั้ง 2 แบบด้วย "in"
-        const q = query(
-            collection(db, "Transactions"), 
-            where("1", "in", [tableStr, tableNum])
-        );
-        const querySnapshot = await getDocs(q);
-        
-        let allTableTx = [];
-        querySnapshot.forEach(docSnap => {
-            let data = docSnap.data();
-            let payStatus = data["5"] ? String(data["5"]).trim() : "";
-            
-            // กรองเอาเฉพาะรายการที่ยังไม่ได้ชำระเงิน
-            if (payStatus === "ยังไม่จ่าย" || payStatus === "ยังไม่ชำระ" || payStatus === "") {
-                allTableTx.push(data);
-            }
-        });
-
-        // ฟังก์ชันช่วยแปลงเวลาให้ปลอดภัย
-        const getSeconds = (ts) => {
-            if (!ts) return 0;
-            if (typeof ts.seconds === 'number') return ts.seconds;
-            if (ts.toDate && typeof ts.toDate === 'function') return Math.floor(ts.toDate().getTime() / 1000);
-            return 0;
-        };
-
-        // 3. หาเวลาเปิดโต๊ะล่าสุด
-        let latestOpenTime = 0;
-        allTableTx.forEach(tx => {
-            let action = tx["2"] ? String(tx["2"]).trim() : "";
-            if (action.includes("เปิดโต๊ะ")) {
-                let txTime = getSeconds(tx["0"]);
-                if (txTime > latestOpenTime) {
-                    latestOpenTime = txTime;
-                }
-            }
-        });
-
-        // 4. กรองรายการอาหารของรอบปัจจุบัน
-        let currentSessionOrders = allTableTx.filter(tx => {
-            if (latestOpenTime > 0) {
-                return getSeconds(tx["0"]) >= latestOpenTime;
-            }
-            return true;
-        });
-
-        // จัดเรียงเวลาจากเก่าไปใหม่
-        currentSessionOrders.sort((a, b) => getSeconds(a["0"]) - getSeconds(b["0"]));
-
-        let html = "<ul style='padding-left: 15px; font-size: 14px; margin:0;'>";
-        let total = 0;
-
-        if (currentSessionOrders.length === 0) {
-            html = "<p style='text-align:center; color:#888; padding:20px;'>ยังไม่มีรายการสั่งอาหารในรอบนี้</p>";
-        } else {
-            currentSessionOrders.forEach(h => {
-                let timeStr = h["0"] && h["0"].toDate ? h["0"].toDate().toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : "-";
-                let amount = parseFloat(h["4"]) || 0;
-                total += amount;
-                let actionType = h["2"] || "สั่งอาหาร";
-                
-                html += `<li style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
-                            <strong>เวลา:</strong> ${timeStr}<br>
-                            <strong>รายการ:</strong> <span style="color:#2f3542;">${h["3"]}</span><br>
-                            <strong style="color:#ff4757;">ราคา: ${amount} บาท</strong> `;
-                
-                if (!actionType.includes("เปิดโต๊ะ")) {
-                    html += `<span style="font-size:12px; color:#747d8c;">(สถานะครัว: ${h["6"] || "-"})</span>`;
-                }
-                
-                html += `</li>`;
-            });
-            html += `</ul>
-                     <h2 style="text-align:center; color:#ff4757; border-top: 2px solid #ff4757; padding-top: 10px; margin-top:15px; margin-bottom:0;">
-                        ยอดรวมปัจจุบัน: ${total} บาท
-                     </h2>`;
+        // 1. ดึงข้อมูลรายการทั้งหมดของโต๊ะนี้
+        try {
+            const q1 = query(transactionsRef, where("1", "in", [tStr, isNaN(tNum) ? tStr : tNum]));
+            const snap1 = await getDocs(q1);
+            snap1.forEach(doc => docsList.push({ id: doc.id, ...doc.data() }));
+        } catch (e) {
+            console.warn("Query error, using fallback:", e);
         }
+
+        // กรณี Query แบบระบุเงื่อนไขไม่เจอ ให้ดึงข้อมูลมาสแกนหาเลขโต๊ะตรงๆ
+        if (docsList.length === 0) {
+            const allSnap = await getDocs(transactionsRef);
+            allSnap.forEach(docSnap => {
+                const data = docSnap.data();
+                const docTable = data["1"] !== undefined ? data["1"] : data.tableNo;
+                if (String(docTable).trim() === tStr) {
+                    docsList.push({ id: docSnap.id, ...data });
+                }
+            });
+        }
+
+        // 2. กรองเฉพาะรายการที่ยังไม่ได้ชำระเงิน
+        let unpaidList = docsList.filter(item => {
+            const payStatus = String(item["5"] || item.payStatus || item.status || "").trim();
+            return payStatus !== "ชำระแล้ว" && payStatus !== "จ่ายแล้ว" && payStatus !== "Paid";
+        });
+
+        // 3. กรองรอบการเปิดโต๊ะล่าสุด (ถ้ามี)
+        let latestOpenTime = 0;
+        unpaidList.forEach(item => {
+            const action = String(item["2"] || item.action || "");
+            const detail = String(item["3"] || item.detail || "");
+            if (action.includes("เปิดโต๊ะ") || detail.includes("เปิดโต๊ะ")) {
+                let ts = item["0"] || item.timestamp;
+                let sec = ts?.seconds || (ts?.toDate ? Math.floor(ts.toDate().getTime() / 1000) : 0);
+                if (sec > latestOpenTime) latestOpenTime = sec;
+            }
+        });
+
+        let sessionItems = unpaidList;
+        if (latestOpenTime > 0) {
+            let filtered = unpaidList.filter(item => {
+                let ts = item["0"] || item.timestamp;
+                let sec = ts?.seconds || (ts?.toDate ? Math.floor(ts.toDate().getTime() / 1000) : 0);
+                return sec >= latestOpenTime || sec === 0;
+            });
+            if (filtered.length > 0) sessionItems = filtered;
+        }
+
+        // 4. แสดงผลบนหน้าเว็บ
+        if (sessionItems.length === 0) {
+            document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>ยังไม่มีรายการสั่งอาหารในรอบนี้</p>";
+            return;
+        }
+
+        let totalAmount = 0;
+        let html = "<ul style='padding-left: 0; font-size: 14px; margin:0; list-style:none;'>";
+
+        sessionItems.forEach(item => {
+            let price = parseFloat(item["4"] !== undefined ? item["4"] : (item.price || 0)) || 0;
+            totalAmount += price;
+
+            let detail = item["3"] || item.detail || "รายการอาหาร";
+            let status = item["6"] || item.kitchenStatus || "";
+            let timeStr = "-";
+            let ts = item["0"] || item.timestamp;
+            if (ts && ts.toDate) {
+                timeStr = ts.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            html += `<li style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div>
+                                <strong style="color:#2f3542;">${detail}</strong>
+                                ${status ? <br><span style="font-size:12px; color:#747d8c;">สถานะ: ${status}</span> : ''}
+                                <br><span style="font-size:11px; color:#a4b0be;">เวลา: ${timeStr}</span>
+                            </div>
+                            <div style="font-weight:bold; color:#ff4757; text-align:right; min-width: 60px;">
+                                ${price} บาท
+                            </div>
+                        </div>
+                     </li>`;
+        });
+
+        html += `</ul>
+                 <div style="border-top: 2px solid #ff4757; margin-top: 15px; padding-top: 10px; text-align: center;">
+                    <span style="font-size: 15px; color: #555;">ยอดรวมทั้งหมด</span>
+                    <h2 style="margin: 5px 0 0 0; color: #ff4757; font-size: 24px;">${totalAmount} บาท</h2>
+                 </div>`;
+
         document.getElementById('billDetails').innerHTML = html;
+
     } catch (error) {
-        console.error("เกิดข้อผิดพลาดในการดึงบิล:", error);
-        document.getElementById('billDetails').innerHTML = "<p style='color:red; text-align:center;'>เกิดข้อผิดพลาดในการดึงบิล</p>";
+        console.error("Error loading bill:", error);
+        document.getElementById('billDetails').innerHTML = `<p style='color:red; text-align:center;'>เกิดข้อผิดพลาดในการดึงบิล: ${error.message}</p>`;
     }
 }
         function closeModal(modalId) {
