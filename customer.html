@@ -98,23 +98,22 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getFirestore, collection, getDocs, getDoc, addDoc, query, where, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-        // ⚠️ ใส่ Firebase Config ของคุณตรงนี้
+        // Firebase Config ประจำโปรเจกต์
         const firebaseConfig = {
-  apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
-  authDomain: "buffet-system-9b165.firebaseapp.com",
-  projectId: "buffet-system-9b165",
-  storageBucket: "buffet-system-9b165.firebasestorage.app",
-  messagingSenderId: "144497251618",
-  appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
-  measurementId: "G-82JK3EL1HL"
-};
-
+            apiKey: "AIzaSyCcSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+            authDomain: "buffet-system-9b165.firebaseapp.com",
+            projectId: "buffet-system-9b165",
+            storageBucket: "buffet-system-9b165.firebasestorage.app",
+            messagingSenderId: "144497251618",
+            appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+            measurementId: "G-82JK3EL1HL"
+        };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
         const urlParams = new URLSearchParams(window.location.search);
-        let tableNo = urlParams.get('tableNo') || ""; 
+        let tableNo = urlParams.get('tableNo') || urlParams.get('table') || ""; 
         
         let allAllowedMenu = [];
         let cart = {}; 
@@ -127,7 +126,6 @@
                 document.getElementById('tableSelectModal').style.display = 'flex';
                 
                 try {
-                    // ดึงโต๊ะที่มีสถานะ "ไม่ว่าง" ตามฟังก์ชันเดิมใน Code.gs
                     const querySnapshot = await getDocs(collection(db, "tables"));
                     let select = document.getElementById('activeTableSelect');
                     let options = '<option value="">-- เลือกลำดับโต๊ะ --</option>';
@@ -212,7 +210,6 @@
                     let item = docSnap.data();
                     let allowedPackages = item.allowedPackage ? String(item.allowedPackage).trim() : "";
                     
-                    // เงื่อนไขการกรองเมนูตามแพ็กเกจ (จำลองกติกาเดิม: allowedPackage ว่าง หรือตรงกับแพ็กเกจโต๊ะ)
                     let isAllowed = (allowedPackages === "" || allowedPackages.indexOf(tablePackagePrice) !== -1);
 
                     if (isAllowed) {
@@ -338,23 +335,22 @@
             }
 
             try {
-                // บันทึกคำสั่งซื้อลง Collection "Transactions" ให้ตรงกับฟังก์ชัน recordAction เดิม
                 await addDoc(collection(db, "Transactions"), {
-                    0: serverTimestamp(), // วันที่-เวลา
-                    1: tableNo,           // หมายเลขโต๊ะ
-                    2: "สั่งอาหาร",         // action
-                    3: orderDetails.join(", "), // รายละเอียดอาหาร
-                    4: totalAmount,       // ราคา
-                    5: "ยังไม่จ่าย",       // สถานะการจ่ายเงิน
-                    6: "กำลังเตรียม",      // สถานะครัว
-                    7: ""                 // Shift ID
+                    0: serverTimestamp(),
+                    1: tableNo,
+                    2: "สั่งอาหาร",
+                    3: orderDetails.join(", "),
+                    4: totalAmount,
+                    5: "ยังไม่จ่าย",
+                    6: "กำลังเตรียม",
+                    7: ""
                 });
                 
                 closeModal('cartModal');
                 btn.disabled = false;
                 btn.innerText = "ยืนยันการสั่งอาหาร";
                 alert("✅ ส่งออเดอร์เข้าครัวเรียบร้อยแล้ว!");
-                loadMenu(); // รีโหลดเมนูและล้างตะกร้า
+                loadMenu();
 
             } catch (error) {
                 btn.disabled = false;
@@ -368,47 +364,74 @@
             document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#666;'>กำลังดึงข้อมูลบิล...</p>";
             
             try {
-                // ดึงข้อมูลบิลจาก Collection "Transactions" เฉพาะโต๊ะนี้และยังไม่จ่าย
+                // ดึงข้อมูลการทำงานทั้งหมดของโต๊ะนี้
                 const q = query(collection(db, "Transactions"), where("1", "==", tableNo));
                 const querySnapshot = await getDocs(q);
                 
-                let ordersList = [];
+                let allTableTx = [];
                 querySnapshot.forEach(docSnap => {
                     let data = docSnap.data();
                     let payStatus = data["5"] ? String(data["5"]).trim() : "";
-                    if (payStatus === "ยังไม่จ่าย" || payStatus === "ยังไม่ชำระ") {
-                        ordersList.push(data);
+                    if (payStatus === "ยังไม่จ่าย" || payStatus === "ยังไม่ชำระ" || payStatus === "") {
+                        allTableTx.push(data);
                     }
                 });
 
-                // จัดเรียงเวลาจากใหม่ไปเก่า (ถ้ามี timestamp)
-                ordersList.sort((a,b) => (b["0"]?.seconds || 0) - (a["0"]?.seconds || 0));
+                // หาเวลาของการ "เปิดโต๊ะ" ครั้งล่าสุดของโต๊ะนี้
+                let latestOpenTime = 0;
+                allTableTx.forEach(tx => {
+                    let action = tx["2"] ? String(tx["2"]).trim() : "";
+                    if (action.includes("เปิดโต๊ะ")) {
+                        let txTime = tx["0"]?.seconds || 0;
+                        if (txTime > latestOpenTime) {
+                            latestOpenTime = txTime;
+                        }
+                    }
+                });
+
+                // กรองเฉพาะรายการที่เกิดตั้งแต่เวลา "เปิดโต๊ะ" ครั้งล่าสุดเป็นต้นไป
+                let currentSessionOrders = allTableTx.filter(tx => {
+                    let txTime = tx["0"]?.seconds || 0;
+                    if (latestOpenTime > 0) {
+                        return txTime >= latestOpenTime;
+                    }
+                    return true;
+                });
+
+                // จัดเรียงเวลาจากเก่าไปใหม่
+                currentSessionOrders.sort((a, b) => (a["0"]?.seconds || 0) - (b["0"]?.seconds || 0));
 
                 let html = "<ul style='padding-left: 15px; font-size: 14px; margin:0;'>";
                 let total = 0;
 
-                if(ordersList.length === 0) {
-                    html = "<p style='text-align:center; color:#888;'>ยังไม่มีรายการสั่งอาหาร</p>";
+                if (currentSessionOrders.length === 0) {
+                    html = "<p style='text-align:center; color:#888; padding:20px;'>ยังไม่มีรายการสั่งอาหารในรอบนี้</p>";
                 } else {
-                    ordersList.forEach(h => {
+                    currentSessionOrders.forEach(h => {
                         let timeStr = h["0"] ? h["0"].toDate().toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : "-";
                         let amount = parseFloat(h["4"]) || 0;
                         total += amount;
+                        let actionType = h["2"] || "สั่งอาหาร";
+                        
                         html += `<li style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
                                     <strong>เวลา:</strong> ${timeStr}<br>
                                     <strong>รายการ:</strong> <span style="color:#2f3542;">${h["3"]}</span><br>
-                                    <strong style="color:#ff4757;">ราคา: ${amount} บาท</strong> 
-                                    <span style="font-size:12px; color:#747d8c;">(สถานะครัว: ${h["6"] || "-"})</span>
-                                 </li>`;
+                                    <strong style="color:#ff4757;">ราคา: ${amount} บาท</strong> `;
+                        
+                        if (actionType !== "เปิดโต๊ะ") {
+                            html += `<span style="font-size:12px; color:#747d8c;">(สถานะครัว: ${h["6"] || "-"})</span>`;
+                        }
+                        
+                        html += `</li>`;
                     });
                     html += `</ul>
-                             <h2 style="text-align:center; color:#ff4757; border-top: 2px solid #ff4757; padding-top: 10px; margin-bottom:0;">
+                             <h2 style="text-align:center; color:#ff4757; border-top: 2px solid #ff4757; padding-top: 10px; margin-top:15px; margin-bottom:0;">
                                 ยอดรวมปัจจุบัน: ${total} บาท
                              </h2>`;
                 }
                 document.getElementById('billDetails').innerHTML = html;
             } catch (error) {
-                console.error(error);
+                console.error("เกิดข้อผิดพลาดในการดึงบิล:", error);
                 document.getElementById('billDetails').innerHTML = "<p style='color:red; text-align:center;'>เกิดข้อผิดพลาดในการดึงบิล</p>";
             }
         }
