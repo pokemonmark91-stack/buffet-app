@@ -146,6 +146,8 @@
 
         let tableNo = "";
         let currentPackage = "";
+        let tablePrice = 0;
+        let tableData = {};
         let cart = {}; 
         let allMenuItems = []; 
         let selectedCategory = 'all';
@@ -185,10 +187,9 @@
                     
                     if (status === "ไม่ว่าง" || status === "occupied" || status === "busy") {
                         let pkgText = "";
-                        if (data.package) {
-                            pkgText = " (" + data.package + ")";
-                        } else if (data.packageName) {
-                            pkgText = " (" + data.packageName + ")";
+                        let pName = data.package || data.packageName || data.selectPackage || data.pkg || "";
+                        if (pName) {
+                            pkgText = " (" + pName + ")";
                         }
                         optionsHtml += '<option value="' + doc.id + '">โต๊ะ ' + doc.id + pkgText + '</option>';
                         hasOccupiedTable = true;
@@ -221,6 +222,7 @@
             activateSystem();
         }
 
+        // 📌 2. อ่านข้อมูลโต๊ะและราคาแพ็กเกจของโต๊ะ
         async function activateSystem() {
             document.getElementById('displayTableNo').innerText = tableNo;
             document.getElementById('closeTableModalBtn').classList.remove('d-none');
@@ -231,11 +233,25 @@
             try {
                 const tableDoc = await db.collection("tables").doc(tableNo).get();
                 if (tableDoc.exists) {
-                    let tData = tableDoc.data();
-                    currentPackage = tData.package || tData.packageName || "";
+                    tableData = tableDoc.data() || {};
                     
+                    // ดึงชื่อแพ็กเกจ
+                    currentPackage = tableData.package || tableData.packageName || tableData.selectPackage || tableData.selectedPackage || tableData.pkg || "";
+                    
+                    // ดึงราคาแพ็กเกจของโต๊ะ (เป็นตัวเลข เช่น 119 หรือ 159)
+                    tablePrice = 0;
+                    if (currentPackage) {
+                        let match = String(currentPackage).match(/\d+/);
+                        if (match) tablePrice = parseInt(match[0]);
+                    }
+                    if (!tablePrice && (tableData.packagePrice || tableData.price)) {
+                        tablePrice = parseInt(tableData.packagePrice || tableData.price);
+                    }
+
                     if (currentPackage) {
                         document.getElementById('displayPackage').innerText = "แพ็กเกจ: " + currentPackage;
+                    } else if (tablePrice > 0) {
+                        document.getElementById('displayPackage').innerText = "แพ็กเกจ: " + tablePrice + " บาท";
                     } else {
                         document.getElementById('displayPackage').innerText = '';
                     }
@@ -248,7 +264,7 @@
             }
         }
 
-        // 📌 2. ดึงข้อมูลเมนู + กรองแพ็กเกจราคาอย่างเข้มงวด
+        // 📌 3. ดึงข้อมูลเมนู + กรองแพ็กเกจราคาอย่างเข้มงวด
         async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
@@ -262,41 +278,41 @@
                 allMenuItems = [];
                 let categoriesSet = new Set();
 
-                // สกัดตัวเลขราคาจากแพ็กเกจของโต๊ะ (เช่น ได้ 119 จาก "ชาบูหมูกระทะ (119)")
-                let tablePrice = 0;
-                if (currentPackage) {
-                    let match = String(currentPackage).match(/\d+/);
-                    if (match) tablePrice = parseInt(match[0]);
-                }
-
                 snapshot.forEach(doc => {
                     let item = doc.data();
                     item.id = doc.id;
                     
-                    let itemPkg = item.package || item.packageName || item.packages || item.tier || "";
+                    // ดึงข้อมูลแพ็กเกจ/ราคาของเมนูจากทุก Field ที่เป็นไปได้
+                    let itemPkg = item.package || item.packageName || item.packages || item.tier || item.priceTier || item.pkg || item.level || "";
                     let isMatch = false;
 
-                    if (tablePrice > 0) {
-                        let itemPrices = [];
-
-                        if (Array.isArray(itemPkg)) {
-                            itemPrices = itemPkg.map(p => {
-                                let m = String(p).match(/\d+/);
-                                return m ? parseInt(m[0]) : null;
-                            }).filter(p => p !== null);
-                        } else if (itemPkg !== "" && itemPkg !== null && itemPkg !== undefined) {
-                            let match = String(itemPkg).match(/\d+/);
-                            if (match) itemPrices.push(parseInt(match[0]));
+                    // สกัดตัวเลขราคาแพ็กเกจของเมนู
+                    let itemPrices = [];
+                    if (Array.isArray(itemPkg)) {
+                        itemPkg.forEach(p => {
+                            let m = String(p).match(/\d+/);
+                            if (m) itemPrices.push(parseInt(m[0]));
+                        });
+                    } else if (typeof itemPkg === 'number') {
+                        itemPrices.push(itemPkg);
+                    } else if (itemPkg !== "" && itemPkg !== null && itemPkg !== undefined) {
+                        let matches = String(itemPkg).match(/\d+/g);
+                        if (matches) {
+                            matches.forEach(m => itemPrices.push(parseInt(m)));
                         }
+                    }
 
+                    if (tablePrice > 0) {
                         if (itemPrices.length > 0) {
-                            // แสดงเฉพาะเมนูที่มีราคาแพ็กเกจ <= ราคาแพ็กเกจของโต๊ะ (159 จะไม่แสดงในโต๊ะ 119)
+                            // แสดงเฉพาะเมนูที่มีราคาแพ็กเกจขั้นต่ำ <= ราคาแพ็กเกจของโต๊ะ
+                            // (เช่น เมนู 159 จะไม่แสดงในโต๊ะ 119 เพราะ 159 <= 119 คือ false)
                             isMatch = itemPrices.some(p => p <= tablePrice);
                         } else {
-                            // เมนูกลาง (ไม่ได้ใส่แพ็กเกจ) แสดงผลให้ทุกโต๊ะ
+                            // ถ้าเมนูกลางไม่ได้ระบุแพ็กเกจ ให้แสดงได้ทุกโต๊ะ
                             isMatch = true; 
                         }
                     } else {
+                        // ถ้าไม่พบราคาแพ็กเกจของโต๊ะ ให้แสดงรายการไว้ก่อน
                         isMatch = true;
                     }
 
@@ -309,7 +325,7 @@
                 });
 
                 if (allMenuItems.length === 0) {
-                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ " + (currentPackage || "") + "</div>";
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ " + (currentPackage || tablePrice || "") + "</div>";
                     return;
                 }
 
@@ -435,7 +451,7 @@
             }
         }
 
-        // 📌 3. คำนวณยอดบิลให้ตรงกับ Staff 100% (บุฟเฟต์ผู้ใหญ่ + บุฟเฟต์เด็ก + ออเดอร์เพิ่มเติม)
+        // 📌 4. คำนวณยอดบิลให้ตรงกับ Staff 100% (บุฟเฟต์ผู้ใหญ่ + บุฟเฟต์เด็ก + ออเดอร์เพิ่มเติม)
         async function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             if (!tableNo) {
@@ -456,13 +472,13 @@
                         let html = `<ul class="list-group list-group-flush mb-3">`;
 
                         // อ่านค่าราคาบุฟเฟต์และจำนวนคน
-                        let pkgName = tData.package || tData.packageName || "";
+                        let pkgName = tData.package || tData.packageName || tData.selectPackage || tData.pkg || "";
                         let adultCount = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
                         let childCount = parseInt(tData.children || tData.childCount || tData.child || 0);
                         let basePrice = parseFloat(tData.packagePrice || tData.price || 0);
 
                         if (!basePrice && pkgName) {
-                            let match = pkgName.match(/\d+/);
+                            let match = String(pkgName).match(/\d+/);
                             if (match) basePrice = parseFloat(match[0]);
                         }
 
