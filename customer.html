@@ -54,11 +54,11 @@
             </button>
         </div>
 
-        <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) -->
+        <!-- แถบแยกหมวดหมู่ (Category Tabs) -->
         <div class="category-scroll mb-3" id="categoryContainer" style="display: none;">
         </div>
 
-        <!-- 📌 พื้นที่แสดงรายการอาหาร -->
+        <!-- พื้นที่แสดงรายการอาหาร -->
         <div class="row g-2" id="menuGrid">
             <div class="text-center w-100 mt-5 text-muted">
                 <h5>กรุณาระบุหมายเลขโต๊ะ</h5>
@@ -83,7 +83,7 @@
         </div>
     </div>
 
-    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ -->
+    <!-- Modal เลือก/เปลี่ยนโต๊ะ -->
     <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content border-0 shadow" style="border-radius: 15px;">
@@ -94,7 +94,6 @@
                 <div class="modal-body text-center">
                     <p class="text-muted small mb-2">เลือกโต๊ะที่พนักงานเปิดให้คุณแล้ว</p>
                     
-                    <!-- 📌 Dropdown เลือกโต๊ะ -->
                     <select id="inputTableNo" class="form-select form-select-lg text-center fs-6 fw-bold mb-3 shadow-sm">
                         <option value="" disabled selected>กำลังโหลดโต๊ะ...</option>
                     </select>
@@ -264,28 +263,15 @@
                 snapshot.forEach(doc => {
                     let item = doc.data();
                     item.id = doc.id;
-
-                    let itemPkg = item.package || item.packageName || "";
-                    let isMatch = false;
-
-                    if (!currentPackage || !itemPkg) {
-                        isMatch = true; 
-                    } else if (typeof itemPkg === 'string' && (itemPkg === currentPackage || currentPackage.includes(itemPkg) || itemPkg.includes(currentPackage))) {
-                        isMatch = true;
-                    } else if (Array.isArray(itemPkg) && itemPkg.includes(currentPackage)) {
-                        isMatch = true;
-                    }
-
-                    if (isMatch) {
-                        allMenuItems.push(item);
-                        if (item.category) {
-                            categoriesSet.add(item.category);
-                        }
+                    
+                    allMenuItems.push(item);
+                    if (item.category) {
+                        categoriesSet.add(item.category);
                     }
                 });
 
                 if (allMenuItems.length === 0) {
-                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ " + currentPackage + "</div>";
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารในระบบ</div>";
                     return;
                 }
 
@@ -411,7 +397,10 @@
             }
         }
 
-        function loadCustomerBill() {
+        // ========================================================
+        // ปรับปรุงฟังก์ชันคำนวณบิล: รวมทั้งค่าหัวบุฟเฟต์ + ออเดอร์
+        // ========================================================
+        async function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             if (!tableNo) {
                 billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>กรุณาระบุเลขโต๊ะก่อนครับ</div>";
@@ -420,49 +409,100 @@
             
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
 
-            db.collection("tables").doc(tableNo).collection("orders")
-                .orderBy("timestamp", "asc")
-                .onSnapshot(function(snapshot) {
-                    if (snapshot.empty) {
-                        billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>ยังไม่มีรายการสั่งอาหารในรอบนี้</div>";
-                        return;
-                    }
+            try {
+                // ดึงข้อมูลโต๊ะเพื่อดึงจำนวนผู้ใหญ่/เด็ก และชื่อแพ็กเกจ
+                const tableDoc = await db.collection("tables").doc(tableNo).get();
+                let tData = tableDoc.exists ? tableDoc.data() : {};
 
-                    let totalAmount = 0;
-                    let html = `<ul class="list-group list-group-flush mb-3">`;
+                db.collection("tables").doc(tableNo).collection("orders")
+                    .orderBy("timestamp", "asc")
+                    .onSnapshot(function(snapshot) {
+                        let totalAmount = 0;
+                        let html = `<ul class="list-group list-group-flush mb-3">`;
 
-                    snapshot.forEach(doc => {
-                        let item = doc.data();
-                        totalAmount += (item.amount || 0);
+                        // 1. คำนวณค่าบุฟเฟต์ตั้งต้น (ผู้ใหญ่/เด็ก)
+                        let pkgName = tData.package || tData.packageName || "";
+                        let adultCount = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
+                        let childCount = parseInt(tData.children || tData.childCount || tData.child || 0);
+                        let basePrice = parseFloat(tData.packagePrice || tData.price || 0);
 
-                        let kBadge = "";
-                        if (item.kitchenStatus === "เตรียม") {
-                            kBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 11px;">กำลังทำ</span>';
-                        } else if (item.kitchenStatus === "เสร็จ") {
-                            kBadge = '<span class="badge bg-success ms-1" style="font-size: 11px;">เสิร์ฟแล้ว</span>';
+                        // แกะตัวเลขราคาจากชื่อแพ็กเกจ เช่น "ชาบูหมูกระทะ (119)"
+                        if (!basePrice && pkgName) {
+                            let match = pkgName.match(/\d+/);
+                            if (match) basePrice = parseFloat(match[0]);
                         }
 
-                        let detailText = item.details ? item.details.replace(/\n/g, '<br>') : "";
+                        // แสดงแถวบุฟเฟต์ผู้ใหญ่
+                        if (adultCount > 0 && basePrice > 0) {
+                            let adultTotal = adultCount * basePrice;
+                            totalAmount += adultTotal;
+                            html += `<li class="list-group-item d-flex justify-content-between align-items-start px-2 py-2 bg-light rounded-2 mb-1">
+                                        <div>
+                                            <div class="fw-bold text-dark" style="font-size: 14px;">👨‍👩‍👧 บุฟเฟต์ผู้ใหญ่ (${pkgName || 'ปกติ'})</div>
+                                            <small class="text-muted">${basePrice} ฿ × ${adultCount} ท่าน</small>
+                                        </div>
+                                        <span class="fw-bold text-dark">${adultTotal.toLocaleString()} ฿</span>
+                                     </li>`;
+                        }
 
-                        html += `<li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
-                                    <div>
-                                        <div class="fw-bold text-dark" style="font-size: 14px;">${item.action} ${kBadge}</div>
-                                        <small class="text-muted" style="font-size: 13px;">${detailText}</small>
-                                    </div>
-                                    <span class="fw-bold text-danger">${item.amount || 0} ฿</span>
-                                 </li>`;
+                        // แสดงแถวบุฟเฟต์เด็ก (ครึ่งราคา 50%)
+                        if (childCount > 0 && basePrice > 0) {
+                            let childPrice = basePrice * 0.5;
+                            let childTotal = childCount * childPrice;
+                            totalAmount += childTotal;
+                            html += `<li class="list-group-item d-flex justify-content-between align-items-start px-2 py-2 bg-light rounded-2 mb-1">
+                                        <div>
+                                            <div class="fw-bold text-dark" style="font-size: 14px;">👶 บุฟเฟต์เด็ก (50%)</div>
+                                            <small class="text-muted">${childPrice} ฿ × ${childCount} ท่าน</small>
+                                        </div>
+                                        <span class="fw-bold text-dark">${childTotal.toLocaleString()} ฿</span>
+                                     </li>`;
+                        }
+
+                        // 2. คำนวณรายการสั่งอาหาร/บริการเสริมเพิ่มเติม
+                        if (!snapshot.empty) {
+                            snapshot.forEach(doc => {
+                                let item = doc.data();
+                                totalAmount += (item.amount || 0);
+
+                                let kBadge = "";
+                                if (item.kitchenStatus === "เตรียม") {
+                                    kBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 11px;">กำลังทำ</span>';
+                                } else if (item.kitchenStatus === "เสร็จ") {
+                                    kBadge = '<span class="badge bg-success ms-1" style="font-size: 11px;">เสิร์ฟแล้ว</span>';
+                                }
+
+                                let detailText = item.details ? item.details.replace(/\n/g, '<br>') : "";
+
+                                html += `<li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                                            <div>
+                                                <div class="fw-bold text-dark" style="font-size: 14px;">${item.action || 'สั่งอาหาร'} ${kBadge}</div>
+                                                <small class="text-muted" style="font-size: 13px;">${detailText}</small>
+                                            </div>
+                                            <span class="fw-bold text-danger">${(item.amount || 0).toLocaleString()} ฿</span>
+                                         </li>`;
+                            });
+                        }
+
+                        if (totalAmount === 0 && snapshot.empty) {
+                            billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>ยังไม่มีรายการสั่งอาหารในรอบนี้</div>";
+                            return;
+                        }
+
+                        html += `</ul>
+                                 <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center" style="border: 1px dashed #dc3545;">
+                                     <span class="fw-bold text-dark">ยอดสุทธิรวมทั้งหมด:</span>
+                                     <span class="fw-bold text-danger fs-4">${totalAmount.toLocaleString()} ฿</span>
+                                 </div>`;
+
+                        billArea.innerHTML = html;
+                    }, function(err) {
+                        billArea.innerHTML = `<div class='alert alert-danger'>เกิดข้อผิดพลาด: ${err.message}</div>`;
                     });
-
-                    html += `</ul>
-                             <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center" style="border: 1px dashed #dc3545;">
-                                 <span class="fw-bold text-dark">ยอดสุทธิรวม:</span>
-                                 <span class="fw-bold text-danger fs-4">${totalAmount.toLocaleString()} ฿</span>
-                             </div>`;
-
-                    billArea.innerHTML = html;
-                }, function(err) {
-                    billArea.innerHTML = `<div class='alert alert-danger'>เกิดข้อผิดพลาด: ${err.message}</div>`;
-                });
+            } catch (err) {
+                console.error("Error loading bill:", err);
+                billArea.innerHTML = `<div class='alert alert-danger'>ไม่สามารถโหลดข้อมูลบิลได้</div>`;
+            }
         }
     </script>
 </body>
