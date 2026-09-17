@@ -96,9 +96,8 @@
     <!-- Firebase SDK & Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, collection, getDocs, getDoc, addDoc, query, where, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, addDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-        // Firebase Config ประจำโปรเจกต์
         const firebaseConfig = {
             apiKey: "AIzaSyCcSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -360,112 +359,85 @@
         }
 
         async function viewBill() {
-    document.getElementById('billModal').style.display = 'flex';
-    document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#666;'>กำลังดึงข้อมูลบิล...</p>";
+            document.getElementById('billModal').style.display = 'flex';
+            document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#666;'>กำลังดึงข้อมูลบิล...</p>";
 
-    try {
-        const tStr = String(tableNo).trim();
-        const tNum = parseInt(tableNo, 10);
-        const transactionsRef = collection(db, "Transactions");
-        let docsList = [];
+            try {
+                const targetTable = String(tableNo).trim();
+                const transactionsRef = collection(db, "Transactions");
+                const allSnap = await getDocs(transactionsRef);
+                
+                let sessionItems = [];
+                
+                // ดึงรายการทั้งหมดที่เป็นของโต๊ะนี้ และ "ยังไม่จ่าย" เหมือนที่หน้า Staff ทำเป๊ะๆ
+                allSnap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const docTable = String(data["1"] || data.tableNo || "").trim();
+                    const payStatus = String(data["5"] || data.payStatus || data.status || "").trim();
+                    
+                    if (docTable === targetTable && (payStatus === "ยังไม่จ่าย" || payStatus === "ยังไม่ชำระ" || payStatus === "")) {
+                        sessionItems.push({ id: docSnap.id, ...data });
+                    }
+                });
 
-        // 1. ดึงข้อมูลรายการทั้งหมดของโต๊ะนี้
-        try {
-            const q1 = query(transactionsRef, where("1", "in", [tStr, isNaN(tNum) ? tStr : tNum]));
-            const snap1 = await getDocs(q1);
-            snap1.forEach(doc => docsList.push({ id: doc.id, ...doc.data() }));
-        } catch (e) {
-            console.warn("Query error, using fallback:", e);
-        }
-
-        // กรณี Query แบบระบุเงื่อนไขไม่เจอ ให้ดึงข้อมูลมาสแกนหาเลขโต๊ะตรงๆ
-        if (docsList.length === 0) {
-            const allSnap = await getDocs(transactionsRef);
-            allSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                const docTable = data["1"] !== undefined ? data["1"] : data.tableNo;
-                if (String(docTable).trim() === tStr) {
-                    docsList.push({ id: docSnap.id, ...data });
+                if (sessionItems.length === 0) {
+                    document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>ยังไม่มีรายการสั่งอาหารในรอบนี้</p>";
+                    return;
                 }
-            });
-        }
 
-        // 2. กรองเฉพาะรายการที่ยังไม่ได้ชำระเงิน
-        let unpaidList = docsList.filter(item => {
-            const payStatus = String(item["5"] || item.payStatus || item.status || "").trim();
-            return payStatus !== "ชำระแล้ว" && payStatus !== "จ่ายแล้ว" && payStatus !== "Paid";
-        });
+                // เรียงลำดับตามเวลาสั่ง (เก่าไปใหม่)
+                sessionItems.sort((a, b) => {
+                    let timeA = a["0"]?.seconds || 0;
+                    let timeB = b["0"]?.seconds || 0;
+                    return timeA - timeB;
+                });
 
-        // 3. กรองรอบการเปิดโต๊ะล่าสุด (ถ้ามี)
-        let latestOpenTime = 0;
-        unpaidList.forEach(item => {
-            const action = String(item["2"] || item.action || "");
-            const detail = String(item["3"] || item.detail || "");
-            if (action.includes("เปิดโต๊ะ") || detail.includes("เปิดโต๊ะ")) {
-                let ts = item["0"] || item.timestamp;
-                let sec = ts?.seconds || (ts?.toDate ? Math.floor(ts.toDate().getTime() / 1000) : 0);
-                if (sec > latestOpenTime) latestOpenTime = sec;
+                let totalAmount = 0;
+                let html = "<ul style='padding-left: 0; font-size: 14px; margin:0; list-style:none;'>";
+
+                sessionItems.forEach(item => {
+                    let price = parseFloat(item["4"] !== undefined ? item["4"] : (item.price || 0)) || 0;
+                    totalAmount += price;
+
+                    let detail = item["3"] || item.detail || "รายการอาหาร";
+                    let status = item["6"] || item.kitchenStatus || "";
+                    let timeStr = "-";
+                    let ts = item["0"] || item.timestamp;
+                    if (ts && ts.toDate) {
+                        timeStr = ts.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+                    }
+
+                    // แก้ไข Syntax Error ตรงส่วนการแสดงสถานะให้ถูกต้อง
+                    let statusHtml = status ? <br><span style="font-size:12px; color:#747d8c;">สถานะ: ${status}</span> : '';
+
+                    html += `<li style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <div>
+                                        <strong style="color:#2f3542;">${detail}</strong>
+                                        ${statusHtml}
+                                        <br><span style="font-size:11px; color:#a4b0be;">เวลา: ${timeStr}</span>
+                                    </div>
+                                    <div style="font-weight:bold; color:#ff4757; text-align:right; min-width: 60px;">
+                                        ${price} บาท
+                                    </div>
+                                </div>
+                             </li>`;
+                });
+
+                html += `</ul>
+                         <div style="border-top: 2px solid #ff4757; margin-top: 15px; padding-top: 10px; text-align: center;">
+                            <span style="font-size: 15px; color: #555;">ยอดรวมทั้งหมด</span>
+                            <h2 style="margin: 5px 0 0 0; color: #ff4757; font-size: 24px;">${totalAmount} บาท</h2>
+                         </div>`;
+
+                document.getElementById('billDetails').innerHTML = html;
+
+            } catch (error) {
+                console.error("Error loading bill:", error);
+                document.getElementById('billDetails').innerHTML = `<p style='color:red; text-align:center;'>เกิดข้อผิดพลาดในการดึงบิล: ${error.message}</p>`;
             }
-        });
-
-        let sessionItems = unpaidList;
-        if (latestOpenTime > 0) {
-            let filtered = unpaidList.filter(item => {
-                let ts = item["0"] || item.timestamp;
-                let sec = ts?.seconds || (ts?.toDate ? Math.floor(ts.toDate().getTime() / 1000) : 0);
-                return sec >= latestOpenTime || sec === 0;
-            });
-            if (filtered.length > 0) sessionItems = filtered;
         }
 
-        // 4. แสดงผลบนหน้าเว็บ
-        if (sessionItems.length === 0) {
-            document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>ยังไม่มีรายการสั่งอาหารในรอบนี้</p>";
-            return;
-        }
-
-        let totalAmount = 0;
-        let html = "<ul style='padding-left: 0; font-size: 14px; margin:0; list-style:none;'>";
-
-        sessionItems.forEach(item => {
-            let price = parseFloat(item["4"] !== undefined ? item["4"] : (item.price || 0)) || 0;
-            totalAmount += price;
-
-            let detail = item["3"] || item.detail || "รายการอาหาร";
-            let status = item["6"] || item.kitchenStatus || "";
-            let timeStr = "-";
-            let ts = item["0"] || item.timestamp;
-            if (ts && ts.toDate) {
-                timeStr = ts.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-            }
-
-            html += `<li style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                            <div>
-                                <strong style="color:#2f3542;">${detail}</strong>
-                                ${status ? <br><span style="font-size:12px; color:#747d8c;">สถานะ: ${status}</span> : ''}
-                                <br><span style="font-size:11px; color:#a4b0be;">เวลา: ${timeStr}</span>
-                            </div>
-                            <div style="font-weight:bold; color:#ff4757; text-align:right; min-width: 60px;">
-                                ${price} บาท
-                            </div>
-                        </div>
-                     </li>`;
-        });
-
-        html += `</ul>
-                 <div style="border-top: 2px solid #ff4757; margin-top: 15px; padding-top: 10px; text-align: center;">
-                    <span style="font-size: 15px; color: #555;">ยอดรวมทั้งหมด</span>
-                    <h2 style="margin: 5px 0 0 0; color: #ff4757; font-size: 24px;">${totalAmount} บาท</h2>
-                 </div>`;
-
-        document.getElementById('billDetails').innerHTML = html;
-
-    } catch (error) {
-        console.error("Error loading bill:", error);
-        document.getElementById('billDetails').innerHTML = `<p style='color:red; text-align:center;'>เกิดข้อผิดพลาดในการดึงบิล: ${error.message}</p>`;
-    }
-}
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
         }
