@@ -146,7 +146,7 @@
         const db = firebase.firestore();
 
         let tableNo = "";
-        let currentPackage = ""; // เก็บชื่อแพ็กเกจของโต๊ะ
+        let currentPackage = "";
         let cart = {}; 
         let allMenuItems = []; 
         let selectedCategory = 'all';
@@ -170,7 +170,6 @@
             loadOccupiedTables();
         }
 
-        // 📌 ดึงเฉพาะโต๊ะที่มีสถานะ "ไม่ว่าง" (ที่พนักงานเปิดโต๊ะไว้)
         async function loadOccupiedTables() {
             let select = document.getElementById('inputTableNo');
             select.innerHTML = '<option value="">กำลังโหลดโต๊ะ...</option>';
@@ -184,10 +183,14 @@
                     let data = doc.data();
                     let status = data.status || "";
                     
-                    // 📌 กรองเฉพาะโต๊ะที่เป็นสถานะ "ไม่ว่าง" ตามหน้า Staff
                     if (status === "ไม่ว่าง" || status === "occupied" || status === "busy") {
-                        let pkgText = data.package || data.packageName ?  (${data.package || data.packageName}) : '';
-                        optionsHtml += `<option value="${doc.id}">โต๊ะ ${doc.id}${pkgText}</option>`;
+                        let pkgText = "";
+                        if (data.package) {
+                            pkgText = " (" + data.package + ")";
+                        } else if (data.packageName) {
+                            pkgText = " (" + data.packageName + ")";
+                        }
+                        optionsHtml += '<option value="' + doc.id + '">โต๊ะ ' + doc.id + pkgText + '</option>';
                         hasOccupiedTable = true;
                     }
                 });
@@ -218,7 +221,6 @@
             activateSystem();
         }
 
-        // 📌 เปิดระบบ + ดึงข้อมูลแพ็กเกจของโต๊ะ + ดึงเมนูที่ตรงกับแพ็กเกจ
         async function activateSystem() {
             document.getElementById('displayTableNo').innerText = tableNo;
             document.getElementById('closeTableModalBtn').classList.remove('d-none');
@@ -227,20 +229,18 @@
             document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดข้อมูลแพ็กเกจและเมนู...</div>";
 
             try {
-                // 1. อ่านข้อมูลแพ็กเกจจากโต๊ะใน Firebase
                 const tableDoc = await db.collection("tables").doc(tableNo).get();
                 if (tableDoc.exists) {
                     let tData = tableDoc.data();
                     currentPackage = tData.package || tData.packageName || "";
                     
                     if (currentPackage) {
-                        document.getElementById('displayPackage').innerText = `แพ็กเกจ: ${currentPackage}`;
+                        document.getElementById('displayPackage').innerText = "แพ็กเกจ: " + currentPackage;
                     } else {
                         document.getElementById('displayPackage').innerText = '';
                     }
                 }
 
-                // 2. โหลดเมนูอาหารตามแพ็กเกจ
                 loadMenu();
             } catch (err) {
                 console.error("Error fetching table package:", err);
@@ -248,7 +248,6 @@
             }
         }
 
-        // 📌 ดึงรายการอาหารและกรองตามแพ็กเกจ
         async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
@@ -266,13 +265,11 @@
                     let item = doc.data();
                     item.id = doc.id;
 
-                    // 📌 เงื่อนไขกรองเมนูตามแพ็กเกจ
-                    // แสดงผลหาก: ไม่ได้ระบุแพ็กเกจในโต๊ะ/เมนู OR ชื่อแพ็กเกจตรงกัน OR เมนูรองรับหลายแพ็กเกจ
                     let itemPkg = item.package || item.packageName || "";
                     let isMatch = false;
 
                     if (!currentPackage || !itemPkg) {
-                        isMatch = true; // ถ้าไม่ได้ระบุ ให้สั่งได้ทุกแพ็กเกจ
+                        isMatch = true; 
                     } else if (typeof itemPkg === 'string' && (itemPkg === currentPackage || currentPackage.includes(itemPkg) || itemPkg.includes(currentPackage))) {
                         isMatch = true;
                     } else if (Array.isArray(itemPkg) && itemPkg.includes(currentPackage)) {
@@ -288,7 +285,7 @@
                 });
 
                 if (allMenuItems.length === 0) {
-                    menuGrid.innerHTML = `<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ "${currentPackage}"</div>`;
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ " + currentPackage + "</div>";
                     return;
                 }
 
@@ -297,16 +294,16 @@
 
             } catch (error) {
                 console.error("Error loading menu:", error);
-                menuGrid.innerHTML = `<div class='text-danger w-100 text-center'>เกิดข้อผิดพลาดในการโหลดเมนู: ${error.message}</div>`;
+                menuGrid.innerHTML = "<div class='text-danger w-100 text-center'>เกิดข้อผิดพลาดในการโหลดเมนู: " + error.message + "</div>";
             }
         }
 
         function renderCategories(categories) {
             const container = document.getElementById('categoryContainer');
-            let html = `<button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>`;
+            let html = '<button class="btn btn-danger cat-btn active" onclick="filterCategory(\'all\', this)">ทั้งหมด</button>';
             
             categories.forEach(cat => {
-                html += `<button class="btn btn-outline-secondary cat-btn" onclick="filterCategory('${cat}', this)">${cat}</button>`;
+                html += '<button class="btn btn-outline-secondary cat-btn" onclick="filterCategory(\'' + cat + '\', this)">' + cat + '</button>';
             });
 
             container.innerHTML = html;
