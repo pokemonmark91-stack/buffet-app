@@ -369,7 +369,6 @@
                 
                 let sessionItems = [];
                 
-                // ดึงรายการทั้งหมดที่เป็นของโต๊ะนี้ และ "ยังไม่จ่าย" เหมือนที่หน้า Staff ทำเป๊ะๆ
                 allSnap.forEach(docSnap => {
                     const data = docSnap.data();
                     const docTable = String(data["1"] || data.tableNo || "").trim();
@@ -385,7 +384,6 @@
                     return;
                 }
 
-                // เรียงลำดับตามเวลาสั่ง (เก่าไปใหม่)
                 sessionItems.sort((a, b) => {
                     let timeA = a["0"]?.seconds || 0;
                     let timeB = b["0"]?.seconds || 0;
@@ -407,34 +405,36 @@
                         timeStr = ts.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
                     }
 
-                    // แก้ไข Syntax Error ตรงส่วนการแสดงสถานะให้ถูกต้อง
-                    let statusHtml = status ? <br><span style="font-size:12px; color:#747d8c;">สถานะ: ${status}</span> : '';
+                    let statusHtml = "";
+                    if (status) {
+                        statusHtml = "<br><span style='font-size:12px; color:#747d8c;'>สถานะ: " + status + "</span>";
+                    }
 
-                    html += `<li style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
-                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                    <div>
-                                        <strong style="color:#2f3542;">${detail}</strong>
-                                        ${statusHtml}
-                                        <br><span style="font-size:11px; color:#a4b0be;">เวลา: ${timeStr}</span>
-                                    </div>
-                                    <div style="font-weight:bold; color:#ff4757; text-align:right; min-width: 60px;">
-                                        ${price} บาท
-                                    </div>
-                                </div>
-                             </li>`;
+                    html += "<li style='margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;'>" +
+                                "<div style='display:flex; justify-content:space-between; align-items:flex-start;'>" +
+                                    "<div>" +
+                                        "<strong style='color:#2f3542;'>" + detail + "</strong>" +
+                                        statusHtml +
+                                        "<br><span style='font-size:11px; color:#a4b0be;'>เวลา: " + timeStr + "</span>" +
+                                    "</div>" +
+                                    "<div style='font-weight:bold; color:#ff4757; text-align:right; min-width: 60px;'>" +
+                                        price + " บาท" +
+                                    "</div>" +
+                                "</div>" +
+                             "</li>";
                 });
 
-                html += `</ul>
-                         <div style="border-top: 2px solid #ff4757; margin-top: 15px; padding-top: 10px; text-align: center;">
-                            <span style="font-size: 15px; color: #555;">ยอดรวมทั้งหมด</span>
-                            <h2 style="margin: 5px 0 0 0; color: #ff4757; font-size: 24px;">${totalAmount} บาท</h2>
-                         </div>`;
+                html += "</ul>" +
+                        "<div style='border-top: 2px solid #ff4757; margin-top: 15px; padding-top: 10px; text-align: center;'>" +
+                            "<span style='font-size: 15px; color: #555;'>ยอดรวมทั้งหมด</span>" +
+                            "<h2 style='margin: 5px 0 0 0; color: #ff4757; font-size: 24px;'>" + totalAmount + " บาท</h2>" +
+                        "</div>";
 
                 document.getElementById('billDetails').innerHTML = html;
 
             } catch (error) {
                 console.error("Error loading bill:", error);
-                document.getElementById('billDetails').innerHTML = `<p style='color:red; text-align:center;'>เกิดข้อผิดพลาดในการดึงบิล: ${error.message}</p>`;
+                document.getElementById('billDetails').innerHTML = "<p style='color:red; text-align:center;'>เกิดข้อผิดพลาดในการดึงบิล: " + error.message + "</p>";
             }
         }
 
@@ -442,7 +442,6 @@
             document.getElementById(modalId).style.display = 'none';
         }
 
-        // ผูกฟังก์ชันให้ปุ่ม HTML เรียกใช้ได้
         window.confirmTableSelection = confirmTableSelection;
         window.filterMenu = filterMenu;
         window.updateQty = updateQty;
