@@ -264,7 +264,7 @@
             }
         }
 
-        // 📌 3. ดึงข้อมูลเมนู + กรองแพ็กเกจราคาอย่างเข้มงวด
+        // 📌 3. ดึงข้อมูลเมนู + กรองแพ็กเกจด้วย allowedPackage อย่างเข้มงวด
         async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
@@ -282,11 +282,11 @@
                     let item = doc.data();
                     item.id = doc.id;
                     
-                    // ดึงข้อมูลแพ็กเกจ/ราคาของเมนูจากทุก Field ที่เป็นไปได้
-                    let itemPkg = item.package || item.packageName || item.packages || item.tier || item.priceTier || item.pkg || item.level || "";
+                    // 🎯 อ่านจาก allowedPackage ลำดับแรกตรงกับโครงสร้าง Firestore
+                    let itemPkg = item.allowedPackage || item.package || item.packageName || item.packages || item.tier || item.priceTier || item.pkg || "";
                     let isMatch = false;
 
-                    // สกัดตัวเลขราคาแพ็กเกจของเมนู
+                    // สกัดตัวเลขราคาของเมนู (เช่น "159" -> 159)
                     let itemPrices = [];
                     if (Array.isArray(itemPkg)) {
                         itemPkg.forEach(p => {
@@ -304,15 +304,13 @@
 
                     if (tablePrice > 0) {
                         if (itemPrices.length > 0) {
-                            // แสดงเฉพาะเมนูที่มีราคาแพ็กเกจขั้นต่ำ <= ราคาแพ็กเกจของโต๊ะ
-                            // (เช่น เมนู 159 จะไม่แสดงในโต๊ะ 119 เพราะ 159 <= 119 คือ false)
+                            // โต๊ะ 119 สั่งได้เฉพาะเมนูที่ราคา <= 119 เท่านั้น (159 <= 119 เป็น FALSE)
                             isMatch = itemPrices.some(p => p <= tablePrice);
                         } else {
-                            // ถ้าเมนูกลางไม่ได้ระบุแพ็กเกจ ให้แสดงได้ทุกโต๊ะ
+                            // กรณีเมนูกลางที่ไม่มีการตั้ง allowedPackage ให้แสดงทุกโต๊ะ
                             isMatch = true; 
                         }
                     } else {
-                        // ถ้าไม่พบราคาแพ็กเกจของโต๊ะ ให้แสดงรายการไว้ก่อน
                         isMatch = true;
                     }
 
@@ -377,7 +375,7 @@
                 let itemId = item.id;
                 let itemName = item.name || "ไม่มีชื่อเมนู";
                 let itemPrice = item.price || 0;
-                let itemImg = item.image || "https://placehold.co/150x150?text=Food";
+                let itemImg = item.image || item.imageUrl || "https://placehold.co/150x150?text=Food";
                 let currentQty = cart[itemId] ? cart[itemId].qty : 0;
 
                 html += `
