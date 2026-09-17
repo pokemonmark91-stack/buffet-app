@@ -68,24 +68,30 @@
         // ตัวแปรเก็บ Real-time Listener ป้องกันการโหลดซ้ำซ้อน
         let unsubscribeBill = null;
 
-        // เมื่อเปิดหน้าเว็บมา เช็กว่าเคยระบุโต๊ะไว้หรือยัง
+                // เมื่อเปิดหน้าเว็บมา ให้เช็กเลขโต๊ะจาก URL ก่อน (เช่น ?tableNo=1)
         window.onload = function() {
-            let savedTable = localStorage.getItem("customerTableNo");
-            if (savedTable) {
-                document.getElementById('tableNoInput').value = savedTable;
-                loginTable();
+            const urlParams = new URLSearchParams(window.location.search);
+            let tNoFromURL = urlParams.get('tableNo');
+
+            if (tNoFromURL) {
+                // ถ้าใน URL มีการระบุมาแล้ว (เช่น ?tableNo=1) ให้ข้ามหน้าจอเลือกโต๊ะแล้วลุยโลด
+                localStorage.setItem("customerTableNo", tNoFromURL);
+                startCustomerApp(tNoFromURL);
+            } else {
+                // ถ้าไม่มีใน URL ให้เช็กจากหน่วยความจำเครื่อง
+                let savedTable = localStorage.getItem("customerTableNo");
+                if (savedTable) {
+                    startCustomerApp(savedTable);
+                } else {
+                    // ถ้ายังไม่มีเลย ให้โชว์หน้าจอเลือกโต๊ะ
+                    document.getElementById('loginSection').style.display = 'block';
+                    document.getElementById('billSection').style.display = 'none';
+                }
             }
         };
 
-        // ฟังก์ชันเมื่อลูกค้าระบุโต๊ะและกดตกลง
-        function loginTable() {
-            let tNo = document.getElementById('tableNoInput').value.trim();
-            if (!tNo) return alert("กรุณาระบุหมายเลขโต๊ะครับ");
-
-            // บันทึกเบอร์โต๊ะลงเครื่อง (เผื่อลูกค้ารีเฟรชหน้าเว็บ จะได้ไม่ต้องกรอกใหม่)
-            localStorage.setItem("customerTableNo", tNo);
-            
-            // สลับหน้าจอซ่อนตัวล็อกอิน โชว์บิล
+        // ฟังก์ชันเริ่มรันระบบของโต๊ะนั้นๆ
+        function startCustomerApp(tNo) {
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('billSection').style.display = 'block';
             document.getElementById('displayTableNo').innerText = tNo;
@@ -94,18 +100,13 @@
             loadCustomerBill(tNo);
         }
 
-        // ฟังก์ชันเปลี่ยนโต๊ะ / ออกจากระบบ
-        function logoutTable() {
-            localStorage.removeItem("customerTableNo");
-            document.getElementById('tableNoInput').value = "";
-            document.getElementById('loginSection').style.display = 'block';
-            document.getElementById('billSection').style.display = 'none';
-            
-            // ยกเลิกการดึงข้อมูลแบบ Real-time ของโต๊ะเดิม
-            if (unsubscribeBill) {
-                unsubscribeBill();
-                unsubscribeBill = null;
-            }
+        // ฟังก์ชันเมื่อลูกค้าระบุโต๊ะจากช่องกรอกเอง
+        function loginTable() {
+            let tNo = document.getElementById('tableNoInput').value.trim();
+            if (!tNo) return alert("กรุณาระบุหมายเลขโต๊ะครับ");
+
+            localStorage.setItem("customerTableNo", tNo);
+            startCustomerApp(tNo);
         }
 
         // ฟังก์ชันดึงข้อมูลบิลแบบ Real-time (โค้ดจุดที่แก้ไขโครงสร้างให้ตรงกับ Staff)
