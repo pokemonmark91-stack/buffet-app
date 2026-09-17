@@ -30,34 +30,9 @@
             <span class="badge bg-success">เปิดโต๊ะเรียบร้อย</span>
         </div>
 
-        <!-- รายการเมนูอาหาร -->
+        <!-- 📌 พื้นที่แสดงรายการอาหาร (ปล่อยว่างไว้ เดี๋ยว JS จะดึงจาก Firebase มาใส่ให้) -->
         <div class="row g-2" id="menuGrid">
-            <!-- เมนูตัวอย่าง (จะเพิ่มขึ้นตามเมนูของร้าน) -->
-            <div class="col-6 col-md-4 col-lg-3">
-                <div class="menu-card p-2 text-center">
-                    <div class="menu-img rounded mb-2 d-flex align-items-center justify-content-center text-muted fs-4">🥤</div>
-                    <div class="fw-bold text-dark" style="font-size: 14px;">น้ำเปล่า</div>
-                    <div class="text-danger small fw-bold mb-2">20 ฿</div>
-                    <div class="d-flex justify-content-center align-items-center gap-2">
-                        <button class="btn btn-outline-danger qty-btn" onclick="updateQty('water', -1)">-</button>
-                        <span id="qty-water" class="fw-bold">0</span>
-                        <button class="btn btn-success qty-btn" onclick="updateQty('water', 1)">+</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-md-4 col-lg-3">
-                <div class="menu-card p-2 text-center">
-                    <div class="menu-img rounded mb-2 d-flex align-items-center justify-content-center text-muted fs-4">🧊</div>
-                    <div class="fw-bold text-dark" style="font-size: 14px;">น้ำแข็ง</div>
-                    <div class="text-danger small fw-bold mb-2">15 ฿</div>
-                    <div class="d-flex justify-content-center align-items-center gap-2">
-                        <button class="btn btn-outline-danger qty-btn" onclick="updateQty('ice', -1)">-</button>
-                        <span id="qty-ice" class="fw-bold">0</span>
-                        <button class="btn btn-success qty-btn" onclick="updateQty('ice', 1)">+</button>
-                    </div>
-                </div>
-            </div>
+            <div class="text-center w-100 my-4 text-muted">กำลังโหลดเมนูอาหาร...</div>
         </div>
     </div>
 
@@ -120,52 +95,127 @@
         const db = firebase.firestore();
 
         let tableNo = "1";
-        let cart = {};
+        let cart = {}; // เก็บข้อมูลตระกร้าสินค้า
 
-        // ดึงเลขโต๊ะจาก URL หรือ LocalStorage
+        // เมื่อโหลดหน้าเว็บเสร็จ
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             let tNo = urlParams.get('tableNo') || localStorage.getItem("customerTableNo") || "1";
             tableNo = tNo;
             localStorage.setItem("customerTableNo", tableNo);
             document.getElementById('displayTableNo').innerText = tableNo;
+
+            // 📌 เรียกใช้ฟังก์ชันโหลดเมนูจาก Firebase ทันทีที่เปิดหน้าเว็บ
+            loadMenu();
         };
 
-        // จัดการบวก/ลบ จำนวนสินค้า
-        function updateQty(itemId, change) {
-            if (!cart[itemId]) cart[itemId] = 0;
-            cart[itemId] += change;
-            if (cart[itemId] < 0) cart[itemId] = 0;
+        // 📌 ฟังก์ชันดึงเมนูอาหารจาก Firebase (คอลเล็กชันชื่อ "menu")
+        async function loadMenu() {
+            const menuGrid = document.getElementById('menuGrid');
+            try {
+                // **ถ้าคอลเล็กชันเมนูของคุณชื่ออื่น ให้เปลี่ยนคำว่า "menu" ด้านล่างนี้ครับ**
+                const snapshot = await db.collection("menu").get(); 
+                
+                if (snapshot.empty) {
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการเมนูในระบบ</div>";
+                    return;
+                }
+
+                let html = "";
+                snapshot.forEach(doc => {
+                    let item = doc.data();
+                    let itemId = doc.id;
+                    let itemName = item.name || "ไม่มีชื่อเมนู";
+                    let itemPrice = item.price || 0;
+                    // ถ้าไม่มีรูป ให้โชว์รูปจานอาหารพื้นฐาน
+                    let itemImg = item.image || "https://via.placeholder.com/150?text=Food"; 
+
+                    html += `
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="menu-card p-2 text-center h-100 d-flex flex-column">
+                            <img src="${itemImg}" class="menu-img rounded mb-2" onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
+                            <div class="fw-bold text-dark flex-grow-1" style="font-size: 14px;">${itemName}</div>
+                            <div class="text-danger small fw-bold mb-2">${itemPrice} ฿</div>
+                            <div class="d-flex justify-content-center align-items-center gap-2 mt-auto">
+                                <button class="btn btn-outline-danger qty-btn" onclick="updateQty('${itemId}', -1, '${itemName}', ${itemPrice})">-</button>
+                                <span id="qty-${itemId}" class="fw-bold">0</span>
+                                <button class="btn btn-success qty-btn" onclick="updateQty('${itemId}', 1, '${itemName}', ${itemPrice})">+</button>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+                
+                menuGrid.innerHTML = html;
+
+            } catch (error) {
+                console.error("Error loading menu:", error);
+                menuGrid.innerHTML = `<div class='text-danger w-100 text-center'>เกิดข้อผิดพลาดในการโหลดเมนู: ${error.message}</div>`;
+            }
+        }
+
+        // 📌 จัดการบวก/ลบ จำนวนสินค้าและเก็บลงตะกร้า (Cart)
+        function updateQty(itemId, change, itemName, itemPrice) {
+            // ถ้ายังไม่มีสินค้านี้ในตะกร้า ให้สร้าง Object ไว้เก็บข้อมูล
+            if (!cart[itemId]) {
+                cart[itemId] = { name: itemName, price: itemPrice, qty: 0 };
+            }
             
-            document.getElementById(`qty-${itemId}`).innerText = cart[itemId];
+            cart[itemId].qty += change;
             
-            let totalItems = Object.values(cart).reduce((a, b) => a + b, 0);
+            // ถ้าจำนวนน้อยกว่า 0 ให้ลบออกจากตะกร้าไปเลย
+            if (cart[itemId].qty <= 0) {
+                delete cart[itemId];
+                document.getElementById(`qty-${itemId}`).innerText = "0";
+            } else {
+                document.getElementById(`qty-${itemId}`).innerText = cart[itemId].qty;
+            }
+            
+            // อัปเดตตัวเลขจำนวนรายการรวมที่แถบด้านล่าง
+            let totalItems = 0;
+            for (let key in cart) {
+                totalItems += cart[key].qty;
+            }
             document.getElementById('cartCount').innerText = totalItems;
         }
 
-        // ฟังก์ชันสั่งอาหาร (ส่งเข้าฐานข้อมูล)
+        // 📌 ฟังก์ชันสั่งอาหาร (ส่งเข้าฐานข้อมูล)
         async function submitOrder() {
-            let totalItems = Object.values(cart).reduce((a, b) => a + b, 0);
+            let totalItems = 0;
+            let totalAmount = 0;
+            let orderDetails = "";
+
+            // วนลูปอ่านข้อมูลในตะกร้าเพื่อเรียบเรียงข้อความที่จะส่งให้ห้องครัว
+            for (let key in cart) {
+                totalItems += cart[key].qty;
+                totalAmount += (cart[key].price * cart[key].qty);
+                orderDetails += `${cart[key].name} x ${cart[key].qty}\n`; // เช่น "น้ำเปล่า x 2"
+            }
+
             if (totalItems === 0) return alert("กรุณาเลือกรายการอาหารก่อนครับ");
 
             try {
+                // ส่งออเดอร์เข้าไปที่โฟลเดอร์ orders ของโต๊ะนั้นๆ
                 await db.collection("tables").doc(tableNo).collection("orders").add({
-                    action: "สั่งอาหารเพิ่มเติม",
-                    details: JSON.stringify(cart),
-                    amount: 0,
+                    action: "สั่งอาหาร",
+                    details: orderDetails.trim(),
+                    amount: totalAmount, // คำนวณราคาให้เลย
                     kitchenStatus: "เตรียม",
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
+                
                 alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
+                
+                // ล้างตะกร้าสินค้าหลังจากกดส่ง
                 cart = {};
                 document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
                 document.getElementById('cartCount').innerText = '0';
+                
             } catch (err) {
                 alert("เกิดข้อผิดพลาดในการส่งรายการ: " + err.message);
             }
         }
 
-        // ฟังก์ชันโหลดข้อมูลบิลแสดงใน Modal (อิงโครงสร้าง tables/{tableNo}/orders)
+        // ฟังก์ชันโหลดข้อมูลบิลแสดงใน Modal (โครงสร้างเดิมที่แก้ไปแล้ว)
         function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
@@ -187,17 +237,17 @@
 
                         let kBadge = "";
                         if (item.kitchenStatus === "เตรียม") {
-                            kBadge = '<span class="badge bg-warning text-dark ms-1">กำลังทำ</span>';
+                            kBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 11px;">กำลังทำ</span>';
                         } else if (item.kitchenStatus === "เสร็จ") {
-                            kBadge = '<span class="badge bg-success ms-1">เสิร์ฟแล้ว</span>';
+                            kBadge = '<span class="badge bg-success ms-1" style="font-size: 11px;">เสิร์ฟแล้ว</span>';
                         }
 
-                        let detailText = item.details ? item.details.replace(/\n/g, ', ') : "";
+                        let detailText = item.details ? item.details.replace(/\n/g, '<br>') : "";
 
                         html += `<li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
                                     <div>
                                         <div class="fw-bold text-dark" style="font-size: 14px;">${item.action} ${kBadge}</div>
-                                        <small class="text-muted" style="font-size: 12px;">${detailText}</small>
+                                        <small class="text-muted" style="font-size: 13px;">${detailText}</small>
                                     </div>
                                     <span class="fw-bold text-danger">${item.amount || 0} ฿</span>
                                  </li>`;
