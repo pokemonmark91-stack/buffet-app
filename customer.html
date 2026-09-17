@@ -54,11 +54,11 @@
             </button>
         </div>
 
-        <!-- แถบแยกหมวดหมู่ (Category Tabs) -->
+        <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) -->
         <div class="category-scroll mb-3" id="categoryContainer" style="display: none;">
         </div>
 
-        <!-- พื้นที่แสดงรายการอาหาร -->
+        <!-- 📌 พื้นที่แสดงรายการอาหาร -->
         <div class="row g-2" id="menuGrid">
             <div class="text-center w-100 mt-5 text-muted">
                 <h5>กรุณาระบุหมายเลขโต๊ะ</h5>
@@ -83,7 +83,7 @@
         </div>
     </div>
 
-    <!-- Modal เลือก/เปลี่ยนโต๊ะ -->
+    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ -->
     <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content border-0 shadow" style="border-radius: 15px;">
@@ -169,6 +169,7 @@
             loadOccupiedTables();
         }
 
+        // 📌 1. ดึงเฉพาะโต๊ะที่มีสถานะ "ไม่ว่าง" (ที่พนักงานเปิดโต๊ะไว้แล้ว)
         async function loadOccupiedTables() {
             let select = document.getElementById('inputTableNo');
             select.innerHTML = '<option value="">กำลังโหลดโต๊ะ...</option>';
@@ -247,7 +248,8 @@
             }
         }
 
-                async function loadMenu() {
+        // 📌 2. ดึงข้อมูลเมนู + กรองแพ็กเกจราคาอย่างเข้มงวด
+        async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
                 const snapshot = await db.collection("menu").get(); 
@@ -260,41 +262,44 @@
                 allMenuItems = [];
                 let categoriesSet = new Set();
 
+                // สกัดตัวเลขราคาจากแพ็กเกจของโต๊ะ (เช่น ได้ 119 จาก "ชาบูหมูกระทะ (119)")
+                let tablePrice = 0;
+                if (currentPackage) {
+                    let match = String(currentPackage).match(/\d+/);
+                    if (match) tablePrice = parseInt(match[0]);
+                }
+
                 snapshot.forEach(doc => {
                     let item = doc.data();
                     item.id = doc.id;
                     
-                    // --- ระบบกรองแพ็กเกจ (Filter) ---
-                    let itemPkg = item.package || item.packageName || "";
+                    let itemPkg = item.package || item.packageName || item.packages || item.tier || "";
                     let isMatch = false;
 
-                    // 1. ถ้าเมนูนั้นไม่มีการระบุแพ็กเกจ ให้ถือว่าเป็นเมนูกลาง (แสดงทุกโต๊ะ)
-                    if (!itemPkg) {
-                        isMatch = true; 
-                    } 
-                    // 2. ถ้ามีการระบุแพ็กเกจ นำมาเช็คกับแพ็กเกจของโต๊ะ (currentPackage)
-                    else if (currentPackage) {
-                        // ดึงเฉพาะตัวเลขราคาออกมาเช็ค (เผื่อพิมพ์ชื่อไม่ตรงกัน 100%)
-                        let tablePriceMatch = currentPackage.match(/\d+/);
-                        let itemPriceMatch = String(itemPkg).match(/\d+/);
-                        
-                        if (tablePriceMatch && itemPriceMatch) {
-                            let tablePrice = parseInt(tablePriceMatch[0]);
-                            let itemPrice = parseInt(itemPriceMatch[0]);
-                            
-                            // ลอจิกสำคัญ: โต๊ะแพงกว่า สามารถเห็นเมนูที่ราคาถูกกว่าได้ 
-                            // (เช่น โต๊ะ 159 เห็นเมนู 119 ได้ แต่โต๊ะ 119 จะไม่เห็นเมนู 159)
-                            if (tablePrice >= itemPrice) {
-                                isMatch = true;
-                            }
-                        } 
-                        // กรณีที่ไม่ได้ตั้งเป็นตัวเลขราคา ให้เช็คข้อความตรงๆ
-                        else if (String(itemPkg).includes(currentPackage) || currentPackage.includes(String(itemPkg))) {
-                            isMatch = true;
+                    if (tablePrice > 0) {
+                        let itemPrices = [];
+
+                        if (Array.isArray(itemPkg)) {
+                            itemPrices = itemPkg.map(p => {
+                                let m = String(p).match(/\d+/);
+                                return m ? parseInt(m[0]) : null;
+                            }).filter(p => p !== null);
+                        } else if (itemPkg !== "" && itemPkg !== null && itemPkg !== undefined) {
+                            let match = String(itemPkg).match(/\d+/);
+                            if (match) itemPrices.push(parseInt(match[0]));
                         }
+
+                        if (itemPrices.length > 0) {
+                            // แสดงเฉพาะเมนูที่มีราคาแพ็กเกจ <= ราคาแพ็กเกจของโต๊ะ (159 จะไม่แสดงในโต๊ะ 119)
+                            isMatch = itemPrices.some(p => p <= tablePrice);
+                        } else {
+                            // เมนูกลาง (ไม่ได้ใส่แพ็กเกจ) แสดงผลให้ทุกโต๊ะ
+                            isMatch = true; 
+                        }
+                    } else {
+                        isMatch = true;
                     }
 
-                    // ถ้าระบบเช็คแล้วว่า "ตรงกับแพ็กเกจ" ถึงจะนำมาแสดงให้ลูกค้าเห็น
                     if (isMatch) {
                         allMenuItems.push(item);
                         if (item.category) {
@@ -304,7 +309,7 @@
                 });
 
                 if (allMenuItems.length === 0) {
-                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจของคุณ</div>";
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ " + (currentPackage || "") + "</div>";
                     return;
                 }
 
@@ -430,9 +435,7 @@
             }
         }
 
-        // ========================================================
-        // ปรับปรุงฟังก์ชันคำนวณบิล: รวมทั้งค่าหัวบุฟเฟต์ + ออเดอร์
-        // ========================================================
+        // 📌 3. คำนวณยอดบิลให้ตรงกับ Staff 100% (บุฟเฟต์ผู้ใหญ่ + บุฟเฟต์เด็ก + ออเดอร์เพิ่มเติม)
         async function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             if (!tableNo) {
@@ -443,7 +446,6 @@
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
 
             try {
-                // ดึงข้อมูลโต๊ะเพื่อดึงจำนวนผู้ใหญ่/เด็ก และชื่อแพ็กเกจ
                 const tableDoc = await db.collection("tables").doc(tableNo).get();
                 let tData = tableDoc.exists ? tableDoc.data() : {};
 
@@ -453,19 +455,18 @@
                         let totalAmount = 0;
                         let html = `<ul class="list-group list-group-flush mb-3">`;
 
-                        // 1. คำนวณค่าบุฟเฟต์ตั้งต้น (ผู้ใหญ่/เด็ก)
+                        // อ่านค่าราคาบุฟเฟต์และจำนวนคน
                         let pkgName = tData.package || tData.packageName || "";
                         let adultCount = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
                         let childCount = parseInt(tData.children || tData.childCount || tData.child || 0);
                         let basePrice = parseFloat(tData.packagePrice || tData.price || 0);
 
-                        // แกะตัวเลขราคาจากชื่อแพ็กเกจ เช่น "ชาบูหมูกระทะ (119)"
                         if (!basePrice && pkgName) {
                             let match = pkgName.match(/\d+/);
                             if (match) basePrice = parseFloat(match[0]);
                         }
 
-                        // แสดงแถวบุฟเฟต์ผู้ใหญ่
+                        // แสดงบุฟเฟต์ผู้ใหญ่
                         if (adultCount > 0 && basePrice > 0) {
                             let adultTotal = adultCount * basePrice;
                             totalAmount += adultTotal;
@@ -478,7 +479,7 @@
                                      </li>`;
                         }
 
-                        // แสดงแถวบุฟเฟต์เด็ก (ครึ่งราคา 50%)
+                        // แสดงบุฟเฟต์เด็ก (50%)
                         if (childCount > 0 && basePrice > 0) {
                             let childPrice = basePrice * 0.5;
                             let childTotal = childCount * childPrice;
@@ -492,7 +493,7 @@
                                      </li>`;
                         }
 
-                        // 2. คำนวณรายการสั่งอาหาร/บริการเสริมเพิ่มเติม
+                        // คำนวณรายการสั่งอาหารเพิ่มเติม
                         if (!snapshot.empty) {
                             snapshot.forEach(doc => {
                                 let item = doc.data();
