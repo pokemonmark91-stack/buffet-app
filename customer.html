@@ -358,23 +358,37 @@
             }
         }
 
+        // --- ฟังก์ชันดึงบิลเวอร์ชันอัปเกรด ดักจับทุกรูปแบบข้อมูล ---
         async function viewBill() {
             document.getElementById('billModal').style.display = 'flex';
             document.getElementById('billDetails').innerHTML = "<p style='text-align:center; color:#666;'>กำลังดึงข้อมูลบิล...</p>";
 
             try {
-                const targetTable = String(tableNo).trim();
                 const transactionsRef = collection(db, "Transactions");
                 const allSnap = await getDocs(transactionsRef);
                 
                 let sessionItems = [];
                 
+                // แปลงเลขโต๊ะปัจจุบันให้เหลือแค่ "ตัวเลข" เช่น "โต๊ะ 1" กลายเป็น "1"
+                const targetTblMatch = String(tableNo).match(/\d+/);
+                const targetTblNum = targetTblMatch ? parseInt(targetTblMatch[0]) : String(tableNo).trim();
+                
                 allSnap.forEach(docSnap => {
                     const data = docSnap.data();
-                    const docTable = String(data["1"] || data.tableNo || "").trim();
-                    const payStatus = String(data["5"] || data.payStatus || data.status || "").trim();
                     
-                    if (docTable === targetTable && (payStatus === "ยังไม่จ่าย" || payStatus === "ยังไม่ชำระ" || payStatus === "")) {
+                    // 1. หาข้อมูลโต๊ะจาก Key ต่างๆ ที่อาจจะเป็นไปได้ในฐานข้อมูล แล้วดึงมาแค่ตัวเลข
+                    let rawTable = String(data["1"] || data.tableNo || data.table || data.tableName || "").trim();
+                    let docTblMatch = rawTable.match(/\d+/);
+                    let docTblNum = docTblMatch ? parseInt(docTblMatch[0]) : rawTable;
+
+                    // 2. หาข้อมูลสถานะการจ่ายเงินจาก Key ต่างๆ
+                    let payStatus = String(data["5"] || data.payStatus || data.status || "").trim();
+                    
+                    // 3. ตรวจสอบว่า "จ่ายเงินแล้วหรือยัง" (ถ้าไม่มีคำว่า จ่ายแล้ว/ชำระแล้ว/paid ให้ถือว่ายังไม่จ่าย)
+                    let isPaid = payStatus.includes("จ่ายแล้ว") || payStatus.includes("ชำระแล้ว") || payStatus.toLowerCase() === "paid" || payStatus === "success";
+                    
+                    // ถ้าเลขโต๊ะตรงกัน และ "ยังไม่จ่ายเงิน" ให้ดึงมาแสดง!
+                    if (docTblNum === targetTblNum && !isPaid && rawTable !== "") {
                         sessionItems.push({ id: docSnap.id, ...data });
                     }
                 });
@@ -384,9 +398,10 @@
                     return;
                 }
 
+                // เรียงลำดับตามเวลา (ดักจับ Key เวลาหลายแบบ)
                 sessionItems.sort((a, b) => {
-                    let timeA = a["0"]?.seconds || 0;
-                    let timeB = b["0"]?.seconds || 0;
+                    let timeA = (a["0"] || a.timestamp || a.createdAt)?.seconds || 0;
+                    let timeB = (b["0"] || b.timestamp || b.createdAt)?.seconds || 0;
                     return timeA - timeB;
                 });
 
@@ -394,19 +409,25 @@
                 let html = "<ul style='padding-left: 0; font-size: 14px; margin:0; list-style:none;'>";
 
                 sessionItems.forEach(item => {
-                    let price = parseFloat(item["4"] !== undefined ? item["4"] : (item.price || 0)) || 0;
+                    // ดึงราคา (ดักจับ Key หลายแบบ)
+                    let rawPrice = item["4"] !== undefined ? item["4"] : (item.price || item.total || item.amount || 0);
+                    let price = parseFloat(rawPrice) || 0;
                     totalAmount += price;
 
-                    let detail = item["3"] || item.detail || "รายการอาหาร";
-                    let status = item["6"] || item.kitchenStatus || "";
+                    // ดึงชื่อรายการอาหาร (ดักจับ Key หลายแบบ)
+                    let detail = item["3"] || item.detail || item.items || item.name || "รายการอาหาร";
+                    
+                    // ดึงสถานะครัว (ดักจับ Key หลายแบบ)
+                    let status = item["6"] || item.kitchenStatus || item.orderStatus || "";
+                    
                     let timeStr = "-";
-                    let ts = item["0"] || item.timestamp;
+                    let ts = item["0"] || item.timestamp || item.createdAt;
                     if (ts && ts.toDate) {
                         timeStr = ts.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
                     }
 
                     let statusHtml = "";
-                    if (status) {
+                    if (status && status !== "undefined" && status !== "null") {
                         statusHtml = "<br><span style='font-size:12px; color:#747d8c;'>สถานะ: " + status + "</span>";
                     }
 
