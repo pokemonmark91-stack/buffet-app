@@ -247,7 +247,7 @@
             }
         }
 
-        async function loadMenu() {
+                async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
                 const snapshot = await db.collection("menu").get(); 
@@ -264,14 +264,47 @@
                     let item = doc.data();
                     item.id = doc.id;
                     
-                    allMenuItems.push(item);
-                    if (item.category) {
-                        categoriesSet.add(item.category);
+                    // --- ระบบกรองแพ็กเกจ (Filter) ---
+                    let itemPkg = item.package || item.packageName || "";
+                    let isMatch = false;
+
+                    // 1. ถ้าเมนูนั้นไม่มีการระบุแพ็กเกจ ให้ถือว่าเป็นเมนูกลาง (แสดงทุกโต๊ะ)
+                    if (!itemPkg) {
+                        isMatch = true; 
+                    } 
+                    // 2. ถ้ามีการระบุแพ็กเกจ นำมาเช็คกับแพ็กเกจของโต๊ะ (currentPackage)
+                    else if (currentPackage) {
+                        // ดึงเฉพาะตัวเลขราคาออกมาเช็ค (เผื่อพิมพ์ชื่อไม่ตรงกัน 100%)
+                        let tablePriceMatch = currentPackage.match(/\d+/);
+                        let itemPriceMatch = String(itemPkg).match(/\d+/);
+                        
+                        if (tablePriceMatch && itemPriceMatch) {
+                            let tablePrice = parseInt(tablePriceMatch[0]);
+                            let itemPrice = parseInt(itemPriceMatch[0]);
+                            
+                            // ลอจิกสำคัญ: โต๊ะแพงกว่า สามารถเห็นเมนูที่ราคาถูกกว่าได้ 
+                            // (เช่น โต๊ะ 159 เห็นเมนู 119 ได้ แต่โต๊ะ 119 จะไม่เห็นเมนู 159)
+                            if (tablePrice >= itemPrice) {
+                                isMatch = true;
+                            }
+                        } 
+                        // กรณีที่ไม่ได้ตั้งเป็นตัวเลขราคา ให้เช็คข้อความตรงๆ
+                        else if (String(itemPkg).includes(currentPackage) || currentPackage.includes(String(itemPkg))) {
+                            isMatch = true;
+                        }
+                    }
+
+                    // ถ้าระบบเช็คแล้วว่า "ตรงกับแพ็กเกจ" ถึงจะนำมาแสดงให้ลูกค้าเห็น
+                    if (isMatch) {
+                        allMenuItems.push(item);
+                        if (item.category) {
+                            categoriesSet.add(item.category);
+                        }
                     }
                 });
 
                 if (allMenuItems.length === 0) {
-                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารในระบบ</div>";
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจของคุณ</div>";
                     return;
                 }
 
