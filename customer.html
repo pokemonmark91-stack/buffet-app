@@ -17,9 +17,9 @@
             white-space: nowrap;
             gap: 8px;
             padding-bottom: 8px;
-            scrollbar-width: none; /* ซ่อน Scrollbar บน Firefox */
+            scrollbar-width: none;
         }
-        .category-scroll::-webkit-scrollbar { display: none; } /* ซ่อน Scrollbar บน Chrome/Safari */
+        .category-scroll::-webkit-scrollbar { display: none; }
         
         .cat-btn {
             border-radius: 20px;
@@ -47,7 +47,7 @@
         <!-- แถบแสดงเลขโต๊ะ + ปุ่มเปลี่ยนโต๊ะ -->
         <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 px-3 rounded-3 shadow-sm">
             <span class="fw-bold text-dark">📍 โต๊ะของคุณ: <span id="displayTableNo" class="text-danger fs-5">1</span></span>
-            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#selectTableModal">
+            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#selectTableModal" onclick="loadActiveTables()">
                 ✏️ เปลี่ยนโต๊ะ
             </button>
         </div>
@@ -55,7 +55,6 @@
         <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) -->
         <div class="category-scroll mb-3" id="categoryContainer">
             <button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>
-            <!-- หมวดหมู่อื่นๆ จะถูกสร้างและมาต่อท้ายตรงนี้อัตโนมัติ -->
         </div>
 
         <!-- 📌 พื้นที่แสดงรายการอาหาร -->
@@ -82,16 +81,23 @@
         </div>
     </div>
 
-    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ -->
-    <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true">
+    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ (เปลี่ยนเป็น Dropdown เลือกโต๊ะที่เปิดอยู่) -->
+    <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content border-0 shadow" style="border-radius: 15px;">
                 <div class="modal-header border-0 pb-0">
                     <h5 class="modal-title fw-bold text-dark">📍 ระบุหมายเลขโต๊ะ</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <!-- ซ่อนปุ่มปิด ถ้ายังไม่มีเลขโต๊ะในระบบ เพื่อบังคับให้ลูกค้าเลือกโต๊ะก่อน -->
+                    <button type="button" class="btn-close d-none" id="closeTableModalBtn" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center">
-                    <input type="number" id="inputTableNo" class="form-control text-center fs-4 fw-bold mb-3" placeholder="ระบุเลขโต๊ะ เช่น 1">
+                    <p class="text-muted small mb-2">เลือกโต๊ะที่พนักงานเปิดให้คุณแล้ว</p>
+                    
+                    <!-- 📌 Dropdown เลือกโต๊ะ -->
+                    <select id="inputTableNo" class="form-select form-select-lg text-center fs-6 fw-bold mb-3 shadow-sm">
+                        <option value="" disabled selected>กำลังโหลดโต๊ะ...</option>
+                    </select>
+
                     <button class="btn btn-danger w-100 fw-bold rounded-pill" onclick="saveTableNo()">ตกลง</button>
                 </div>
             </div>
@@ -138,39 +144,81 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        let tableNo = "1";
+        let tableNo = "";
         let cart = {}; // ตะกร้าสินค้า
-        let allMenuItems = []; // เก็บเมนูอาหารทั้งหมดที่ดึงมาจาก Firebase
-        let selectedCategory = 'all'; // หมวดหมู่ที่กำลังเลือก
+        let allMenuItems = []; 
+        let selectedCategory = 'all';
 
-        // เมื่อเปิดหน้าเว็บ
+        // 📌 เมื่อเปิดหน้าเว็บ
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             let tNo = urlParams.get('tableNo') || localStorage.getItem("customerTableNo");
             
             if (!tNo) {
-                // ถ้าไม่มีเลขโต๊ะเลย ให้เด้ง Modal ถามเลขโต๊ะทันที
+                // ถ้าไม่มีเลขโต๊ะ ให้แสดง Modal เลือกโต๊ะ
                 var selectModal = new bootstrap.Modal(document.getElementById('selectTableModal'));
                 selectModal.show();
+                loadActiveTables(); // ดึงรายชื่อโต๊ะที่ว่าง
             } else {
                 tableNo = tNo;
                 localStorage.setItem("customerTableNo", tableNo);
                 document.getElementById('displayTableNo').innerText = tableNo;
+                // แสดงปุ่ม X ปิด Modal ได้หากมีโต๊ะในระบบแล้ว
+                document.getElementById('closeTableModalBtn').classList.remove('d-none');
             }
 
-            // โหลดเมนูอาหารจาก Firebase
             loadMenu();
         };
 
+        // 📌 ดึงรายชื่อโต๊ะที่ "เปิดอยู่" จาก Firebase
+        async function loadActiveTables() {
+            let select = document.getElementById('inputTableNo');
+            select.innerHTML = '<option value="">กำลังโหลดโต๊ะ...</option>';
+            
+            try {
+                // สมมติว่าเก็บข้อมูลโต๊ะที่ collection "tables"
+                const snapshot = await db.collection("tables").get();
+                let optionsHtml = '<option value="" disabled selected>-- กรุณาเลือกโต๊ะของคุณ --</option>';
+                let hasTable = false;
+
+                snapshot.forEach(doc => {
+                    let data = doc.data();
+                    let status = data.status || ""; 
+                    
+                    // ⚠️ สำคัญ: เงื่อนไขเช็กว่าโต๊ะเปิดอยู่
+                    // หากหน้า Staff ของคุณใช้คำอื่นในการเปิดโต๊ะ (เช่น "กำลังทาน", "active") ให้เปลี่ยนตรงนี้ครับ
+                    if (status === "เปิดโต๊ะ" || status === "occupied" || status === "active" || status === "open" || status === "busy") {
+                        optionsHtml += `<option value="${doc.id}">โต๊ะ ${doc.id}</option>`;
+                        hasTable = true;
+                    }
+                });
+
+                if (!hasTable) {
+                    optionsHtml = '<option value="" disabled selected>ยังไม่มีโต๊ะเปิด (โปรดแจ้งพนักงาน)</option>';
+                }
+
+                select.innerHTML = optionsHtml;
+            } catch (err) {
+                select.innerHTML = '<option value="" disabled>โหลดข้อมูลผิดพลาด</option>';
+                console.error("Error loading tables:", err);
+            }
+        }
+
         // 📌 ฟังก์ชันบันทึกการเปลี่ยนเลขโต๊ะ
         function saveTableNo() {
-            let inputVal = document.getElementById('inputTableNo').value.trim();
-            if (!inputVal) return alert("กรุณากรอกหมายเลขโต๊ะครับ");
+            let selectVal = document.getElementById('inputTableNo').value;
+            if (!selectVal) return alert("กรุณาเลือกหมายเลขโต๊ะจากรายการครับ");
             
-            tableNo = inputVal;
+            tableNo = selectVal;
             localStorage.setItem("customerTableNo", tableNo);
             document.getElementById('displayTableNo').innerText = tableNo;
+            document.getElementById('closeTableModalBtn').classList.remove('d-none'); // อนุญาตให้ปิดได้ในอนาคต
             
+            // ล้างตะกร้าเก่าทิ้งเวลาเปลี่ยนโต๊ะ
+            cart = {};
+            document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
+            document.getElementById('cartCount').innerText = '0';
+
             // ปิด Modal
             let modalEl = document.getElementById('selectTableModal');
             let modal = bootstrap.Modal.getInstance(modalEl);
@@ -196,16 +244,12 @@
                     item.id = doc.id;
                     allMenuItems.push(item);
 
-                    // เก็บรายชื่อหมวดหมู่ที่มีอยู่ใน Firebase
                     if (item.category) {
                         categoriesSet.add(item.category);
                     }
                 });
 
-                // สร้างปุ่มหมวดหมู่
                 renderCategories(Array.from(categoriesSet));
-
-                // แสดงรายการอาหารทั้งหมด
                 renderMenu();
 
             } catch (error) {
@@ -230,7 +274,6 @@
         function filterCategory(cat, btnElement) {
             selectedCategory = cat;
 
-            // เปลี่ยนสีปุ่มที่กดเลือก
             document.querySelectorAll('.cat-btn').forEach(btn => {
                 btn.classList.remove('btn-danger', 'active');
                 btn.classList.add('btn-outline-secondary');
@@ -238,11 +281,10 @@
             btnElement.classList.remove('btn-outline-secondary');
             btnElement.classList.add('btn-danger', 'active');
 
-            // วาดรายการอาหารใหม่
             renderMenu();
         }
 
-        // 📌 ฟังก์ชันวาดการ์ดรายการอาหารลงบนหน้าจอ
+        // 📌 ฟังก์ชันวาดการ์ดรายการอาหาร
         function renderMenu() {
             const menuGrid = document.getElementById('menuGrid');
             let html = "";
@@ -256,17 +298,18 @@
                 return;
             }
 
+            // ใช้ placehold.co แทน via.placeholder เพื่อแก้ปัญหาโหลดรูปไม่ขึ้น (ตามภาพ Error Console ของคุณ)
             filteredItems.forEach(item => {
                 let itemId = item.id;
                 let itemName = item.name || "ไม่มีชื่อเมนู";
                 let itemPrice = item.price || 0;
-                let itemImg = item.image || "https://via.placeholder.com/150?text=Food";
+                let itemImg = item.image || "https://placehold.co/150x150?text=Food";
                 let currentQty = cart[itemId] ? cart[itemId].qty : 0;
 
                 html += `
                 <div class="col-6 col-md-4 col-lg-3">
                     <div class="menu-card p-2 text-center h-100 d-flex flex-column">
-                        <img src="${itemImg}" class="menu-img rounded mb-2" onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
+                        <img src="${itemImg}" class="menu-img rounded mb-2" onerror="this.src='https://placehold.co/150x150?text=No+Image'">
                         <div class="fw-bold text-dark flex-grow-1" style="font-size: 14px;">${itemName}</div>
                         <div class="text-danger small fw-bold mb-2">${itemPrice} ฿</div>
                         <div class="d-flex justify-content-center align-items-center gap-2 mt-auto">
@@ -296,7 +339,6 @@
                 if(document.getElementById(`qty-${itemId}`)) document.getElementById(`qty-${itemId}`).innerText = cart[itemId].qty;
             }
             
-            // อัปเดตตัวเลขรวมในแถบด้านล่าง
             let totalItems = 0;
             for (let key in cart) {
                 totalItems += cart[key].qty;
@@ -306,6 +348,8 @@
 
         // 📌 ฟังก์ชันส่งสั่งอาหารเข้า Firebase
         async function submitOrder() {
+            if (!tableNo) return alert("กรุณาระบุเลขโต๊ะก่อนสั่งอาหารครับ!");
+            
             let totalItems = 0;
             let totalAmount = 0;
             let orderDetails = "";
@@ -341,6 +385,11 @@
         // 📌 ฟังก์ชันดึงบิล
         function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
+            if (!tableNo) {
+                billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>กรุณาระบุเลขโต๊ะก่อนครับ</div>";
+                return;
+            }
+            
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
 
             db.collection("tables").doc(tableNo).collection("orders")
