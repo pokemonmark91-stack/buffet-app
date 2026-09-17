@@ -10,7 +10,6 @@
         body { background-color: #f4f6f8; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding-bottom: 90px; }
         .header-bg { background-color: #e64a19; color: white; padding: 12px; border-radius: 0 0 15px 15px; }
         
-        /* สไตล์แถบหมวดหมู่แบบสไลด์แนวนอน */
         .category-scroll {
             display: flex;
             overflow-x: auto;
@@ -46,48 +45,49 @@
     <div class="container">
         <!-- แถบแสดงเลขโต๊ะ + ปุ่มเปลี่ยนโต๊ะ -->
         <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 px-3 rounded-3 shadow-sm">
-            <span class="fw-bold text-dark">📍 โต๊ะของคุณ: <span id="displayTableNo" class="text-danger fs-5">1</span></span>
+            <span class="fw-bold text-dark">📍 โต๊ะของคุณ: <span id="displayTableNo" class="text-danger fs-5">?</span></span>
             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#selectTableModal" onclick="loadActiveTables()">
                 ✏️ เปลี่ยนโต๊ะ
             </button>
         </div>
 
         <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) -->
-        <div class="category-scroll mb-3" id="categoryContainer">
-            <button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>
+        <div class="category-scroll mb-3" id="categoryContainer" style="display: none;">
+            <!-- ปุ่มหมวดหมู่จะถูกแทรกที่นี่ผ่าน JS -->
         </div>
 
         <!-- 📌 พื้นที่แสดงรายการอาหาร -->
         <div class="row g-2" id="menuGrid">
-            <div class="text-center w-100 my-4 text-muted">กำลังโหลดเมนูอาหาร...</div>
+            <!-- ข้อความเริ่มต้น ก่อนเลือกโต๊ะ -->
+            <div class="text-center w-100 mt-5 text-muted">
+                <h5>กรุณาระบุหมายเลขโต๊ะ</h5>
+                <p>เพื่อดูเมนูอาหารและเริ่มสั่งอาหารครับ 🍽️</p>
+            </div>
         </div>
     </div>
 
-    <!-- แถบล่างสุด: ปุ่มส่งรายการ และ ปุ่มสรุปยอดบิล -->
-    <div class="bottom-bar d-flex justify-content-between align-items-center">
+    <!-- แถบล่างสุด: ซ่อนไว้ก่อนจนกว่าจะเลือกโต๊ะ (style="display: none;") -->
+    <div id="bottomBar" class="bottom-bar justify-content-between align-items-center" style="display: none;">
         <div>
             <small class="text-muted d-block">รายการที่เลือก</small>
             <span id="cartCount" class="fw-bold text-primary fs-5">0</span> รายการ
         </div>
         <div class="d-flex gap-2">
-            <!-- ปุ่มเปิดดูบิล -->
             <button class="btn btn-outline-primary fw-bold rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#billModal" onclick="loadCustomerBill()">
                 🧾 สรุปยอดบิล
             </button>
-            <!-- ปุ่มส่งออเดอร์ -->
             <button class="btn btn-danger fw-bold rounded-pill px-4" onclick="submitOrder()">
                 ส่งรายการ 🚀
             </button>
         </div>
     </div>
 
-    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ (เปลี่ยนเป็น Dropdown เลือกโต๊ะที่เปิดอยู่) -->
+    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ (ล็อกหน้าจอจนกว่าจะเลือก) -->
     <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content border-0 shadow" style="border-radius: 15px;">
                 <div class="modal-header border-0 pb-0">
                     <h5 class="modal-title fw-bold text-dark">📍 ระบุหมายเลขโต๊ะ</h5>
-                    <!-- ซ่อนปุ่มปิด ถ้ายังไม่มีเลขโต๊ะในระบบ เพื่อบังคับให้ลูกค้าเลือกโต๊ะก่อน -->
                     <button type="button" class="btn-close d-none" id="closeTableModalBtn" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center">
@@ -145,7 +145,7 @@
         const db = firebase.firestore();
 
         let tableNo = "";
-        let cart = {}; // ตะกร้าสินค้า
+        let cart = {}; 
         let allMenuItems = []; 
         let selectedCategory = 'all';
 
@@ -155,20 +155,30 @@
             let tNo = urlParams.get('tableNo') || localStorage.getItem("customerTableNo");
             
             if (!tNo) {
-                // ถ้าไม่มีเลขโต๊ะ ให้แสดง Modal เลือกโต๊ะ
+                // กรณี 1: ยังไม่มีโต๊ะ -> เด้ง Modal ทันที และบังคับให้เลือก (ไม่โหลดเมนู)
                 var selectModal = new bootstrap.Modal(document.getElementById('selectTableModal'));
                 selectModal.show();
-                loadActiveTables(); // ดึงรายชื่อโต๊ะที่ว่าง
+                loadActiveTables();
             } else {
+                // กรณี 2: เคยมีประวัติโต๊ะแล้ว -> เปิดระบบและโหลดเมนูให้เลย
                 tableNo = tNo;
                 localStorage.setItem("customerTableNo", tableNo);
-                document.getElementById('displayTableNo').innerText = tableNo;
-                // แสดงปุ่ม X ปิด Modal ได้หากมีโต๊ะในระบบแล้ว
-                document.getElementById('closeTableModalBtn').classList.remove('d-none');
+                
+                activateSystem();
             }
-
-            loadMenu();
         };
+
+        // 📌 ฟังก์ชันเปิดการแสดงผลหน้าจอทั้งหมดหลังได้โต๊ะ
+        function activateSystem() {
+            document.getElementById('displayTableNo').innerText = tableNo;
+            document.getElementById('closeTableModalBtn').classList.remove('d-none'); // อนุญาตให้ปิด Modal ได้
+            
+            document.getElementById('bottomBar').style.display = 'flex'; // แสดงแถบตะกร้า
+            document.getElementById('categoryContainer').style.display = 'flex'; // แสดงแถบหมวดหมู่
+            
+            document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดเมนูอาหาร...</div>";
+            loadMenu(); // เริ่มโหลดเมนูอาหาร
+        }
 
         // 📌 ดึงรายชื่อโต๊ะที่ "เปิดอยู่" จาก Firebase
         async function loadActiveTables() {
@@ -176,7 +186,6 @@
             select.innerHTML = '<option value="">กำลังโหลดโต๊ะ...</option>';
             
             try {
-                // สมมติว่าเก็บข้อมูลโต๊ะที่ collection "tables"
                 const snapshot = await db.collection("tables").get();
                 let optionsHtml = '<option value="" disabled selected>-- กรุณาเลือกโต๊ะของคุณ --</option>';
                 let hasTable = false;
@@ -185,8 +194,7 @@
                     let data = doc.data();
                     let status = data.status || ""; 
                     
-                    // ⚠️ สำคัญ: เงื่อนไขเช็กว่าโต๊ะเปิดอยู่
-                    // หากหน้า Staff ของคุณใช้คำอื่นในการเปิดโต๊ะ (เช่น "กำลังทาน", "active") ให้เปลี่ยนตรงนี้ครับ
+                    // เงื่อนไขเช็กว่าโต๊ะเปิดอยู่ 
                     if (status === "เปิดโต๊ะ" || status === "occupied" || status === "active" || status === "open" || status === "busy") {
                         optionsHtml += `<option value="${doc.id}">โต๊ะ ${doc.id}</option>`;
                         hasTable = true;
@@ -204,25 +212,25 @@
             }
         }
 
-        // 📌 ฟังก์ชันบันทึกการเปลี่ยนเลขโต๊ะ
+        // 📌 ฟังก์ชันเมื่อลูกค้ากดปุ่ม "ตกลง" เลือกโต๊ะ
         function saveTableNo() {
             let selectVal = document.getElementById('inputTableNo').value;
             if (!selectVal) return alert("กรุณาเลือกหมายเลขโต๊ะจากรายการครับ");
             
             tableNo = selectVal;
             localStorage.setItem("customerTableNo", tableNo);
-            document.getElementById('displayTableNo').innerText = tableNo;
-            document.getElementById('closeTableModalBtn').classList.remove('d-none'); // อนุญาตให้ปิดได้ในอนาคต
             
-            // ล้างตะกร้าเก่าทิ้งเวลาเปลี่ยนโต๊ะ
+            // ล้างตะกร้าเก่าทิ้งเสมอเวลาเปลี่ยนโต๊ะ
             cart = {};
-            document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
             document.getElementById('cartCount').innerText = '0';
 
             // ปิด Modal
             let modalEl = document.getElementById('selectTableModal');
             let modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
+
+            // เรียกฟังก์ชันเปิดระบบ
+            activateSystem();
         }
 
         // 📌 ฟังก์ชันดึงเมนูอาหารจาก Firebase
@@ -258,7 +266,7 @@
             }
         }
 
-        // 📌 ฟังก์ชันสร้างปุ่มหมวดหมู่บนแถบสไลด์
+        // 📌 สร้างปุ่มหมวดหมู่
         function renderCategories(categories) {
             const container = document.getElementById('categoryContainer');
             let html = `<button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>`;
@@ -270,21 +278,19 @@
             container.innerHTML = html;
         }
 
-        // 📌 ฟังก์ชันกรองเมนูตามหมวดหมู่
+        // 📌 กรองเมนูตามหมวดหมู่
         function filterCategory(cat, btnElement) {
             selectedCategory = cat;
-
             document.querySelectorAll('.cat-btn').forEach(btn => {
                 btn.classList.remove('btn-danger', 'active');
                 btn.classList.add('btn-outline-secondary');
             });
             btnElement.classList.remove('btn-outline-secondary');
             btnElement.classList.add('btn-danger', 'active');
-
             renderMenu();
         }
 
-        // 📌 ฟังก์ชันวาดการ์ดรายการอาหาร
+        // 📌 วาดการ์ดเมนูอาหาร
         function renderMenu() {
             const menuGrid = document.getElementById('menuGrid');
             let html = "";
@@ -298,7 +304,6 @@
                 return;
             }
 
-            // ใช้ placehold.co แทน via.placeholder เพื่อแก้ปัญหาโหลดรูปไม่ขึ้น (ตามภาพ Error Console ของคุณ)
             filteredItems.forEach(item => {
                 let itemId = item.id;
                 let itemName = item.name || "ไม่มีชื่อเมนู";
@@ -326,9 +331,9 @@
 
         // 📌 จัดการบวก/ลบ จำนวนสินค้า
         function updateQty(itemId, change, itemName, itemPrice) {
-            if (!cart[itemId]) {
-                cart[itemId] = { name: itemName, price: itemPrice, qty: 0 };
-            }
+            if (!tableNo) return alert("กรุณาเลือกโต๊ะก่อนสั่งอาหารครับ!");
+
+            if (!cart[itemId]) cart[itemId] = { name: itemName, price: itemPrice, qty: 0 };
             
             cart[itemId].qty += change;
             
@@ -340,9 +345,7 @@
             }
             
             let totalItems = 0;
-            for (let key in cart) {
-                totalItems += cart[key].qty;
-            }
+            for (let key in cart) { totalItems += cart[key].qty; }
             document.getElementById('cartCount').innerText = totalItems;
         }
 
@@ -372,7 +375,436 @@
                 });
                 
                 alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
+                cart = {};
+                document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
+                document.getElementById('cartCount').innerText = '0';
                 
+            } catch (err) {
+                alert("เกิดข้อผิดพลาดในการส่งรายการ: " + err.message);
+            }
+        }
+
+        // 📌 ฟังก์ชันดึงบิล
+        function loadCustomerBill() {
+            let billArea = document.getElementById('billArea');
+            if (!tableNo) {
+                billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>กรุณาระบุเลขโต๊ะก่อนครับ</div>";
+                return;
+            }
+            
+            billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
+
+            db.collection("tables").doc(tableNo).collection("orders")
+                .orderBy("timestamp", "asc")
+                .onSnapshot(function(snapshot) {
+                    if (snapshot.empty) {
+                        billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>ยังไม่มีรายการสั่งอาหารในรอบนี้</div>";
+                        return;
+                    }
+
+                    let totalAmount = 0;
+                    let html = `<ul class="list-group list-group-flush mb-3">`;
+
+                    snapshot.forEach(doc => {
+                        let item = doc.data();
+                        totalAmount += (item.amount || 0);
+
+                        let kBadge = "";
+                        if (item.kitchenStatus === "เตรียม") {
+                            kBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 11px;">กำลังทำ</span>';
+                        } else if (item.kitchenStatus === "เสร็จ") {
+                            kBadge = '<span class="badge bg-success ms-1" style="font-size: 11px;">เสิร์ฟแล้ว</span>';
+                        }
+
+                        let detailText = item.details ? item.details.replace(/\n/g, '<br>') : "";
+
+                        html += `<li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                                    <div>
+                                        <div class="fw-bold text-dark" style="font-size: 14px;">${item.action} ${kBadge}</div>
+                                        <small class="text-muted" style="font-size: 13px;">${detailText}</small>
+                                    </div>
+                                    <span class="fw-bold text-danger">${item.amount || 0} ฿</span>
+                                 </li>`;
+                    });
+
+                    // 📌 ฟังก์ชันเมื่อลูกค้ากดปุ่ม "ตกลง" เลือกโต๊ะ
+        function saveTableNo() {
+            let selectVal = document.getElementById('inputTableNo').value;
+            if (!selectVal) return alert("กรุณาเลือกหมายเลขโต๊ะจากรายการครับ");
+            
+            tableNo = selectVal;
+            localStorage.setItem("customerTableNo", tableNo);
+            
+            // ล้างตะกร้าเก่าทิ้งเสมอเวลาเปลี่ยนโต๊ะ
+            cart = {};
+            document.getElementById('cartCount').innerText = '0';
+
+            // ปิด Modal
+            let modalEl = document.getElementById('selectTableModal');
+            let modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            // เรียกฟังก์ชันเปิดระบบ
+            activateSystem();
+        }
+
+        // 📌 ฟังก์ชันดึงเมนูอาหารจาก Firebase
+        async function loadMenu() {
+            const menuGrid = document.getElementById('menuGrid');
+            try {
+                const snapshot = await db.collection("menu").get(); 
+                
+                if (snapshot.empty) {
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการเมนูในระบบ</div>";
+                    return;
+                }
+
+                allMenuItems = [];
+                let categoriesSet = new Set();
+
+                snapshot.forEach(doc => {
+                    let item = doc.data();
+                    item.id = doc.id;
+                    allMenuItems.push(item);
+
+                    if (item.category) {
+                        categoriesSet.add(item.category);
+                    }
+                });
+
+                renderCategories(Array.from(categoriesSet));
+                renderMenu();
+
+            } catch (error) {
+                console.error("Error loading menu:", error);
+                menuGrid.innerHTML = `<div class='text-danger w-100 text-center'>เกิดข้อผิดพลาดในการโหลดเมนู: ${error.message}</div>`;
+            }
+        }
+
+        // 📌 สร้างปุ่มหมวดหมู่
+        function renderCategories(categories) {
+            const container = document.getElementById('categoryContainer');
+            let html = `<button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>`;
+            
+            categories.forEach(cat => {
+                html += `<button class="btn btn-outline-secondary cat-btn" onclick="filterCategory('${cat}', this)">${cat}</button>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 📌 กรองเมนูตามหมวดหมู่
+        function filterCategory(cat, btnElement) {
+            selectedCategory = cat;
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('btn-danger', 'active');
+                btn.classList.add('btn-outline-secondary');
+            });
+            btnElement.classList.remove('btn-outline-secondary');
+            btnElement.classList.add('btn-danger', 'active');
+            renderMenu();
+        }
+
+        // 📌 วาดการ์ดเมนูอาหาร
+        function renderMenu() {
+            const menuGrid = document.getElementById('menuGrid');
+            let html = "";
+
+            let filteredItems = (selectedCategory === 'all') 
+                ? allMenuItems 
+                : allMenuItems.filter(item => item.category === selectedCategory);
+
+            if (filteredItems.length === 0) {
+                menuGrid.innerHTML = "<div class='text-center w-100 my-4 text-muted'>ไม่มีรายการในหมวดหมู่นี้</div>";
+                return;
+            }
+
+            filteredItems.forEach(item => {
+                let itemId = item.id;
+                let itemName = item.name || "ไม่มีชื่อเมนู";
+                let itemPrice = item.price || 0;
+                let itemImg = item.image || "https://placehold.co/150x150?text=Food";
+                let currentQty = cart[itemId] ? cart[itemId].qty : 0;
+
+                html += `
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="menu-card p-2 text-center h-100 d-flex flex-column">
+                        <img src="${itemImg}" class="menu-img rounded mb-2" onerror="this.src='https://placehold.co/150x150?text=No+Image'">
+                        <div class="fw-bold text-dark flex-grow-1" style="font-size: 14px;">${itemName}</div>
+                        <div class="text-danger small fw-bold mb-2">${itemPrice} ฿</div>
+                        <div class="d-flex justify-content-center align-items-center gap-2 mt-auto">
+                            <button class="btn btn-outline-danger qty-btn" onclick="updateQty('${itemId}', -1, '${itemName}', ${itemPrice})">-</button>
+                            <span id="qty-${itemId}" class="fw-bold">${currentQty}</span>
+                            <button class="btn btn-success qty-btn" onclick="updateQty('${itemId}', 1, '${itemName}', ${itemPrice})">+</button>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            menuGrid.innerHTML = html;
+        }
+
+        // 📌 จัดการบวก/ลบ จำนวนสินค้า
+        function updateQty(itemId, change, itemName, itemPrice) {
+            if (!tableNo) return alert("กรุณาเลือกโต๊ะก่อนสั่งอาหารครับ!");
+
+            if (!cart[itemId]) cart[itemId] = { name: itemName, price: itemPrice, qty: 0 };
+            
+            cart[itemId].qty += change;
+            
+            if (cart[itemId].qty <= 0) {
+                delete cart[itemId];
+                if(document.getElementById(`qty-${itemId}`)) document.getElementById(`qty-${itemId}`).innerText = "0";
+            } else {
+                if(document.getElementById(`qty-${itemId}`)) document.getElementById(`qty-${itemId}`).innerText = cart[itemId].qty;
+            }
+            
+            let totalItems = 0;
+            for (let key in cart) { totalItems += cart[key].qty; }
+            document.getElementById('cartCount').innerText = totalItems;
+        }
+
+        // 📌 ฟังก์ชันส่งสั่งอาหารเข้า Firebase
+        async function submitOrder() {
+            if (!tableNo) return alert("กรุณาระบุเลขโต๊ะก่อนสั่งอาหารครับ!");
+            
+            let totalItems = 0;
+            let totalAmount = 0;
+            let orderDetails = "";
+
+            for (let key in cart) {
+                totalItems += cart[key].qty;
+                totalAmount += (cart[key].price * cart[key].qty);
+                orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
+            }
+
+            if (totalItems === 0) return alert("กรุณาเลือกรายการอาหารก่อนครับ");
+
+            try {
+                await db.collection("tables").doc(tableNo).collection("orders").add({
+                    action: "สั่งอาหาร",
+                    details: orderDetails.trim(),
+                    amount: totalAmount,
+                    kitchenStatus: "เตรียม",
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
+                cart = {};
+                document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
+                document.getElementById('cartCount').innerText = '0';
+                
+            } catch (err) {
+                alert("เกิดข้อผิดพลาดในการส่งรายการ: " + err.message);
+            }
+        }
+
+        // 📌 ฟังก์ชันดึงบิล
+        function loadCustomerBill() {
+            let billArea = document.getElementById('billArea');
+            if (!tableNo) {
+                billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>กรุณาระบุเลขโต๊ะก่อนครับ</div>";
+                return;
+            }
+            
+            billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
+
+            db.collection("tables").doc(tableNo).collection("orders")
+                .orderBy("timestamp", "asc")
+                .onSnapshot(function(snapshot) {
+                    if (snapshot.empty) {
+                        billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>ยังไม่มีรายการสั่งอาหารในรอบนี้</div>";
+                        return;
+                    }
+
+                    let totalAmount = 0;
+                    let html = `<ul class="list-group list-group-flush mb-3">`;
+
+                    snapshot.forEach(doc => {
+                        let item = doc.data();
+                        totalAmount += (item.amount || 0);
+
+                        let kBadge = "";
+                        if (item.kitchenStatus === "เตรียม") {
+                            kBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 11px;">กำลังทำ</span>';
+                        } else if (item.kitchenStatus === "เสร็จ") {
+                            kBadge = '<span class="badge bg-success ms-1" style="font-size: 11px;">เสิร์ฟแล้ว</span>';
+                        }
+
+                        let detailText = item.details ? item.details.replace(/\n/g, '<br>') : "";
+
+                        html += `<li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                                    <div>
+                                        <div class="fw-bold text-dark" style="font-size: 14px;">${item.action} ${kBadge}</div>
+                                        <small class="text-muted" style="font-size: 13px;">${detailText}</small>
+                                    </div>
+                                    <span class="fw-bold text-danger">${item.amount || 0} ฿</span>
+                                 </li>`;
+                    });
+
+                    // 📌 ฟังก์ชันเมื่อลูกค้ากดปุ่ม "ตกลง" เลือกโต๊ะ
+        function saveTableNo() {
+            let selectVal = document.getElementById('inputTableNo').value;
+            if (!selectVal) return alert("กรุณาเลือกหมายเลขโต๊ะจากรายการครับ");
+            
+            tableNo = selectVal;
+            localStorage.setItem("customerTableNo", tableNo);
+            
+            // ล้างตะกร้าเก่าทิ้งเสมอเวลาเปลี่ยนโต๊ะ
+            cart = {};
+            document.getElementById('cartCount').innerText = '0';
+
+            // ปิด Modal
+            let modalEl = document.getElementById('selectTableModal');
+            let modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            // เรียกฟังก์ชันเปิดระบบ
+            activateSystem();
+        }
+
+        // 📌 ฟังก์ชันดึงเมนูอาหารจาก Firebase
+        async function loadMenu() {
+            const menuGrid = document.getElementById('menuGrid');
+            try {
+                const snapshot = await db.collection("menu").get(); 
+                
+                if (snapshot.empty) {
+                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการเมนูในระบบ</div>";
+                    return;
+                }
+
+                allMenuItems = [];
+                let categoriesSet = new Set();
+
+                snapshot.forEach(doc => {
+                    let item = doc.data();
+                    item.id = doc.id;
+                    allMenuItems.push(item);
+
+                    if (item.category) {
+                        categoriesSet.add(item.category);
+                    }
+                });
+
+                renderCategories(Array.from(categoriesSet));
+                renderMenu();
+
+            } catch (error) {
+                console.error("Error loading menu:", error);
+                menuGrid.innerHTML = `<div class='text-danger w-100 text-center'>เกิดข้อผิดพลาดในการโหลดเมนู: ${error.message}</div>`;
+            }
+        }
+
+        // 📌 สร้างปุ่มหมวดหมู่
+        function renderCategories(categories) {
+            const container = document.getElementById('categoryContainer');
+            let html = `<button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>`;
+            
+            categories.forEach(cat => {
+                html += `<button class="btn btn-outline-secondary cat-btn" onclick="filterCategory('${cat}', this)">${cat}</button>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 📌 กรองเมนูตามหมวดหมู่
+        function filterCategory(cat, btnElement) {
+            selectedCategory = cat;
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('btn-danger', 'active');
+                btn.classList.add('btn-outline-secondary');
+            });
+            btnElement.classList.remove('btn-outline-secondary');
+            btnElement.classList.add('btn-danger', 'active');
+            renderMenu();
+        }
+
+        // 📌 วาดการ์ดเมนูอาหาร
+        function renderMenu() {
+            const menuGrid = document.getElementById('menuGrid');
+            let html = "";
+
+            let filteredItems = (selectedCategory === 'all') 
+                ? allMenuItems 
+                : allMenuItems.filter(item => item.category === selectedCategory);
+
+            if (filteredItems.length === 0) {
+                menuGrid.innerHTML = "<div class='text-center w-100 my-4 text-muted'>ไม่มีรายการในหมวดหมู่นี้</div>";
+                return;
+            }
+
+            filteredItems.forEach(item => {
+                let itemId = item.id;
+                let itemName = item.name || "ไม่มีชื่อเมนู";
+                let itemPrice = item.price || 0;
+                let itemImg = item.image || "https://placehold.co/150x150?text=Food";
+                let currentQty = cart[itemId] ? cart[itemId].qty : 0;
+
+                html += `
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="menu-card p-2 text-center h-100 d-flex flex-column">
+                        <img src="${itemImg}" class="menu-img rounded mb-2" onerror="this.src='https://placehold.co/150x150?text=No+Image'">
+                        <div class="fw-bold text-dark flex-grow-1" style="font-size: 14px;">${itemName}</div>
+                        <div class="text-danger small fw-bold mb-2">${itemPrice} ฿</div>
+                        <div class="d-flex justify-content-center align-items-center gap-2 mt-auto">
+                            <button class="btn btn-outline-danger qty-btn" onclick="updateQty('${itemId}', -1, '${itemName}', ${itemPrice})">-</button>
+                            <span id="qty-${itemId}" class="fw-bold">${currentQty}</span>
+                            <button class="btn btn-success qty-btn" onclick="updateQty('${itemId}', 1, '${itemName}', ${itemPrice})">+</button>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            menuGrid.innerHTML = html;
+        }
+
+        // 📌 จัดการบวก/ลบ จำนวนสินค้า
+        function updateQty(itemId, change, itemName, itemPrice) {
+            if (!tableNo) return alert("กรุณาเลือกโต๊ะก่อนสั่งอาหารครับ!");
+
+            if (!cart[itemId]) cart[itemId] = { name: itemName, price: itemPrice, qty: 0 };
+            
+            cart[itemId].qty += change;
+            
+            if (cart[itemId].qty <= 0) {
+                delete cart[itemId];
+                if(document.getElementById(`qty-${itemId}`)) document.getElementById(`qty-${itemId}`).innerText = "0";
+            } else {
+                if(document.getElementById(`qty-${itemId}`)) document.getElementById(`qty-${itemId}`).innerText = cart[itemId].qty;
+            }
+            
+            let totalItems = 0;
+            for (let key in cart) { totalItems += cart[key].qty; }
+            document.getElementById('cartCount').innerText = totalItems;
+        }
+
+        // 📌 ฟังก์ชันส่งสั่งอาหารเข้า Firebase
+        async function submitOrder() {
+            if (!tableNo) return alert("กรุณาระบุเลขโต๊ะก่อนสั่งอาหารครับ!");
+            
+            let totalItems = 0;
+            let totalAmount = 0;
+            let orderDetails = "";
+
+            for (let key in cart) {
+                totalItems += cart[key].qty;
+                totalAmount += (cart[key].price * cart[key].qty);
+                orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
+            }
+
+            if (totalItems === 0) return alert("กรุณาเลือกรายการอาหารก่อนครับ");
+
+            try {
+                await db.collection("tables").doc(tableNo).collection("orders").add({
+                    action: "สั่งอาหาร",
+                    details: orderDetails.trim(),
+                    amount: totalAmount,
+                    kitchenStatus: "เตรียม",
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
                 cart = {};
                 document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
                 document.getElementById('cartCount').innerText = '0';
