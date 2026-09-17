@@ -9,6 +9,26 @@
     <style>
         body { background-color: #f4f6f8; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding-bottom: 90px; }
         .header-bg { background-color: #e64a19; color: white; padding: 12px; border-radius: 0 0 15px 15px; }
+        
+        /* สไตล์แถบหมวดหมู่แบบสไลด์แนวนอน */
+        .category-scroll {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            gap: 8px;
+            padding-bottom: 8px;
+            scrollbar-width: none; /* ซ่อน Scrollbar บน Firefox */
+        }
+        .category-scroll::-webkit-scrollbar { display: none; } /* ซ่อน Scrollbar บน Chrome/Safari */
+        
+        .cat-btn {
+            border-radius: 20px;
+            padding: 6px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
         .menu-card { background: white; border-radius: 12px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
         .menu-img { width: 100%; height: 110px; object-fit: cover; background-color: #eee; }
         .qty-btn { width: 28px; height: 28px; padding: 0; border-radius: 50%; font-weight: bold; line-height: 1; }
@@ -24,13 +44,21 @@
     </div>
 
     <div class="container">
-        <!-- แสดงเลขโต๊ะ -->
+        <!-- แถบแสดงเลขโต๊ะ + ปุ่มเปลี่ยนโต๊ะ -->
         <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 px-3 rounded-3 shadow-sm">
             <span class="fw-bold text-dark">📍 โต๊ะของคุณ: <span id="displayTableNo" class="text-danger fs-5">1</span></span>
-            <span class="badge bg-success">เปิดโต๊ะเรียบร้อย</span>
+            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#selectTableModal">
+                ✏️ เปลี่ยนโต๊ะ
+            </button>
         </div>
 
-        <!-- 📌 พื้นที่แสดงรายการอาหาร (ปล่อยว่างไว้ เดี๋ยว JS จะดึงจาก Firebase มาใส่ให้) -->
+        <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) -->
+        <div class="category-scroll mb-3" id="categoryContainer">
+            <button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>
+            <!-- หมวดหมู่อื่นๆ จะถูกสร้างและมาต่อท้ายตรงนี้อัตโนมัติ -->
+        </div>
+
+        <!-- 📌 พื้นที่แสดงรายการอาหาร -->
         <div class="row g-2" id="menuGrid">
             <div class="text-center w-100 my-4 text-muted">กำลังโหลดเมนูอาหาร...</div>
         </div>
@@ -51,6 +79,22 @@
             <button class="btn btn-danger fw-bold rounded-pill px-4" onclick="submitOrder()">
                 ส่งรายการ 🚀
             </button>
+        </div>
+    </div>
+
+    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ -->
+    <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content border-0 shadow" style="border-radius: 15px;">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-dark">📍 ระบุหมายเลขโต๊ะ</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <input type="number" id="inputTableNo" class="form-control text-center fs-4 fw-bold mb-3" placeholder="ระบุเลขโต๊ะ เช่น 1">
+                    <button class="btn btn-danger w-100 fw-bold rounded-pill" onclick="saveTableNo()">ตกลง</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -95,25 +139,48 @@
         const db = firebase.firestore();
 
         let tableNo = "1";
-        let cart = {}; // เก็บข้อมูลตระกร้าสินค้า
+        let cart = {}; // ตะกร้าสินค้า
+        let allMenuItems = []; // เก็บเมนูอาหารทั้งหมดที่ดึงมาจาก Firebase
+        let selectedCategory = 'all'; // หมวดหมู่ที่กำลังเลือก
 
-        // เมื่อโหลดหน้าเว็บเสร็จ
+        // เมื่อเปิดหน้าเว็บ
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
-            let tNo = urlParams.get('tableNo') || localStorage.getItem("customerTableNo") || "1";
-            tableNo = tNo;
-            localStorage.setItem("customerTableNo", tableNo);
-            document.getElementById('displayTableNo').innerText = tableNo;
+            let tNo = urlParams.get('tableNo') || localStorage.getItem("customerTableNo");
+            
+            if (!tNo) {
+                // ถ้าไม่มีเลขโต๊ะเลย ให้เด้ง Modal ถามเลขโต๊ะทันที
+                var selectModal = new bootstrap.Modal(document.getElementById('selectTableModal'));
+                selectModal.show();
+            } else {
+                tableNo = tNo;
+                localStorage.setItem("customerTableNo", tableNo);
+                document.getElementById('displayTableNo').innerText = tableNo;
+            }
 
-            // 📌 เรียกใช้ฟังก์ชันโหลดเมนูจาก Firebase ทันทีที่เปิดหน้าเว็บ
+            // โหลดเมนูอาหารจาก Firebase
             loadMenu();
         };
 
-        // 📌 ฟังก์ชันดึงเมนูอาหารจาก Firebase (คอลเล็กชันชื่อ "menu")
+        // 📌 ฟังก์ชันบันทึกการเปลี่ยนเลขโต๊ะ
+        function saveTableNo() {
+            let inputVal = document.getElementById('inputTableNo').value.trim();
+            if (!inputVal) return alert("กรุณากรอกหมายเลขโต๊ะครับ");
+            
+            tableNo = inputVal;
+            localStorage.setItem("customerTableNo", tableNo);
+            document.getElementById('displayTableNo').innerText = tableNo;
+            
+            // ปิด Modal
+            let modalEl = document.getElementById('selectTableModal');
+            let modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+        }
+
+        // 📌 ฟังก์ชันดึงเมนูอาหารจาก Firebase
         async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
-                // **ถ้าคอลเล็กชันเมนูของคุณชื่ออื่น ให้เปลี่ยนคำว่า "menu" ด้านล่างนี้ครับ**
                 const snapshot = await db.collection("menu").get(); 
                 
                 if (snapshot.empty) {
@@ -121,31 +188,25 @@
                     return;
                 }
 
-                let html = "";
+                allMenuItems = [];
+                let categoriesSet = new Set();
+
                 snapshot.forEach(doc => {
                     let item = doc.data();
-                    let itemId = doc.id;
-                    let itemName = item.name || "ไม่มีชื่อเมนู";
-                    let itemPrice = item.price || 0;
-                    // ถ้าไม่มีรูป ให้โชว์รูปจานอาหารพื้นฐาน
-                    let itemImg = item.image || "https://via.placeholder.com/150?text=Food"; 
+                    item.id = doc.id;
+                    allMenuItems.push(item);
 
-                    html += `
-                    <div class="col-6 col-md-4 col-lg-3">
-                        <div class="menu-card p-2 text-center h-100 d-flex flex-column">
-                            <img src="${itemImg}" class="menu-img rounded mb-2" onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
-                            <div class="fw-bold text-dark flex-grow-1" style="font-size: 14px;">${itemName}</div>
-                            <div class="text-danger small fw-bold mb-2">${itemPrice} ฿</div>
-                            <div class="d-flex justify-content-center align-items-center gap-2 mt-auto">
-                                <button class="btn btn-outline-danger qty-btn" onclick="updateQty('${itemId}', -1, '${itemName}', ${itemPrice})">-</button>
-                                <span id="qty-${itemId}" class="fw-bold">0</span>
-                                <button class="btn btn-success qty-btn" onclick="updateQty('${itemId}', 1, '${itemName}', ${itemPrice})">+</button>
-                            </div>
-                        </div>
-                    </div>`;
+                    // เก็บรายชื่อหมวดหมู่ที่มีอยู่ใน Firebase
+                    if (item.category) {
+                        categoriesSet.add(item.category);
+                    }
                 });
-                
-                menuGrid.innerHTML = html;
+
+                // สร้างปุ่มหมวดหมู่
+                renderCategories(Array.from(categoriesSet));
+
+                // แสดงรายการอาหารทั้งหมด
+                renderMenu();
 
             } catch (error) {
                 console.error("Error loading menu:", error);
@@ -153,24 +214,89 @@
             }
         }
 
-        // 📌 จัดการบวก/ลบ จำนวนสินค้าและเก็บลงตะกร้า (Cart)
+        // 📌 ฟังก์ชันสร้างปุ่มหมวดหมู่บนแถบสไลด์
+        function renderCategories(categories) {
+            const container = document.getElementById('categoryContainer');
+            let html = `<button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>`;
+            
+            categories.forEach(cat => {
+                html += `<button class="btn btn-outline-secondary cat-btn" onclick="filterCategory('${cat}', this)">${cat}</button>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 📌 ฟังก์ชันกรองเมนูตามหมวดหมู่
+        function filterCategory(cat, btnElement) {
+            selectedCategory = cat;
+
+            // เปลี่ยนสีปุ่มที่กดเลือก
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('btn-danger', 'active');
+                btn.classList.add('btn-outline-secondary');
+            });
+            btnElement.classList.remove('btn-outline-secondary');
+            btnElement.classList.add('btn-danger', 'active');
+
+            // วาดรายการอาหารใหม่
+            renderMenu();
+        }
+
+        // 📌 ฟังก์ชันวาดการ์ดรายการอาหารลงบนหน้าจอ
+        function renderMenu() {
+            const menuGrid = document.getElementById('menuGrid');
+            let html = "";
+
+            let filteredItems = (selectedCategory === 'all') 
+                ? allMenuItems 
+                : allMenuItems.filter(item => item.category === selectedCategory);
+
+            if (filteredItems.length === 0) {
+                menuGrid.innerHTML = "<div class='text-center w-100 my-4 text-muted'>ไม่มีรายการในหมวดหมู่นี้</div>";
+                return;
+            }
+
+            filteredItems.forEach(item => {
+                let itemId = item.id;
+                let itemName = item.name || "ไม่มีชื่อเมนู";
+                let itemPrice = item.price || 0;
+                let itemImg = item.image || "https://via.placeholder.com/150?text=Food";
+                let currentQty = cart[itemId] ? cart[itemId].qty : 0;
+
+                html += `
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="menu-card p-2 text-center h-100 d-flex flex-column">
+                        <img src="${itemImg}" class="menu-img rounded mb-2" onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
+                        <div class="fw-bold text-dark flex-grow-1" style="font-size: 14px;">${itemName}</div>
+                        <div class="text-danger small fw-bold mb-2">${itemPrice} ฿</div>
+                        <div class="d-flex justify-content-center align-items-center gap-2 mt-auto">
+                            <button class="btn btn-outline-danger qty-btn" onclick="updateQty('${itemId}', -1, '${itemName}', ${itemPrice})">-</button>
+                            <span id="qty-${itemId}" class="fw-bold">${currentQty}</span>
+                            <button class="btn btn-success qty-btn" onclick="updateQty('${itemId}', 1, '${itemName}', ${itemPrice})">+</button>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            menuGrid.innerHTML = html;
+        }
+
+        // 📌 จัดการบวก/ลบ จำนวนสินค้า
         function updateQty(itemId, change, itemName, itemPrice) {
-            // ถ้ายังไม่มีสินค้านี้ในตะกร้า ให้สร้าง Object ไว้เก็บข้อมูล
             if (!cart[itemId]) {
                 cart[itemId] = { name: itemName, price: itemPrice, qty: 0 };
             }
             
             cart[itemId].qty += change;
             
-            // ถ้าจำนวนน้อยกว่า 0 ให้ลบออกจากตะกร้าไปเลย
             if (cart[itemId].qty <= 0) {
                 delete cart[itemId];
-                document.getElementById(`qty-${itemId}`).innerText = "0";
+                if(document.getElementById(`qty-${itemId}`)) document.getElementById(`qty-${itemId}`).innerText = "0";
             } else {
-                document.getElementById(`qty-${itemId}`).innerText = cart[itemId].qty;
+                if(document.getElementById(`qty-${itemId}`)) document.getElementById(`qty-${itemId}`).innerText = cart[itemId].qty;
             }
             
-            // อัปเดตตัวเลขจำนวนรายการรวมที่แถบด้านล่าง
+            // อัปเดตตัวเลขรวมในแถบด้านล่าง
             let totalItems = 0;
             for (let key in cart) {
                 totalItems += cart[key].qty;
@@ -178,34 +304,31 @@
             document.getElementById('cartCount').innerText = totalItems;
         }
 
-        // 📌 ฟังก์ชันสั่งอาหาร (ส่งเข้าฐานข้อมูล)
+        // 📌 ฟังก์ชันส่งสั่งอาหารเข้า Firebase
         async function submitOrder() {
             let totalItems = 0;
             let totalAmount = 0;
             let orderDetails = "";
 
-            // วนลูปอ่านข้อมูลในตะกร้าเพื่อเรียบเรียงข้อความที่จะส่งให้ห้องครัว
             for (let key in cart) {
                 totalItems += cart[key].qty;
                 totalAmount += (cart[key].price * cart[key].qty);
-                orderDetails += `${cart[key].name} x ${cart[key].qty}\n`; // เช่น "น้ำเปล่า x 2"
+                orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
             }
 
             if (totalItems === 0) return alert("กรุณาเลือกรายการอาหารก่อนครับ");
 
             try {
-                // ส่งออเดอร์เข้าไปที่โฟลเดอร์ orders ของโต๊ะนั้นๆ
                 await db.collection("tables").doc(tableNo).collection("orders").add({
                     action: "สั่งอาหาร",
                     details: orderDetails.trim(),
-                    amount: totalAmount, // คำนวณราคาให้เลย
+                    amount: totalAmount,
                     kitchenStatus: "เตรียม",
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 
                 alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
                 
-                // ล้างตะกร้าสินค้าหลังจากกดส่ง
                 cart = {};
                 document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
                 document.getElementById('cartCount').innerText = '0';
@@ -215,7 +338,7 @@
             }
         }
 
-        // ฟังก์ชันโหลดข้อมูลบิลแสดงใน Modal (โครงสร้างเดิมที่แก้ไปแล้ว)
+        // 📌 ฟังก์ชันดึงบิล
         function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
