@@ -45,19 +45,21 @@
     <div class="container">
         <!-- แถบแสดงเลขโต๊ะ + ปุ่มเปลี่ยนโต๊ะ -->
         <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 px-3 rounded-3 shadow-sm">
-            <span class="fw-bold text-dark">📍 โต๊ะของคุณ: <span id="displayTableNo" class="text-danger fs-5">?</span></span>
+            <div>
+                <span class="fw-bold text-dark">📍 โต๊ะของคุณ: <span id="displayTableNo" class="text-danger fs-5">?</span></span>
+                <small id="displayPackage" class="d-block text-muted" style="font-size: 12px;"></small>
+            </div>
             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="openTableSelectModal()">
                 ✏️ เปลี่ยนโต๊ะ
             </button>
         </div>
 
-        <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) - ซ่อนไว้ก่อน -->
+        <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) -->
         <div class="category-scroll mb-3" id="categoryContainer" style="display: none;">
         </div>
 
         <!-- 📌 พื้นที่แสดงรายการอาหาร -->
         <div class="row g-2" id="menuGrid">
-            <!-- ข้อความเริ่มต้น ก่อนเลือกโต๊ะ -->
             <div class="text-center w-100 mt-5 text-muted">
                 <h5>กรุณาระบุหมายเลขโต๊ะ</h5>
                 <p>เพื่อดูเมนูอาหารและเริ่มสั่งอาหารครับ 🍽️</p>
@@ -81,7 +83,7 @@
         </div>
     </div>
 
-    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ (ล็อกหน้าจอ) -->
+    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ -->
     <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content border-0 shadow" style="border-radius: 15px;">
@@ -90,7 +92,7 @@
                     <button type="button" class="btn-close d-none" id="closeTableModalBtn" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center">
-                    <p class="text-muted small mb-2">กรุณาเลือกโต๊ะของคุณเพื่อเริ่มสั่งอาหาร</p>
+                    <p class="text-muted small mb-2">เลือกโต๊ะที่พนักงานเปิดให้คุณแล้ว</p>
                     
                     <!-- 📌 Dropdown เลือกโต๊ะ -->
                     <select id="inputTableNo" class="form-select form-select-lg text-center fs-6 fw-bold mb-3 shadow-sm">
@@ -144,14 +146,14 @@
         const db = firebase.firestore();
 
         let tableNo = "";
+        let currentPackage = ""; // เก็บชื่อแพ็กเกจของโต๊ะ
         let cart = {}; 
         let allMenuItems = []; 
         let selectedCategory = 'all';
 
-        // 📌 เมื่อเปิดหน้าเว็บ (โหลดปุ๊บ บังคับเปิด Modal เลือกโต๊ะทันที ยกเว้นจะสแกน QR ที่มีเลขโต๊ะมาแล้ว)
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
-            let tNo = urlParams.get('tableNo'); // ลบการดึงจาก localStorage ออก เพื่อแก้ปัญหาค้างโต๊ะเดิม
+            let tNo = urlParams.get('tableNo');
             
             if (!tNo) {
                 openTableSelectModal();
@@ -161,32 +163,38 @@
             }
         };
 
-        // 📌 ฟังก์ชันเปิด Modal เลือกโต๊ะ
         function openTableSelectModal() {
             let modalEl = document.getElementById('selectTableModal');
             let selectModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
             selectModal.show();
-            loadAllTablesForSelect();
+            loadOccupiedTables();
         }
 
-        // 📌 ดึงรายชื่อ "โต๊ะทั้งหมด" ในระบบมาให้เลือก 
-        async function loadAllTablesForSelect() {
+        // 📌 ดึงเฉพาะโต๊ะที่มีสถานะ "ไม่ว่าง" (ที่พนักงานเปิดโต๊ะไว้)
+        async function loadOccupiedTables() {
             let select = document.getElementById('inputTableNo');
             select.innerHTML = '<option value="">กำลังโหลดโต๊ะ...</option>';
             
             try {
                 const snapshot = await db.collection("tables").get();
-                
-                if (snapshot.empty) {
-                    select.innerHTML = '<option value="" disabled selected>ไม่มีข้อมูลโต๊ะในระบบ</option>';
-                    return;
-                }
-
                 let optionsHtml = '<option value="" disabled selected>-- กรุณาเลือกโต๊ะของคุณ --</option>';
-                
+                let hasOccupiedTable = false;
+
                 snapshot.forEach(doc => {
-                    optionsHtml += `<option value="${doc.id}">โต๊ะ ${doc.id}</option>`;
+                    let data = doc.data();
+                    let status = data.status || "";
+                    
+                    // 📌 กรองเฉพาะโต๊ะที่เป็นสถานะ "ไม่ว่าง" ตามหน้า Staff
+                    if (status === "ไม่ว่าง" || status === "occupied" || status === "busy") {
+                        let pkgText = data.package || data.packageName ?  (${data.package || data.packageName}) : '';
+                        optionsHtml += `<option value="${doc.id}">โต๊ะ ${doc.id}${pkgText}</option>`;
+                        hasOccupiedTable = true;
+                    }
                 });
+
+                if (!hasOccupiedTable) {
+                    optionsHtml = '<option value="" disabled selected>ยังไม่มีโต๊ะเปิด (โปรดแจ้งพนักงาน)</option>';
+                }
 
                 select.innerHTML = optionsHtml;
             } catch (err) {
@@ -195,41 +203,52 @@
             }
         }
 
-        // 📌 เมื่อลูกค้ากดปุ่ม "ตกลง" เลือกโต๊ะ
         function saveTableNo() {
             let selectVal = document.getElementById('inputTableNo').value;
             if (!selectVal) return alert("กรุณาเลือกหมายเลขโต๊ะจากรายการครับ");
             
             tableNo = selectVal;
-            
-            // ล้างตะกร้าเก่าทิ้งเสมอเวลาเปลี่ยนโต๊ะ
             cart = {};
             document.getElementById('cartCount').innerText = '0';
 
-            // ปิด Modal
             let modalEl = document.getElementById('selectTableModal');
             let modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
 
-            // เรียกฟังก์ชันเปิดระบบให้สั่งอาหารได้
             activateSystem();
         }
 
-        // 📌 ฟังก์ชันเปิดระบบ ดึงเมนู และแสดงแถบเครื่องมือ
-        function activateSystem() {
+        // 📌 เปิดระบบ + ดึงข้อมูลแพ็กเกจของโต๊ะ + ดึงเมนูที่ตรงกับแพ็กเกจ
+        async function activateSystem() {
             document.getElementById('displayTableNo').innerText = tableNo;
-            document.getElementById('closeTableModalBtn').classList.remove('d-none'); // อนุญาตให้กด X ปิดได้ถ้าจะเปลี่ยนโต๊ะทีหลัง
-            
-            document.getElementById('bottomBar').style.display = 'flex'; // แสดงแถบตะกร้า
-            document.getElementById('categoryContainer').style.display = 'flex'; // แสดงแถบหมวดหมู่
-            
-            document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดเมนูอาหาร...</div>";
-            
-            // เริ่มโหลดเมนูอาหาร (หลังจากรู้โต๊ะแล้ว)
-            loadMenu(); 
+            document.getElementById('closeTableModalBtn').classList.remove('d-none');
+            document.getElementById('bottomBar').style.display = 'flex';
+            document.getElementById('categoryContainer').style.display = 'flex';
+            document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดข้อมูลแพ็กเกจและเมนู...</div>";
+
+            try {
+                // 1. อ่านข้อมูลแพ็กเกจจากโต๊ะใน Firebase
+                const tableDoc = await db.collection("tables").doc(tableNo).get();
+                if (tableDoc.exists) {
+                    let tData = tableDoc.data();
+                    currentPackage = tData.package || tData.packageName || "";
+                    
+                    if (currentPackage) {
+                        document.getElementById('displayPackage').innerText = `แพ็กเกจ: ${currentPackage}`;
+                    } else {
+                        document.getElementById('displayPackage').innerText = '';
+                    }
+                }
+
+                // 2. โหลดเมนูอาหารตามแพ็กเกจ
+                loadMenu();
+            } catch (err) {
+                console.error("Error fetching table package:", err);
+                loadMenu();
+            }
         }
 
-        // 📌 ฟังก์ชันดึงเมนูอาหารจาก Firebase
+        // 📌 ดึงรายการอาหารและกรองตามแพ็กเกจ
         async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
@@ -246,12 +265,32 @@
                 snapshot.forEach(doc => {
                     let item = doc.data();
                     item.id = doc.id;
-                    allMenuItems.push(item);
 
-                    if (item.category) {
-                        categoriesSet.add(item.category);
+                    // 📌 เงื่อนไขกรองเมนูตามแพ็กเกจ
+                    // แสดงผลหาก: ไม่ได้ระบุแพ็กเกจในโต๊ะ/เมนู OR ชื่อแพ็กเกจตรงกัน OR เมนูรองรับหลายแพ็กเกจ
+                    let itemPkg = item.package || item.packageName || "";
+                    let isMatch = false;
+
+                    if (!currentPackage || !itemPkg) {
+                        isMatch = true; // ถ้าไม่ได้ระบุ ให้สั่งได้ทุกแพ็กเกจ
+                    } else if (typeof itemPkg === 'string' && (itemPkg === currentPackage || currentPackage.includes(itemPkg) || itemPkg.includes(currentPackage))) {
+                        isMatch = true;
+                    } else if (Array.isArray(itemPkg) && itemPkg.includes(currentPackage)) {
+                        isMatch = true;
+                    }
+
+                    if (isMatch) {
+                        allMenuItems.push(item);
+                        if (item.category) {
+                            categoriesSet.add(item.category);
+                        }
                     }
                 });
+
+                if (allMenuItems.length === 0) {
+                    menuGrid.innerHTML = `<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ "${currentPackage}"</div>`;
+                    return;
+                }
 
                 renderCategories(Array.from(categoriesSet));
                 renderMenu();
@@ -262,7 +301,6 @@
             }
         }
 
-        // 📌 สร้างปุ่มหมวดหมู่
         function renderCategories(categories) {
             const container = document.getElementById('categoryContainer');
             let html = `<button class="btn btn-danger cat-btn active" onclick="filterCategory('all', this)">ทั้งหมด</button>`;
@@ -274,7 +312,6 @@
             container.innerHTML = html;
         }
 
-        // 📌 กรองเมนูตามหมวดหมู่
         function filterCategory(cat, btnElement) {
             selectedCategory = cat;
             document.querySelectorAll('.cat-btn').forEach(btn => {
@@ -286,7 +323,6 @@
             renderMenu();
         }
 
-        // 📌 วาดการ์ดเมนูอาหาร
         function renderMenu() {
             const menuGrid = document.getElementById('menuGrid');
             let html = "";
@@ -325,7 +361,6 @@
             menuGrid.innerHTML = html;
         }
 
-        // 📌 จัดการบวก/ลบ จำนวนสินค้า
         function updateQty(itemId, change, itemName, itemPrice) {
             if (!tableNo) return alert("กรุณาเลือกโต๊ะก่อนสั่งอาหารครับ!");
 
@@ -345,7 +380,6 @@
             document.getElementById('cartCount').innerText = totalItems;
         }
 
-        // 📌 ฟังก์ชันส่งสั่งอาหารเข้า Firebase
         async function submitOrder() {
             if (!tableNo) return alert("กรุณาระบุเลขโต๊ะก่อนสั่งอาหารครับ!");
             
@@ -380,7 +414,6 @@
             }
         }
 
-        // 📌 ฟังก์ชันดึงบิล
         function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             if (!tableNo) {
