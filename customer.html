@@ -104,6 +104,28 @@
         </div>
     </div>
 
+    <!-- 📌 Modal ป๊อบอัพยืนยันการสั่งอาหาร (ปรับเหมือนป๊อบอัพดูบิล) -->
+    <div class="modal fade" id="confirmOrderModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow" style="border-radius: 15px;">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-dark">📝 ยืนยันการสั่งอาหาร</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">ตรวจสอบรายการอาหารที่เลือกก่อนส่งเข้าครัว</p>
+                    <div id="confirmOrderList">
+                        <!-- รายการสรุปอาหารจะแสดงตรงนี้ -->
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0 d-flex gap-2">
+                    <button type="button" class="btn btn-light rounded-pill flex-fill fw-bold text-secondary" data-bs-dismiss="modal">แก้ไขรายการ</button>
+                    <button type="button" class="btn btn-danger rounded-pill flex-fill fw-bold" id="btnConfirmSend" onclick="confirmAndSendOrder()">ยืนยันส่งเข้าครัว 🚀</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal ป๊อบอัพแสดงสรุปยอดบิล -->
     <div class="modal fade" id="billModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -398,29 +420,56 @@
             document.getElementById('cartCount').innerText = totalItems;
         }
 
-        // 📌 1. ฟังก์ชันส่งรายการอาหาร (เพิ่ม Pop-up ยืนยัน)
-        async function submitOrder() {
+        // 📌 1. เปิด Modal ป๊อบอัพยืนยันการสั่งอาหาร (แทนที่ confirm เดิม)
+        function submitOrder() {
             if (!tableNo) return alert("กรุณาระบุเลขโต๊ะก่อนสั่งอาหารครับ!");
             
             let totalItems = 0;
-            let totalAmount = 0;
-            let orderDetails = "";
-            let confirmMessage = "รายการอาหารที่สั่ง:\n";
+            let htmlList = `<ul class="list-group list-group-flush mb-2">`;
 
             for (let key in cart) {
-                totalItems += cart[key].qty;
-                totalAmount += (cart[key].price * cart[key].qty);
-                orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
-                confirmMessage += `- ${cart[key].name} จำนวน ${cart[key].qty}\n`;
+                if (cart[key].qty > 0) {
+                    totalItems += cart[key].qty;
+                    htmlList += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <div>
+                            <span class="fw-bold text-dark" style="font-size: 14px;">${cart[key].name}</span>
+                            <small class="text-muted d-block" style="font-size: 12px;">${cart[key].price > 0 ? cart[key].price + ' ฿' : 'รวมในบุฟเฟต์'}</small>
+                        </div>
+                        <span class="badge bg-danger rounded-pill px-3 py-2 fs-6">x ${cart[key].qty}</span>
+                    </li>`;
+                }
             }
 
             if (totalItems === 0) return alert("กรุณาเลือกรายการอาหารก่อนครับ");
 
-            confirmMessage += `\nรวมทั้งหมด: ${totalItems} รายการ\nยืนยันการส่งออร์เดอร์เข้าครัวใช่หรือไม่?`;
-            
-            // 👉 เรียกใช้หน้าต่างยืนยัน ถ้ายกเลิก (Cancel) จะหยุดการทำงานทันที
-            if (!confirm(confirmMessage)) {
-                return; 
+            htmlList += `</ul>
+            <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center mt-2" style="border: 1px dashed #dc3545;">
+                <span class="fw-bold text-dark">รวมสั่งทั้งหมด:</span>
+                <span class="fw-bold text-danger fs-5">${totalItems} รายการ</span>
+            </div>`;
+
+            document.getElementById('confirmOrderList').innerHTML = htmlList;
+
+            let modalEl = document.getElementById('confirmOrderModal');
+            let confirmModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            confirmModal.show();
+        }
+
+        // 📌 2. ส่งรายการอาหารเข้า Firebase เมื่อกดปุ่มยืนยันใน Modal
+        async function confirmAndSendOrder() {
+            let btn = document.getElementById('btnConfirmSend');
+            btn.disabled = true;
+            btn.innerText = "กำลังส่ง...";
+
+            let totalAmount = 0;
+            let orderDetails = "";
+
+            for (let key in cart) {
+                if (cart[key].qty > 0) {
+                    totalAmount += (cart[key].price * cart[key].qty);
+                    orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
+                }
             }
 
             try {
@@ -431,18 +480,25 @@
                     kitchenStatus: "เตรียม",
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                
+
+                // ปิด Modal ยืนยัน
+                let modalEl = document.getElementById('confirmOrderModal');
+                let confirmModal = bootstrap.Modal.getInstance(modalEl);
+                if (confirmModal) confirmModal.hide();
+
                 alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
                 cart = {};
                 document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
                 document.getElementById('cartCount').innerText = '0';
-                
+
             } catch (err) {
                 alert("เกิดข้อผิดพลาดในการส่งรายการ: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "ยืนยันส่งเข้าครัว 🚀";
             }
         }
 
-        // 📌 2. ฟังก์ชันโหลดยอดบิล (เพิ่มเวลาสั่งอาหาร)
         async function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             if (!tableNo) {
@@ -502,7 +558,6 @@
                                 let item = doc.data();
                                 totalAmount += (item.amount || 0);
 
-                                // 👉 แปลง Timestamp เป็นเวลา
                                 let timeText = "";
                                 if (item.timestamp) {
                                     let dateObj = typeof item.timestamp.toDate === 'function' ? item.timestamp.toDate() : new Date();
