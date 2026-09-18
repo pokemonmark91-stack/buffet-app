@@ -54,11 +54,11 @@
             </button>
         </div>
 
-        <!-- 📌 แถบแยกหมวดหมู่ (Category Tabs) -->
+        <!-- แถบแยกหมวดหมู่ (Category Tabs) -->
         <div class="category-scroll mb-3" id="categoryContainer" style="display: none;">
         </div>
 
-        <!-- 📌 พื้นที่แสดงรายการอาหาร -->
+        <!-- พื้นที่แสดงรายการอาหาร -->
         <div class="row g-2" id="menuGrid">
             <div class="text-center w-100 mt-5 text-muted">
                 <h5>กรุณาระบุหมายเลขโต๊ะ</h5>
@@ -83,7 +83,7 @@
         </div>
     </div>
 
-    <!-- 📌 Modal เลือก/เปลี่ยนโต๊ะ -->
+    <!-- Modal เลือก/เปลี่ยนโต๊ะ -->
     <div class="modal fade" id="selectTableModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content border-0 shadow" style="border-radius: 15px;">
@@ -171,7 +171,6 @@
             loadOccupiedTables();
         }
 
-        // 📌 1. ดึงเฉพาะโต๊ะที่มีสถานะ "ไม่ว่าง" (ที่พนักงานเปิดโต๊ะไว้แล้ว)
         async function loadOccupiedTables() {
             let select = document.getElementById('inputTableNo');
             select.innerHTML = '<option value="">กำลังโหลดโต๊ะ...</option>';
@@ -222,7 +221,6 @@
             activateSystem();
         }
 
-        // 📌 2. อ่านข้อมูลโต๊ะและราคาแพ็กเกจของโต๊ะ
         async function activateSystem() {
             document.getElementById('displayTableNo').innerText = tableNo;
             document.getElementById('closeTableModalBtn').classList.remove('d-none');
@@ -231,14 +229,12 @@
             document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดข้อมูลแพ็กเกจและเมนู...</div>";
 
             try {
-                const tableDoc = await db.collection("tables").doc(tableNo).get();
+                const tableDoc = await db.collection("tables").doc(String(tableNo)).get();
                 if (tableDoc.exists) {
                     tableData = tableDoc.data() || {};
                     
-                    // ดึงชื่อแพ็กเกจ
                     currentPackage = tableData.package || tableData.packageName || tableData.selectPackage || tableData.selectedPackage || tableData.pkg || "";
                     
-                    // ดึงราคาแพ็กเกจของโต๊ะ (เป็นตัวเลข เช่น 119 หรือ 159)
                     tablePrice = 0;
                     if (currentPackage) {
                         let match = String(currentPackage).match(/\d+/);
@@ -257,14 +253,13 @@
                     }
                 }
 
-                loadMenu();
+                await loadMenu();
             } catch (err) {
                 console.error("Error fetching table package:", err);
-                loadMenu();
+                await loadMenu();
             }
         }
 
-        // 📌 3. ดึงข้อมูลเมนู + กรองแพ็กเกจด้วย allowedPackage อย่างเข้มงวด
         async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
             try {
@@ -282,36 +277,24 @@
                     let item = doc.data();
                     item.id = doc.id;
                     
-                    // 🎯 อ่านจาก allowedPackage ลำดับแรกตรงกับโครงสร้าง Firestore
                     let itemPkg = item.allowedPackage || item.package || item.packageName || item.packages || item.tier || item.priceTier || item.pkg || "";
-                    let isMatch = false;
 
-                    // สกัดตัวเลขราคาของเมนู (เช่น "159" -> 159)
-                    let itemPrices = [];
-                    if (Array.isArray(itemPkg)) {
-                        itemPkg.forEach(p => {
-                            let m = String(p).match(/\d+/);
-                            if (m) itemPrices.push(parseInt(m[0]));
-                        });
-                    } else if (typeof itemPkg === 'number') {
-                        itemPrices.push(itemPkg);
-                    } else if (itemPkg !== "" && itemPkg !== null && itemPkg !== undefined) {
+                    let itemMinPrice = 0;
+                    if (itemPkg !== "" && itemPkg !== null && itemPkg !== undefined) {
                         let matches = String(itemPkg).match(/\d+/g);
-                        if (matches) {
-                            matches.forEach(m => itemPrices.push(parseInt(m)));
+                        if (matches && matches.length > 0) {
+                            itemMinPrice = Math.min(...matches.map(m => parseInt(m)));
                         }
                     }
 
-                    if (tablePrice > 0) {
-                        if (itemPrices.length > 0) {
-                            // โต๊ะ 119 สั่งได้เฉพาะเมนูที่ราคา <= 119 เท่านั้น (159 <= 119 เป็น FALSE)
-                            isMatch = itemPrices.some(p => p <= tablePrice);
+                    let isMatch = true;
+
+                    if (itemMinPrice > 0) {
+                        if (tablePrice > 0) {
+                            isMatch = (tablePrice >= itemMinPrice); 
                         } else {
-                            // กรณีเมนูกลางที่ไม่มีการตั้ง allowedPackage ให้แสดงทุกโต๊ะ
-                            isMatch = true; 
+                            isMatch = false; 
                         }
-                    } else {
-                        isMatch = true;
                     }
 
                     if (isMatch) {
@@ -415,23 +398,33 @@
             document.getElementById('cartCount').innerText = totalItems;
         }
 
+        // 📌 1. ฟังก์ชันส่งรายการอาหาร (เพิ่ม Pop-up ยืนยัน)
         async function submitOrder() {
             if (!tableNo) return alert("กรุณาระบุเลขโต๊ะก่อนสั่งอาหารครับ!");
             
             let totalItems = 0;
             let totalAmount = 0;
             let orderDetails = "";
+            let confirmMessage = "รายการอาหารที่สั่ง:\n";
 
             for (let key in cart) {
                 totalItems += cart[key].qty;
                 totalAmount += (cart[key].price * cart[key].qty);
                 orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
+                confirmMessage += `- ${cart[key].name} จำนวน ${cart[key].qty}\n`;
             }
 
             if (totalItems === 0) return alert("กรุณาเลือกรายการอาหารก่อนครับ");
 
+            confirmMessage += `\nรวมทั้งหมด: ${totalItems} รายการ\nยืนยันการส่งออร์เดอร์เข้าครัวใช่หรือไม่?`;
+            
+            // 👉 เรียกใช้หน้าต่างยืนยัน ถ้ายกเลิก (Cancel) จะหยุดการทำงานทันที
+            if (!confirm(confirmMessage)) {
+                return; 
+            }
+
             try {
-                await db.collection("tables").doc(tableNo).collection("orders").add({
+                await db.collection("tables").doc(String(tableNo)).collection("orders").add({
                     action: "สั่งอาหาร",
                     details: orderDetails.trim(),
                     amount: totalAmount,
@@ -449,7 +442,7 @@
             }
         }
 
-        // 📌 4. คำนวณยอดบิลให้ตรงกับ Staff 100% (บุฟเฟต์ผู้ใหญ่ + บุฟเฟต์เด็ก + ออเดอร์เพิ่มเติม)
+        // 📌 2. ฟังก์ชันโหลดยอดบิล (เพิ่มเวลาสั่งอาหาร)
         async function loadCustomerBill() {
             let billArea = document.getElementById('billArea');
             if (!tableNo) {
@@ -460,16 +453,15 @@
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
 
             try {
-                const tableDoc = await db.collection("tables").doc(tableNo).get();
+                const tableDoc = await db.collection("tables").doc(String(tableNo)).get();
                 let tData = tableDoc.exists ? tableDoc.data() : {};
 
-                db.collection("tables").doc(tableNo).collection("orders")
+                db.collection("tables").doc(String(tableNo)).collection("orders")
                     .orderBy("timestamp", "asc")
                     .onSnapshot(function(snapshot) {
                         let totalAmount = 0;
                         let html = `<ul class="list-group list-group-flush mb-3">`;
 
-                        // อ่านค่าราคาบุฟเฟต์และจำนวนคน
                         let pkgName = tData.package || tData.packageName || tData.selectPackage || tData.pkg || "";
                         let adultCount = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
                         let childCount = parseInt(tData.children || tData.childCount || tData.child || 0);
@@ -480,7 +472,6 @@
                             if (match) basePrice = parseFloat(match[0]);
                         }
 
-                        // แสดงบุฟเฟต์ผู้ใหญ่
                         if (adultCount > 0 && basePrice > 0) {
                             let adultTotal = adultCount * basePrice;
                             totalAmount += adultTotal;
@@ -493,7 +484,6 @@
                                      </li>`;
                         }
 
-                        // แสดงบุฟเฟต์เด็ก (50%)
                         if (childCount > 0 && basePrice > 0) {
                             let childPrice = basePrice * 0.5;
                             let childTotal = childCount * childPrice;
@@ -507,11 +497,19 @@
                                      </li>`;
                         }
 
-                        // คำนวณรายการสั่งอาหารเพิ่มเติม
                         if (!snapshot.empty) {
                             snapshot.forEach(doc => {
                                 let item = doc.data();
                                 totalAmount += (item.amount || 0);
+
+                                // 👉 แปลง Timestamp เป็นเวลา
+                                let timeText = "";
+                                if (item.timestamp) {
+                                    let dateObj = typeof item.timestamp.toDate === 'function' ? item.timestamp.toDate() : new Date();
+                                    timeText = dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น.";
+                                } else {
+                                    timeText = "กำลังบันทึก...";
+                                }
 
                                 let kBadge = "";
                                 if (item.kitchenStatus === "เตรียม") {
@@ -524,7 +522,11 @@
 
                                 html += `<li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
                                             <div>
-                                                <div class="fw-bold text-dark" style="font-size: 14px;">${item.action || 'สั่งอาหาร'} ${kBadge}</div>
+                                                <div class="fw-bold text-dark" style="font-size: 14px;">
+                                                    ${item.action || 'สั่งอาหาร'} 
+                                                    <span class="text-secondary ms-1 fw-normal" style="font-size: 11px;">🕒 ${timeText}</span>
+                                                    ${kBadge}
+                                                </div>
                                                 <small class="text-muted" style="font-size: 13px;">${detailText}</small>
                                             </div>
                                             <span class="fw-bold text-danger">${(item.amount || 0).toLocaleString()} ฿</span>
