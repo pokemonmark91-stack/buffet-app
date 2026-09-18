@@ -5,9 +5,9 @@
     <title>ระบบห้องครัว - จัดเตรียมอาหารและอุปกรณ์</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     
-    <!-- Firebase SDK (Compat Version) -->
+    <!-- เปลี่ยนจาก database เป็น firestore -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <style>
         body { font-family: 'Sarabun', sans-serif; background: #2f3542; color: white; padding: 20px; margin: 0; }
@@ -32,12 +32,9 @@
         .badge-open { background: #3742fa; }
         .badge-stove { background: #e84118; }
         .badge-food { background: #2ed573; color: #2f3542; }
-        .customer-count { font-size: 15px; color: #ff4757; font-weight: bold; margin-left: 8px; }
-        .info-box { background: #ffeaa7; color: #d63031; padding: 10px; border-radius: 5px; font-weight: bold; margin-bottom: 12px; text-align: center; }
         
         .edit-qty-box { display: flex; align-items: center; justify-content: space-between; background: white; padding: 8px 10px; border-radius: 5px; margin-bottom: 8px; border: 1px solid #ced6e0; }
         .edit-qty-box span { font-weight: bold; color: #2f3542; }
-        .edit-qty-box input { width: 60px; text-align: center; font-size: 16px; padding: 5px; border: 1px solid #747d8c; border-radius: 4px; font-weight: bold; }
         
         .btn-done { background: #2ed573; color: white; border: none; width: 100%; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: auto; font-size: 16px; transition: 0.3s; }
         .btn-done:hover { background: #26af5f; }
@@ -69,29 +66,25 @@
     </div>
 
     <script>
-        // --- กำหนดค่า Firebase Config ของคุณตรงนี้ ---
         const firebaseConfig = {
-  apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
-  authDomain: "buffet-system-9b165.firebaseapp.com",
-  projectId: "buffet-system-9b165",
-  storageBucket: "buffet-system-9b165.firebasestorage.app",
-  messagingSenderId: "144497251618",
-  appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
-  measurementId: "G-82JK3EL1HL"
-};
+            apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+            authDomain: "buffet-system-9b165.firebaseapp.com",
+            projectId: "buffet-system-9b165",
+            storageBucket: "buffet-system-9b165.firebasestorage.app",
+            messagingSenderId: "144497251618",
+            appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+            measurementId: "G-82JK3EL1HL"
+        };
 
-
-        // Initialize Firebase
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.database();
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        
+        // 📌 เปลี่ยนเป็น Firestore แทน Realtime Database
+        const db = firebase.firestore();
 
         let currentTab = 'pending';
-        let pendingListener = null;
+        let unsubscribes = []; // เก็บตัวยกเลิก Real-time listeners
 
         window.onload = function() {
-            // ตั้งค่าวันที่เริ่มต้นเป็น "วันนี้"
             let today = new Date();
             let dd = String(today.getDate()).padStart(2, '0');
             let mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -106,6 +99,8 @@
             document.getElementById('btn-pending').classList.remove('active');
             document.getElementById('btn-completed').classList.remove('active');
             
+            clearListeners(); // ล้าง Listener เดิมเสมอเวลาเปลี่ยนแท็บ
+
             if (tabName === 'pending') {
                 document.getElementById('btn-pending').classList.add('active');
                 document.getElementById('date-filter-container').style.display = 'none';
@@ -113,182 +108,205 @@
             } else {
                 document.getElementById('btn-completed').classList.add('active');
                 document.getElementById('date-filter-container').style.display = 'block';
-                // ยกเลิก Realtime listener ตอนเปลี่ยนไปดูประวัติ
-                if (pendingListener) db.ref('orders').off('value', pendingListener);
                 loadCompletedOrders();
             }
         }
 
         function refreshCurrentTab() {
+            clearListeners();
             if (currentTab === 'pending') loadKitchenOrders();
             else loadCompletedOrders();
         }
 
+        function clearListeners() {
+            unsubscribes.forEach(unsub => unsub());
+            unsubscribes = [];
+        }
+
         function parseOrderDetails(detailsStr) {
             if (!detailsStr) return [];
-            let items = detailsStr.split(',');
+            let items = detailsStr.split('\n'); // เปลี่ยนจากแยกด้วย ',' เป็นแยกด้วย ขึ้นบรรทัดใหม่ '\n' ตามที่หน้าลูกค้าส่งมา
             return items.map(item => {
                 let cleanItem = item.trim();
-                let match = cleanItem.match(/(.+?)\s*\(x(\d+)\)/);
+                let match = cleanItem.match(/(.+?)\s*x\s*(\d+)/); // รองรับ format "หมูสามชั้น x 2"
                 if (match) return { name: match[1].trim(), qty: parseInt(match[2]) };
                 return { name: cleanItem, qty: 1 };
             }).filter(item => item.name !== "");
         }
 
-        // --- โหลดรายการที่ "รอทำ" (Realtime) ---
-        function loadKitchenOrders() {
+        // 📌 ฟังก์ชันอ่านออเดอร์ใหม่จากทุกโต๊ะ (Real-time Firestore)
+        async function loadKitchenOrders() {
             let container = document.getElementById('kitchenContainer');
-            let ordersRef = db.ref('orders');
-
-            // ลบ listener เก่าเพื่อป้องกันการฟังซ้ำ
-            if (pendingListener) ordersRef.off('value', pendingListener);
-
-            pendingListener = ordersRef.on('value', (snapshot) => {
-                let orders = [];
-                snapshot.forEach((childSnapshot) => {
-                    let order = childSnapshot.val();
-                    order.id = childSnapshot.key;
-                    // คัดเฉพาะรายการที่ยังไม่เสร็จ (status !== 'เสร็จสิ้น')
-                    if (order.status !== 'เสร็จสิ้น') {
-                        orders.push(order);
-                    }
-                });
-
-                if (orders.length === 0) {
-                    container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีออเดอร์ค้างทำในขณะนี้</p>";
+            container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>กำลังโหลดออเดอร์ล่าสุด...</p>";
+            
+            let allPendingOrders = [];
+            
+            try {
+                // ดึงรายชื่อโต๊ะทั้งหมด
+                const tablesSnapshot = await db.collection("tables").get();
+                
+                if (tablesSnapshot.empty) {
+                    container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีโต๊ะที่เปิดบริการในขณะนี้</p>";
                     return;
                 }
 
-                let html = "";
-                orders.forEach(function(order) {
-                    let actionType = order.action || "สั่งอาหาร";
-                    let badgeClass = "badge-food";
-                    if (actionType.includes("เปิดโต๊ะ")) badgeClass = "badge-open";
-                    else if (actionType.includes("เตา") || actionType.includes("ซุป")) badgeClass = "badge-stove";
-
-                    if (actionType.includes("สั่งอาหาร")) {
-                        let parsedItems = parseOrderDetails(order.details);
-                        let itemsHtml = parsedItems.map((item, idx) => `
-                            <div class="edit-qty-box">
-                                <span id="name-${order.id}-${idx}">${item.name}</span>
-                                <div><input type="number" id="qty-${order.id}-${idx}" value="${item.qty}" min="0"> จาน</div>
-                            </div>
-                        `).join('');
+                // สร้าง Listener สำหรับแต่ละโต๊ะ
+                tablesSnapshot.forEach(doc => {
+                    let tableNo = doc.id;
+                    
+                    let unsub = db.collection("tables").doc(tableNo).collection("orders")
+                        .where("kitchenStatus", "==", "เตรียม")
+                        .onSnapshot(snapshot => {
+                            // นำออร์เดอร์เก่าของโต๊ะนี้ออกจาก Array เพื่ออัปเดตใหม่
+                            allPendingOrders = allPendingOrders.filter(o => o.tableNo !== tableNo);
+                            
+                            snapshot.forEach(orderDoc => {
+                                let order = orderDoc.data();
+                                order.id = orderDoc.id;
+                                order.tableNo = tableNo;
+                                allPendingOrders.push(order);
+                            });
+                            
+                            renderPendingOrders(allPendingOrders, container);
+                        });
                         
-                        html += `<div class="order-card" style="border-left-color: #2ed573;">
-                                    <h3>
-                                        <div>โต๊ะ: ${order.tableNo} <span class="customer-count">(ลูกค้า ${order.pax} ท่าน)</span></div>
-                                        <span class="action-badge ${badgeClass}">${actionType}</span>
-                                    </h3>
-                                    <div style="font-size: 13px; color: #57606f; margin-bottom: 8px;">⏱ ${order.time || ''}</div>
-                                    <div style="margin-bottom:15px;">${itemsHtml}</div>
-                                    <button type="button" class="btn-done" onclick="finishFoodOrder(event, '${order.id}', ${parsedItems.length})">✔️ ทำเสร็จแล้ว</button>
-                                 </div>`;
-                    } else {
-                        let borderColor = actionType.includes("เปิดโต๊ะ") ? "#3742fa" : "#e84118";
-                        html += `<div class="order-card" style="border-left-color: ${borderColor};">
-                                    <h3>
-                                        <div>โต๊ะ: ${order.tableNo} <span class="customer-count">(ลูกค้า ${order.pax} ท่าน)</span></div>
-                                        <span class="action-badge ${badgeClass}">${actionType}</span>
-                                    </h3>
-                                    <div style="font-size: 13px; color: #57606f; margin-bottom: 8px;">⏱ ${order.time || ''}</div>
-                                    <div class="info-box">${order.details || ''}</div>
-                                    <button type="button" class="btn-done" onclick="finishSimpleOrder(event, '${order.id}')">✔️ เตรียมเรียบร้อย</button>
-                                 </div>`;
-                    }
+                    unsubscribes.push(unsub);
                 });
-                container.innerHTML = html;
-            });
+
+            } catch (err) {
+                console.error("Error loading kitchen orders:", err);
+                container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: ${err.message}</p>`;
+            }
         }
 
-        // --- โหลดรายการที่ "ทำเสร็จแล้ว" (ตามวันที่เลือก) ---
-        function loadCompletedOrders() {
-            let container = document.getElementById('kitchenContainer');
-            let selectedDate = document.getElementById('history-date').value;
-            
-            container.innerHTML = `<p style='text-align:center; grid-column: 1/-1; color: #ced6e0;'>กำลังโหลดข้อมูลของวันที่ ${selectedDate} ...</p>`;
-            
-            db.ref('orders').once('value', (snapshot) => {
-                let orders = [];
-                snapshot.forEach((childSnapshot) => {
-                    let order = childSnapshot.val();
-                    order.id = childSnapshot.key;
-                    // คัดเฉพาะรายการที่ทำเสร็จแล้ว และ ตรงกับวันที่เลือก
-                    if (order.status === 'เสร็จสิ้น' && (order.date === selectedDate || (order.time && order.time.includes(selectedDate)))) {
-                        orders.push(order);
-                    }
-                });
+        function renderPendingOrders(orders, container) {
+            if (orders.length === 0) {
+                container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีออเดอร์ค้างทำในขณะนี้</p>";
+                return;
+            }
 
-                if (orders.length === 0) {
-                    container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>ไม่มีประวัติการทำออเดอร์ในวันที่ ${selectedDate}</p>`;
+            // จัดเรียงตามเวลาเก่าไปใหม่
+            orders.sort((a, b) => {
+                let timeA = a.timestamp ? a.timestamp.toMillis() : 0;
+                let timeB = b.timestamp ? b.timestamp.toMillis() : 0;
+                return timeA - timeB;
+            });
+
+            let html = "";
+            orders.forEach(function(order) {
+                let actionType = order.action || "สั่งอาหาร";
+                let badgeClass = "badge-food";
+                
+                // แปลงเวลา Timestamp ของ Firestore เป็นข้อความ
+                let timeText = "กำลังบันทึกเวลา...";
+                if (order.timestamp) {
+                    timeText = order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น.";
+                }
+
+                let parsedItems = parseOrderDetails(order.details);
+                let itemsHtml = parsedItems.map(item => `
+                    <div class="edit-qty-box">
+                        <span>${item.name}</span>
+                        <div style="font-size: 16px; font-weight: bold; color: #d63031;">${item.qty} จาน</div>
+                    </div>
+                `).join('');
+                
+                html += `<div class="order-card" style="border-left-color: #2ed573;">
+                            <h3>
+                                <div>โต๊ะ: <span style="color:#d63031; font-size: 24px;">${order.tableNo}</span></div>
+                                <span class="action-badge ${badgeClass}">${actionType}</span>
+                            </h3>
+                            <div style="font-size: 13px; color: #57606f; margin-bottom: 8px;">⏱ สั่งเวลา: ${timeText}</div>
+                            <div style="margin-bottom:15px;">${itemsHtml}</div>
+                            <button type="button" class="btn-done" onclick="finishFoodOrder(event, '${order.tableNo}', '${order.id}')">✔️ ทำเสร็จแล้ว</button>
+                         </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // 📌 ฟังก์ชันดึงประวัติออร์เดอร์ที่ "เสร็จแล้ว" (จาก Firestore)
+        async function loadCompletedOrders() {
+            let container = document.getElementById('kitchenContainer');
+            let selectedDateStr = document.getElementById('history-date').value; // YYYY-MM-DD
+            
+            container.innerHTML = `<p style='text-align:center; grid-column: 1/-1; color: #ced6e0;'>กำลังโหลดข้อมูลออเดอร์ที่เสร็จแล้ว...</p>`;
+            
+            let allCompletedOrders = [];
+            
+            try {
+                // สร้าง Object Date ของจุดเริ่มต้นและสิ้นสุดของวันที่เลือก เพื่อใช้ query ใน Firestore
+                let startDate = new Date(selectedDateStr + "T00:00:00");
+                let endDate = new Date(selectedDateStr + "T23:59:59");
+
+                const tablesSnapshot = await db.collection("tables").get();
+                
+                for (let doc of tablesSnapshot.docs) {
+                    let tableNo = doc.id;
+                    const ordersSnapshot = await db.collection("tables").doc(tableNo).collection("orders")
+                        .where("kitchenStatus", "==", "เสร็จ")
+                        .where("timestamp", ">=", startDate)
+                        .where("timestamp", "<=", endDate)
+                        .get();
+                        
+                    ordersSnapshot.forEach(orderDoc => {
+                        let order = orderDoc.data();
+                        order.id = orderDoc.id;
+                        order.tableNo = tableNo;
+                        allCompletedOrders.push(order);
+                    });
+                }
+
+                if (allCompletedOrders.length === 0) {
+                    container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>ไม่มีประวัติการทำออเดอร์ในวันที่ ${selectedDateStr}</p>`;
                     return;
                 }
 
+                allCompletedOrders.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis()); // ใหม่ไปเก่า
+
                 let html = "";
-                orders.forEach(function(order) {
+                allCompletedOrders.forEach(function(order) {
                     let actionType = order.action || "สั่งอาหาร";
+                    
+                    let timeText = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH') : "";
+                    let detailText = (order.details || "").replace(/\n/g, '<br>');
+
                     html += `<div class="order-card completed">
                                 <h3>
-                                    <div>โต๊ะ: ${order.tableNo} <span class="customer-count">(ลูกค้า ${order.pax} ท่าน)</span></div>
+                                    <div>โต๊ะ: ${order.tableNo}</div>
                                     <span class="action-badge" style="background:#747d8c;">${actionType}</span>
                                 </h3>
-                                <div style="font-size: 13px; color: #57606f; margin-bottom: 8px;">⏱ ${order.time || ''}</div>
-                                <div style="margin-bottom:15px; font-weight:bold; color: #2f3542;">${order.details || ''}</div>
-                                <div style="text-align:center; color: #27ae60; font-weight:bold;">✅ ส่งออกไปแล้ว</div>
+                                <div style="font-size: 13px; color: #57606f; margin-bottom: 8px;">⏱ ${timeText}</div>
+                                <div style="margin-bottom:15px; font-weight:bold; color: #2f3542;">${detailText}</div>
+                                <div style="text-align:center; color: #27ae60; font-weight:bold;">✅ เสิร์ฟแล้ว</div>
                              </div>`;
                 });
                 container.innerHTML = html;
-            });
+
+            } catch (err) {
+                console.error("Error loading completed orders:", err);
+                container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: ${err.message}</p>`;
+            }
         }
 
-        // --- กดเสร็จสิ้นออเดอร์อาหาร ---
-        function finishFoodOrder(event, orderId, itemsCount) {
-            let newDetails = [];
-            for(let i = 0; i < itemsCount; i++) {
-                let nameEl = document.getElementById(`name-${orderId}-${i}`);
-                let qtyEl = document.getElementById(`qty-${orderId}-${i}`);
-                if (nameEl && qtyEl) {
-                    let name = nameEl.innerText;
-                    let qty = parseInt(qtyEl.value);
-                    if (qty > 0) newDetails.push(`${name} (x${qty})`);
-                }
-            }
-            let updatedDetailsStr = newDetails.join(", ");
-            if(!confirm("ยืนยันการจัดเตรียมรายการนี้เรียบร้อยแล้วใช่ไหม?")) return;
+        // 📌 กดปุ่มเพื่ออัปเดตสถานะออร์เดอร์ว่า "เสร็จ" ใน Firestore
+        async function finishFoodOrder(event, tableNo, orderId) {
+            if(!confirm(`ยืนยันการจัดเตรียมอาหาร โต๊ะ ${tableNo} เรียบร้อยแล้วใช่ไหม?`)) return;
 
             let btn = event.target;
             btn.disabled = true;
             btn.innerText = "⏳ กำลังอัปเดต...";
 
-            db.ref('orders/' + orderId).update({
-                details: updatedDetailsStr,
-                status: "เสร็จสิ้น"
-            }).then(() => {
-                // อัปเดตสำเร็จ ไม่ต้องดึงใหม่เพราะมี Realtime listener
-            }).catch((err) => {
+            try {
+                // เปลี่ยนสถานะใน Firestore ให้ตรงกับหน้า Customer (kitchenStatus = "เสร็จ")
+                await db.collection("tables").doc(tableNo).collection("orders").doc(orderId).update({
+                    kitchenStatus: "เสร็จ"
+                });
+                // อัปเดตสำเร็จ ไม่ต้องโหลด UI ใหม่ เพราะ onSnapshot (Realtime) จะเตะออร์เดอร์ออกไปเอง
+            } catch (err) {
                 alert("เกิดข้อผิดพลาด: " + err.message);
                 btn.disabled = false;
                 btn.innerText = "✔️ ทำเสร็จแล้ว";
-            });
-        }
-
-        // --- กดเสร็จสิ้นออเดอร์ทั่วไป (เปิดโต๊ะ / เตา) ---
-        function finishSimpleOrder(event, orderId) {
-            if(!confirm("ยืนยันการเตรียมรายการนี้เรียบร้อยแล้วใช่ไหม?")) return;
-
-            let btn = event.target;
-            btn.disabled = true;
-            btn.innerText = "⏳ กำลังอัปเดต...";
-
-            db.ref('orders/' + orderId).update({
-                status: "เสร็จสิ้น"
-            }).then(() => {
-                // อัปเดตสำเร็จ
-            }).catch((err) => {
-                alert("เกิดข้อผิดพลาด: " + err.message);
-                btn.disabled = false;
-                btn.innerText = "✔️ เตรียมเรียบร้อย";
-            });
+            }
         }
     </script>
 </body>
