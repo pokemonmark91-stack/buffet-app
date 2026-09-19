@@ -566,17 +566,23 @@
                             timeText = "กำลังบันทึก...";
                         }
 
-                        // ส่วนที่แก้ไข: จัดการป้ายสถานะและนำไปต่อท้ายรายการอาหาร
-                        let kBadge = "";
-                        if (item.kitchenStatus === "เตรียม") {
-                            kBadge = '<span class="badge bg-warning text-dark ms-2" style="font-size: 10px;">กำลังทำ</span>';
-                        } else if (item.kitchenStatus === "เสร็จ") {
-                            kBadge = '<span class="badge bg-success ms-2" style="font-size: 10px;">เสิร์ฟแล้ว</span>';
-                        }
+                        // 📌 ส่วนที่แก้ไข: เช็คสถานะทีละรายการว่าในครัวกดเสร็จหรือยัง
+                        let completedItems = item.completedItems || []; // ดึงข้อมูลรายการที่เสร็จแล้วจากฐานข้อมูล
+                        let isAllCompleted = item.kitchenStatus === "เสร็จ"; // ถ้ายกทั้งบิลเสร็จแล้ว ก็ให้เป็นจริงทั้งหมด
 
                         let detailLines = item.details ? String(item.details).split('\n') : [];
-                        let detailText = detailLines.map(line => {
-                            if(line.trim() !== "") return `${line} ${kBadge}`;
+                        
+                        let detailText = detailLines.map((line, idx) => {
+                            if(line.trim() !== "") {
+                                let kBadge = "";
+                                // ถ้ารายการนี้ (idx) ถูกกดเสร็จแล้ว หรือทั้งบิลเสร็จแล้ว ให้ขึ้นว่า 'เสิร์ฟแล้ว'
+                                if (isAllCompleted || completedItems.includes(idx)) {
+                                    kBadge = '<span class="badge bg-success ms-2" style="font-size: 10px;">เสิร์ฟแล้ว</span>';
+                                } else {
+                                    kBadge = '<span class="badge bg-warning text-dark ms-2" style="font-size: 10px;">กำลังทำ</span>';
+                                }
+                                return `${line} ${kBadge}`;
+                            }
                             return "";
                         }).filter(line => line !== "").join('<br>');
 
