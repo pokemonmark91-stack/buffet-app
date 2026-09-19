@@ -226,67 +226,72 @@
 
         // 📌 ฟังก์ชันดึงประวัติออร์เดอร์ที่ "เสร็จแล้ว" (จาก Firestore)
         async function loadCompletedOrders() {
-            let container = document.getElementById('kitchenContainer');
-            let selectedDateStr = document.getElementById('history-date').value; // YYYY-MM-DD
-            
-            container.innerHTML = `<p style='text-align:center; grid-column: 1/-1; color: #ced6e0;'>กำลังโหลดข้อมูลออเดอร์ที่เสร็จแล้ว...</p>`;
-            
-            let allCompletedOrders = [];
-            
-            try {
-                // สร้าง Object Date ของจุดเริ่มต้นและสิ้นสุดของวันที่เลือก เพื่อใช้ query ใน Firestore
-                let startDate = new Date(selectedDateStr + "T00:00:00");
-                let endDate = new Date(selectedDateStr + "T23:59:59");
+    let container = document.getElementById('kitchenContainer');
+    let selectedDateStr = document.getElementById('history-date').value; // YYYY-MM-DD
+    
+    container.innerHTML = `<p style='text-align:center; grid-column: 1/-1; color: #ced6e0;'>กำลังโหลดข้อมูลออเดอร์ที่เสร็จแล้ว...</p>`;
+    
+    let allCompletedOrders = [];
+    
+    try {
+        // สร้าง Object Date ของจุดเริ่มต้นและสิ้นสุดของวันที่เลือก เพื่อใช้ query ใน Firestore
+        let startDate = new Date(selectedDateStr + "T00:00:00");
+        let endDate = new Date(selectedDateStr + "T23:59:59");
 
-                const tablesSnapshot = await db.collection("tables").get();
+        const tablesSnapshot = await db.collection("tables").get();
+        
+        for (let doc of tablesSnapshot.docs) {
+            let tableNo = doc.id;
+            const ordersSnapshot = await db.collection("tables").doc(tableNo).collection("orders")
+                .where("kitchenStatus", "==", "เสร็จ")
+                .where("timestamp", ">=", startDate)
+                .where("timestamp", "<=", endDate)
+                .get();
                 
-                for (let doc of tablesSnapshot.docs) {
-                    let tableNo = doc.id;
-                    const ordersSnapshot = await db.collection("tables").doc(tableNo).collection("orders")
-                        .where("kitchenStatus", "==", "เสร็จ")
-                        .where("timestamp", ">=", startDate)
-                        .where("timestamp", "<=", endDate)
-                        .get();
-                        
-                    ordersSnapshot.forEach(orderDoc => {
-                        let order = orderDoc.data();
-                        order.id = orderDoc.id;
-                        order.tableNo = tableNo;
-                        allCompletedOrders.push(order);
-                    });
-                }
-
-                if (allCompletedOrders.length === 0) {
-                    container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>ไม่มีประวัติการทำออเดอร์ในวันที่ ${selectedDateStr}</p>`;
-                    return;
-                }
-
-                allCompletedOrders.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis()); // ใหม่ไปเก่า
-
-                let html = "";
-                allCompletedOrders.forEach(function(order) {
-                    let actionType = order.action || "สั่งอาหาร";
-                    
-                    let timeText = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH') : "";
-                    let detailText = (order.details || "").replace(/\n/g, '<br>');
-
-                    html += `<div class="order-card completed">
-                                <h3>
-                                    <div>โต๊ะ: ${order.tableNo}</div>
-                                    <span class="action-badge" style="background:#747d8c;">${actionType}</span>
-                                </h3>
-                                <div style="font-size: 13px; color: #57606f; margin-bottom: 8px;">⏱ ${timeText}</div>
-                                <div style="margin-bottom:15px; font-weight:bold; color: #2f3542;">${detailText}</div>
-                                <div style="text-align:center; color: #27ae60; font-weight:bold;">✅ เสิร์ฟแล้ว</div>
-                             </div>`;
-                });
-                container.innerHTML = html;
-
-            } catch (err) {
-                console.error("Error loading completed orders:", err);
-                container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: ${err.message}</p>`;
-            }
+            ordersSnapshot.forEach(orderDoc => {
+                let order = orderDoc.data();
+                order.id = orderDoc.id;
+                order.tableNo = tableNo;
+                allCompletedOrders.push(order);
+            });
         }
+
+        if (allCompletedOrders.length === 0) {
+            container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>ไม่มีประวัติการทำออเดอร์ในวันที่ ${selectedDateStr}</p>`;
+            return;
+        }
+
+        allCompletedOrders.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis()); // ใหม่ไปเก่า
+
+        let html = "";
+        allCompletedOrders.forEach(function(order) {
+            let actionType = order.action || "สั่งอาหาร";
+            
+            let timeText = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH') : "";
+            
+            // ส่วนที่แก้ไข: จัดการป้ายสถานะให้อยู่ต่อท้ายอาหารแต่ละรายการ
+            let detailLines = order.details ? String(order.details).split('\n') : [];
+            let detailText = detailLines.map(line => {
+                if(line.trim() !== "") return `${line} <span style="color: #27ae60; font-size: 13px; margin-left: 6px; font-weight: normal;">✅ ทำเสร็จแล้ว</span>`;
+                return "";
+            }).filter(line => line !== "").join('<br>');
+
+            html += `<div class="order-card completed">
+                        <h3>
+                            <div>โต๊ะ: ${order.tableNo}</div>
+                            <span class="action-badge" style="background:#747d8c;">${actionType}</span>
+                        </h3>
+                        <div style="font-size: 13px; color: #57606f; margin-bottom: 8px;">⏱ ${timeText}</div>
+                        <div style="margin-bottom:15px; font-weight:bold; color: #2f3542; line-height: 1.8;">${detailText}</div>
+                     </div>`;
+        });
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error("Error loading completed orders:", err);
+        container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: ${err.message}</p>`;
+    }
+}
 
         // 📌 กดปุ่มเพื่ออัปเดตสถานะออร์เดอร์ว่า "เสร็จ" ใน Firestore
         async function finishFoodOrder(event, tableNo, orderId) {
