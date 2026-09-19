@@ -29,6 +29,7 @@
         
         .action-badge { font-size: 12px; color: white; padding: 3px 8px; border-radius: 4px; }
         .badge-open { background: #3742fa; }
+        .badge-add-cust { background: #8e44ad; }
         .badge-stove { background: #e84118; }
         .badge-food { background: #2ed573; color: #2f3542; }
         
@@ -153,11 +154,18 @@
 
                 tablesSnapshot.forEach(function(doc) {
                     let tableNo = doc.id;
-                    let tData = doc.data();
+                    let tData = doc.data() || {};
                     
-                    let adult = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
-                    let child = parseInt(tData.children || tData.childCount || tData.child || 0);
-                    let totalPeople = adult + child;
+                    let adult = parseInt(tData.adults || tData.adultCount || tData.adult || 0) || 0;
+                    let child = parseInt(tData.children || tData.childCount || tData.child || 0) || 0;
+                    let totalP = parseInt(tData.totalPeople || tData.people || tData.pax || 0) || 0;
+                    
+                    let totalPeople = 0;
+                    if (totalP > 0) {
+                        totalPeople = totalP;
+                    } else if ((adult + child) > 0) {
+                        totalPeople = adult + child;
+                    }
 
                     let unsub = db.collection("tables").doc(tableNo).collection("orders")
                         .where("kitchenStatus", "==", "เตรียม")
@@ -197,9 +205,21 @@
             for (let i = 0; i < orders.length; i++) {
                 let order = orders[i];
                 let actionType = order.action || "สั่งอาหาร";
+                
+                let isCustomerAction = actionType.includes("เปิดโต๊ะ") || actionType.includes("เพิ่มลูกค้า");
+
                 let badgeClass = "badge-food";
-                if (actionType.includes("เปิดโต๊ะ")) badgeClass = "badge-open";
-                else if (actionType.includes("เตา") || actionType.includes("ซุป")) badgeClass = "badge-stove";
+                let borderColor = "#2ed573";
+                if (actionType.includes("เปิดโต๊ะ")) {
+                    badgeClass = "badge-open";
+                    borderColor = "#3742fa";
+                } else if (actionType.includes("เพิ่มลูกค้า")) {
+                    badgeClass = "badge-add-cust";
+                    borderColor = "#8e44ad";
+                } else if (actionType.includes("เตา") || actionType.includes("ซุป")) {
+                    badgeClass = "badge-stove";
+                    borderColor = "#e84118";
+                }
                 
                 let timeText = "กำลังบันทึกเวลา...";
                 if (order.timestamp) {
@@ -214,22 +234,30 @@
                     let item = parsedItems[idx];
                     let isDone = completedItems.includes(idx);
                     
+                    let btnText = isCustomerAction ? "✔️ รับทราบ" : "✔️ เสร็จ";
                     let btnHtml = isDone 
-                        ? "<span style='color: #27ae60; font-size: 13px; font-weight: bold; width: 60px; text-align: center;'>✅ เสร็จ</span>"
-                        : "<button type='button' onclick=\"finishSingleItem(event, '" + order.tableNo + "', '" + order.id + "', " + idx + ", " + parsedItems.length + ")\" style='background: #2ed573; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; width: 60px;'>✔️ เสร็จ</button>";
+                        ? "<span style='color: #27ae60; font-size: 13px; font-weight: bold; width: 65px; text-align: center;'>✅ เรียบร้อย</span>"
+                        : "<button type='button' onclick=\"finishSingleItem(event, '" + order.tableNo + "', '" + order.id + "', " + idx + ", " + parsedItems.length + ")\" style='background: #2ed573; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; width: 70px;'>" + btnText + "</button>";
                     
-                    let unit = (item.name.includes("ซุป") || item.name.includes("เตา") || actionType.includes("เปิดโต๊ะ")) ? "ที่" : "จาน";
+                    let unit = (item.name.includes("ซุป") || item.name.includes("เตา") || isCustomerAction) ? "ที่" : "จาน";
                     let bgStyle = isDone ? "background: #f1f2f6; opacity: 0.7;" : "";
                     let textStyle = isDone ? "text-decoration: line-through; color: #747d8c;" : "";
 
-                    let qtyHtml = isDone 
-                        ? "<span style='font-size: 15px; font-weight: bold; color: #747d8c; margin-right: 12px;'>" + item.qty + " " + unit + "</span>"
-                        : "<div class='qty-controls'>" +
-                             "<button type='button' class='qty-btn' onclick=\"adjustQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", -1)\">-</button>" +
-                             "<input type='number' class='qty-input' id='qty-" + order.id + "-" + idx + "' value='" + item.qty + "' onchange=\"manualUpdateQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", this.value)\">" +
-                             "<button type='button' class='qty-btn' onclick=\"adjustQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", 1)\">+</button>" +
-                           "</div>" +
-                           "<span style='font-size: 13px; font-weight: bold; color: #d63031; margin-right: 8px; min-width: 20px;'>" + unit + "</span>";
+                    let qtyHtml = "";
+                    if (isDone) {
+                        qtyHtml = isCustomerAction ? "" : "<span style='font-size: 15px; font-weight: bold; color: #747d8c; margin-right: 12px;'>" + item.qty + " " + unit + "</span>";
+                    } else {
+                        if (isCustomerAction) {
+                            qtyHtml = "<span style='font-size: 13px; font-weight: bold; color: #8e44ad; margin-right: 12px;'>เตรียมอุปกรณ์</span>";
+                        } else {
+                            qtyHtml = "<div class='qty-controls'>" +
+                                 "<button type='button' class='qty-btn' onclick=\"adjustQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", -1)\">-</button>" +
+                                 "<input type='number' class='qty-input' id='qty-" + order.id + "-" + idx + "' value='" + item.qty + "' onchange=\"manualUpdateQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", this.value)\">" +
+                                 "<button type='button' class='qty-btn' onclick=\"adjustQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", 1)\">+</button>" +
+                               "</div>" +
+                               "<span style='font-size: 13px; font-weight: bold; color: #d63031; margin-right: 8px; min-width: 20px;'>" + unit + "</span>";
+                        }
+                    }
 
                     itemsHtml += "<div class='edit-qty-box' style='margin-bottom: 6px; padding: 6px 10px; " + bgStyle + "'>" +
                            "<span class='item-name' style='" + textStyle + "'>" + item.name + "</span>" +
@@ -238,12 +266,8 @@
                            "</div>" +
                         "</div>";
                 }
-                
-                let borderColor = "#2ed573";
-                if (actionType.includes("เปิดโต๊ะ")) borderColor = "#3742fa";
-                else if (actionType.includes("เตา") || actionType.includes("ซุป")) borderColor = "#e84118";
 
-                let peopleText = "";
+                let peopleText = "<span style='font-size: 14px; color: #747d8c; font-weight: normal; margin-left: 6px;'>(ไม่ได้ระบุจำนวน)</span>";
                 if(order.totalPeople > 0) {
                     peopleText = "<span style='font-size: 14px; color: #747d8c; font-weight: normal; margin-left: 6px;'>(ลูกค้า " + order.totalPeople + " ท่าน)</span>";
                 }
@@ -253,7 +277,7 @@
                             "<div>โต๊ะ: <span style='color:#d63031; font-size: 24px;'>" + order.tableNo + "</span>" + peopleText + "</div>" +
                             "<span class='action-badge " + badgeClass + "'>" + actionType + "</span>" +
                         "</h3>" +
-                        "<div style='font-size: 13px; color: #57606f; margin-bottom: 8px;'>⏱ สั่งเวลา: " + timeText + "</div>" +
+                        "<div style='font-size: 13px; color: #57606f; margin-bottom: 8px;'>⏱ เวลา: " + timeText + "</div>" +
                         "<div style='margin-bottom:5px;'>" + itemsHtml + "</div>" +
                     "</div>";
             }
