@@ -111,19 +111,25 @@
         }
 
         function clearListeners() {
-            unsubscribes.forEach(unsub => unsub());
+            unsubscribes.forEach(function(unsub) { unsub(); });
             unsubscribes = [];
         }
 
         function parseOrderDetails(detailsStr) {
             if (!detailsStr) return [];
             let items = String(detailsStr).split('\n');
-            return items.map(item => {
-                let cleanItem = item.trim();
+            let result = [];
+            for(let i=0; i<items.length; i++) {
+                let cleanItem = items[i].trim();
+                if(cleanItem === "") continue;
                 let match = cleanItem.match(/(.+?)\s*x\s*(\d+)/) || cleanItem.match(/(.+?)\s*\(x(\d+)\)/);
-                if (match) return { name: match[1].trim(), qty: parseInt(match[2]) };
-                return { name: cleanItem, qty: 1 };
-            }).filter(item => item.name !== "");
+                if (match) {
+                    result.push({ name: match[1].trim(), qty: parseInt(match[2]) });
+                } else {
+                    result.push({ name: cleanItem, qty: 1 });
+                }
+            }
+            return result;
         }
 
         async function loadKitchenOrders() {
@@ -140,24 +146,23 @@
                     return;
                 }
 
-                tablesSnapshot.forEach(doc => {
+                tablesSnapshot.forEach(function(doc) {
                     let tableNo = doc.id;
                     let tData = doc.data();
                     
-                    // 📌 ดึงจำนวนคนของแต่ละโต๊ะ
                     let adult = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
                     let child = parseInt(tData.children || tData.childCount || tData.child || 0);
                     let totalPeople = adult + child;
 
                     let unsub = db.collection("tables").doc(tableNo).collection("orders")
                         .where("kitchenStatus", "==", "เตรียม")
-                        .onSnapshot(snapshot => {
-                            allPendingOrders = allPendingOrders.filter(o => o.tableNo !== tableNo);
-                            snapshot.forEach(orderDoc => {
+                        .onSnapshot(function(snapshot) {
+                            allPendingOrders = allPendingOrders.filter(function(o) { return o.tableNo !== tableNo; });
+                            snapshot.forEach(function(orderDoc) {
                                 let order = orderDoc.data();
                                 order.id = orderDoc.id;
                                 order.tableNo = tableNo;
-                                order.totalPeople = totalPeople; // แนบจำนวนคนไปกับออเดอร์
+                                order.totalPeople = totalPeople;
                                 allPendingOrders.push(order);
                             });
                             renderPendingOrders(allPendingOrders, container);
@@ -177,7 +182,7 @@
                 return;
             }
 
-            orders.sort((a, b) => {
+            orders.sort(function(a, b) {
                 let timeA = a.timestamp ? a.timestamp.toMillis() : 0;
                 let timeB = b.timestamp ? b.timestamp.toMillis() : 0;
                 return timeA - timeB;
@@ -198,38 +203,41 @@
                 let parsedItems = parseOrderDetails(order.details);
                 let completedItems = order.completedItems || [];
 
-                let itemsHtml = parsedItems.map((item, idx) => {
+                let itemsHtml = "";
+                for(let idx = 0; idx < parsedItems.length; idx++) {
+                    let item = parsedItems[idx];
                     let isDone = completedItems.includes(idx);
                     
                     let btnHtml = isDone 
                         ? "<span style='color: #27ae60; font-size: 13px; font-weight: bold; width: 60px; text-align: center;'>✅ เสร็จ</span>"
                         : "<button type='button' onclick=\"finishSingleItem(event, '" + order.tableNo + "', '" + order.id + "', " + idx + ", " + parsedItems.length + ")\" style='background: #2ed573; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; width: 60px;'>✔️ เสร็จ</button>";
                     
-                    // 📌 เพิ่มปุ่มแก้ไขจำนวน
                     let editBtnHtml = isDone
                         ? ""
-                        : "<button type='button' onclick=\"editItemQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", '" + item.name + "', " + item.qty + ")\" style='background: #f39c12; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 8px;'>✏️</button>";
+                        : "<button type='button' onclick=\"editItemQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", " + item.qty + ")\" style='background: #f39c12; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 8px;'>✏️</button>";
 
-                    let unit = (item.name.includes('ซุป') || item.name.includes('เตา') || actionType.includes('เปิดโต๊ะ')) ? 'ที่' : 'จาน';
+                    let unit = (item.name.includes("ซุป") || item.name.includes("เตา") || actionType.includes("เปิดโต๊ะ")) ? "ที่" : "จาน";
                     let bgStyle = isDone ? "background: #f1f2f6; opacity: 0.7;" : "";
                     let textStyle = isDone ? "text-decoration: line-through; color: #747d8c;" : "";
                     let qtyColor = isDone ? "#747d8c" : "#d63031";
 
-                    return "<div class='edit-qty-box' style='margin-bottom: 6px; padding: 6px 10px; " + bgStyle + "'>" +
+                    itemsHtml += "<div class='edit-qty-box' style='margin-bottom: 6px; padding: 6px 10px; " + bgStyle + "'>" +
                            "<span style='" + textStyle + "'>" + item.name + "</span>" +
                            "<div style='display:flex; align-items:center; justify-content: flex-end; min-width: 130px;'>" +
                            editBtnHtml +
                            "<span style='font-size: 15px; font-weight: bold; color: " + qtyColor + "; margin-right: 12px;'>" + item.qty + " " + unit + "</span>" +
                            btnHtml +
                            "</div></div>";
-                }).join('');
+                }
                 
                 let borderColor = "#2ed573";
                 if (actionType.includes("เปิดโต๊ะ")) borderColor = "#3742fa";
                 else if (actionType.includes("เตา") || actionType.includes("ซุป")) borderColor = "#e84118";
 
-                // 📌 แสดงจำนวนคนหลังหมายเลขโต๊ะ
-                let peopleText = order.totalPeople > 0 ?  <span style='font-size: 14px; color: #747d8c; font-weight: normal;'>(${order.totalPeople} ท่าน)</span> : "";
+                let peopleText = "";
+                if(order.totalPeople > 0) {
+                    peopleText = " <span style='font-size: 14px; color: #747d8c; font-weight: normal;'>(" + order.totalPeople + " ท่าน)</span>";
+                }
 
                 html += "<div class='order-card' style='border-left-color: " + borderColor + ";'>" +
                         "<h3><div>โต๊ะ: <span style='color:#d63031; font-size: 24px;'>" + order.tableNo + "</span>" + peopleText + "</div>" +
@@ -240,9 +248,8 @@
             container.innerHTML = html;
         }
 
-        // 📌 ฟังก์ชันสำหรับแก้ไขจำนวนจาน
-        async function editItemQty(tableNo, orderId, itemIndex, itemName, currentQty) {
-            let newQty = prompt("แก้ไขจำนวนของ: " + itemName + "\nกรอกจำนวนใหม่ที่ต้องการ:", currentQty);
+        async function editItemQty(tableNo, orderId, itemIndex, currentQty) {
+            let newQty = prompt("กรอกจำนวนใหม่ที่ต้องการ:", currentQty);
             if (newQty === null || newQty.trim() === "" || isNaN(newQty)) return;
             
             newQty = parseInt(newQty);
@@ -266,7 +273,6 @@
                         } else {
                             detailLines[itemIndex] = detailLines[itemIndex].trim() + " x " + newQty;
                         }
-                        
                         await orderRef.update({ details: detailLines.join('\n') });
                     }
                 }
@@ -318,7 +324,8 @@
                 let endDate = new Date(selectedDateStr + "T23:59:59");
                 const tablesSnapshot = await db.collection("tables").get();
                 
-                for (let doc of tablesSnapshot.docs) {
+                for (let i = 0; i < tablesSnapshot.docs.length; i++) {
+                    let doc = tablesSnapshot.docs[i];
                     let tableNo = doc.id;
                     const ordersSnapshot = await db.collection("tables").doc(tableNo).collection("orders")
                         .where("kitchenStatus", "==", "เสร็จ")
@@ -326,7 +333,7 @@
                         .where("timestamp", "<=", endDate)
                         .get();
                         
-                    ordersSnapshot.forEach(orderDoc => {
+                    ordersSnapshot.forEach(function(orderDoc) {
                         let order = orderDoc.data();
                         order.id = orderDoc.id;
                         order.tableNo = tableNo;
@@ -339,17 +346,20 @@
                     return;
                 }
 
-                allCompletedOrders.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis()); 
+                allCompletedOrders.sort(function(a, b) { return b.timestamp.toMillis() - a.timestamp.toMillis(); }); 
                 let html = "";
                 allCompletedOrders.forEach(function(order) {
                     let actionType = order.action || "สั่งอาหาร";
                     let timeText = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH') : "";
                     
                     let detailLines = order.details ? String(order.details).split('\n') : [];
-                    let detailText = detailLines.map(line => {
-                        if(line.trim() !== "") return line + " <span style='color: #27ae60; font-size: 13px; margin-left: 6px; font-weight: normal;'>✅ ทำเสร็จแล้ว</span>";
-                        return "";
-                    }).filter(line => line !== "").join('<br>');
+                    let detailTextArray = [];
+                    for(let i=0; i<detailLines.length; i++) {
+                        if(detailLines[i].trim() !== "") {
+                            detailTextArray.push(detailLines[i] + " <span style='color: #27ae60; font-size: 13px; margin-left: 6px; font-weight: normal;'>✅ ทำเสร็จแล้ว</span>");
+                        }
+                    }
+                    let detailText = detailTextArray.join('<br>');
 
                     html += "<div class='order-card completed'>" +
                             "<h3><div>โต๊ะ: " + order.tableNo + "</div>" +
@@ -361,7 +371,7 @@
 
             } catch (err) {
                 console.error("Error loading completed orders:", err);
-                container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>กรุณากดที่ลิงก์ใน Console เพื่อสร้าง Index ก่อนครับ (" + err.message + ")</p>";
+                container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาดในการโหลดประวัติ: " + err.message + "</p>";
             }
         }
     </script>
