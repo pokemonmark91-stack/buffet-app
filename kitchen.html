@@ -33,10 +33,18 @@
         .badge-food { background: #2ed573; color: #2f3542; }
         
         .edit-qty-box { display: flex; align-items: center; justify-content: space-between; background: white; padding: 8px 10px; border-radius: 5px; margin-bottom: 8px; border: 1px solid #ced6e0; }
-        .edit-qty-box span { font-weight: bold; color: #2f3542; }
+        .edit-qty-box span.item-name { font-weight: bold; color: #2f3542; flex: 1; }
         
         .refresh-box { text-align: right; margin-bottom: 10px; }
         .btn-refresh { background: #1e90ff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; }
+
+        /* Styles for inline +/- input */
+        .qty-wrapper { display: flex; align-items: center; justify-content: flex-end; min-width: 140px; }
+        .qty-controls { display: flex; align-items: center; margin-right: 8px; background: white; border-radius: 4px; border: 1px solid #ced6e0; overflow: hidden; }
+        .qty-btn { background: #f1f2f6; border: none; width: 26px; height: 26px; font-size: 16px; cursor: pointer; color: #2f3542; font-weight: bold; display: flex; justify-content: center; align-items: center; transition: 0.2s; padding: 0; }
+        .qty-btn:hover { background: #dfe4ea; }
+        .qty-input { width: 32px; height: 26px; text-align: center; border: none; border-left: 1px solid #ced6e0; border-right: 1px solid #ced6e0; font-size: 14px; font-weight: bold; color: #d63031; -moz-appearance: textfield; outline: none; padding: 0; margin: 0; }
+        .qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
 <body>
@@ -83,7 +91,7 @@
             let dd = String(today.getDate()).padStart(2, '0');
             let mm = String(today.getMonth() + 1).padStart(2, '0');
             let yyyy = today.getFullYear();
-            document.getElementById('history-date').value = yyyy + "-" + mm + "-" + dd;
+            document.getElementById('history-date').value = `${yyyy}-${mm}-${dd}`;
             loadKitchenOrders();
         };
 
@@ -111,7 +119,7 @@
         }
 
         function clearListeners() {
-            unsubscribes.forEach(function(unsub) { unsub(); });
+            unsubscribes.forEach(unsub => unsub());
             unsubscribes = [];
         }
 
@@ -135,30 +143,29 @@
         async function loadKitchenOrders() {
             let container = document.getElementById('kitchenContainer');
             container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>กำลังโหลดออเดอร์ล่าสุด...</p>";
-            
             let allPendingOrders = [];
             
             try {
                 const tablesSnapshot = await db.collection("tables").get();
-                
                 if (tablesSnapshot.empty) {
                     container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีโต๊ะที่เปิดบริการในขณะนี้</p>";
                     return;
                 }
 
-                tablesSnapshot.forEach(function(doc) {
+                tablesSnapshot.forEach(doc => {
                     let tableNo = doc.id;
                     let tData = doc.data();
                     
+                    // หาจำนวนลูกค้า
                     let adult = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
                     let child = parseInt(tData.children || tData.childCount || tData.child || 0);
                     let totalPeople = adult + child;
 
                     let unsub = db.collection("tables").doc(tableNo).collection("orders")
                         .where("kitchenStatus", "==", "เตรียม")
-                        .onSnapshot(function(snapshot) {
-                            allPendingOrders = allPendingOrders.filter(function(o) { return o.tableNo !== tableNo; });
-                            snapshot.forEach(function(orderDoc) {
+                        .onSnapshot(snapshot => {
+                            allPendingOrders = allPendingOrders.filter(o => o.tableNo !== tableNo);
+                            snapshot.forEach(orderDoc => {
                                 let order = orderDoc.data();
                                 order.id = orderDoc.id;
                                 order.tableNo = tableNo;
@@ -172,7 +179,7 @@
 
             } catch (err) {
                 console.error("Error loading kitchen orders:", err);
-                container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: " + err.message + "</p>";
+                container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: ${err.message}</p>`;
             }
         }
 
@@ -182,14 +189,14 @@
                 return;
             }
 
-            orders.sort(function(a, b) {
+            orders.sort((a, b) => {
                 let timeA = a.timestamp ? a.timestamp.toMillis() : 0;
                 let timeB = b.timestamp ? b.timestamp.toMillis() : 0;
                 return timeA - timeB;
             });
 
             let html = "";
-            orders.forEach(function(order) {
+            orders.forEach(order => {
                 let actionType = order.action || "สั่งอาหาร";
                 let badgeClass = "badge-food";
                 if (actionType.includes("เปิดโต๊ะ")) badgeClass = "badge-open";
@@ -204,64 +211,86 @@
                 let completedItems = order.completedItems || [];
 
                 let itemsHtml = "";
-                for(let idx = 0; idx < parsedItems.length; idx++) {
-                    let item = parsedItems[idx];
+                parsedItems.forEach((item, idx) => {
                     let isDone = completedItems.includes(idx);
                     
                     let btnHtml = isDone 
-                        ? "<span style='color: #27ae60; font-size: 13px; font-weight: bold; width: 60px; text-align: center;'>✅ เสร็จ</span>"
-                        : "<button type='button' onclick=\"finishSingleItem(event, '" + order.tableNo + "', '" + order.id + "', " + idx + ", " + parsedItems.length + ")\" style='background: #2ed573; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; width: 60px;'>✔️ เสร็จ</button>";
+                        ? <span style='color: #27ae60; font-size: 13px; font-weight: bold; width: 60px; text-align: center;'>✅ เสร็จ</span>
+                        : `<button type='button' onclick="finishSingleItem(event, '${order.tableNo}', '${order.id}', ${idx}, ${parsedItems.length})" style='background: #2ed573; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; width: 60px;'>✔️ เสร็จ</button>`;
                     
-                    let editBtnHtml = isDone
-                        ? ""
-                        : "<button type='button' onclick=\"editItemQty('" + order.tableNo + "', '" + order.id + "', " + idx + ", " + item.qty + ")\" style='background: #f39c12; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 8px;'>✏️</button>";
-
                     let unit = (item.name.includes("ซุป") || item.name.includes("เตา") || actionType.includes("เปิดโต๊ะ")) ? "ที่" : "จาน";
                     let bgStyle = isDone ? "background: #f1f2f6; opacity: 0.7;" : "";
                     let textStyle = isDone ? "text-decoration: line-through; color: #747d8c;" : "";
-                    let qtyColor = isDone ? "#747d8c" : "#d63031";
 
-                    itemsHtml += "<div class='edit-qty-box' style='margin-bottom: 6px; padding: 6px 10px; " + bgStyle + "'>" +
-                           "<span style='" + textStyle + "'>" + item.name + "</span>" +
-                           "<div style='display:flex; align-items:center; justify-content: flex-end; min-width: 130px;'>" +
-                           editBtnHtml +
-                           "<span style='font-size: 15px; font-weight: bold; color: " + qtyColor + "; margin-right: 12px;'>" + item.qty + " " + unit + "</span>" +
-                           btnHtml +
-                           "</div></div>";
-                }
+                    // สร้างปุ่มเพิ่มลดจำนวน หรือ แสดงเป็นข้อความถ้าทำเสร็จแล้ว
+                    let qtyHtml = isDone 
+                        ? <span style='font-size: 15px; font-weight: bold; color: #747d8c; margin-right: 12px;'>${item.qty} ${unit}</span>
+                        : `<div class='qty-controls'>
+                             <button type='button' class='qty-btn' onclick="adjustQty('${order.tableNo}', '${order.id}', ${idx}, -1)">-</button>
+                             <input type='number' class='qty-input' id='qty-${order.id}-${idx}' value='${item.qty}' onchange="manualUpdateQty('${order.tableNo}', '${order.id}', ${idx}, this.value)">
+                             <button type='button' class='qty-btn' onclick="adjustQty('${order.tableNo}', '${order.id}', ${idx}, 1)">+</button>
+                           </div>
+                           <span style='font-size: 13px; font-weight: bold; color: #d63031; margin-right: 8px; min-width: 20px;'>${unit}</span>`;
+
+                    itemsHtml += `
+                        <div class='edit-qty-box' style='margin-bottom: 6px; padding: 6px 10px; ${bgStyle}'>
+                           <span class='item-name' style='${textStyle}'>${item.name}</span>
+                           <div class='qty-wrapper'>
+                               ${qtyHtml}
+                               ${btnHtml}
+                           </div>
+                        </div>`;
+                });
                 
                 let borderColor = "#2ed573";
                 if (actionType.includes("เปิดโต๊ะ")) borderColor = "#3742fa";
                 else if (actionType.includes("เตา") || actionType.includes("ซุป")) borderColor = "#e84118";
 
+                // แสดงจำนวนลูกค้า
                 let peopleText = "";
                 if(order.totalPeople > 0) {
-                    peopleText = " <span style='font-size: 14px; color: #747d8c; font-weight: normal;'>(" + order.totalPeople + " ท่าน)</span>";
+                    peopleText = `<span style='font-size: 14px; color: #747d8c; font-weight: normal; margin-left: 6px;'>(ลูกค้า ${order.totalPeople} ท่าน)</span>`;
                 }
 
-                html += "<div class='order-card' style='border-left-color: " + borderColor + ";'>" +
-                        "<h3><div>โต๊ะ: <span style='color:#d63031; font-size: 24px;'>" + order.tableNo + "</span>" + peopleText + "</div>" +
-                        "<span class='action-badge " + badgeClass + "'>" + actionType + "</span></h3>" +
-                        "<div style='font-size: 13px; color: #57606f; margin-bottom: 8px;'>⏱ สั่งเวลา: " + timeText + "</div>" +
-                        "<div style='margin-bottom:5px;'>" + itemsHtml + "</div></div>";
+                html += `
+                    <div class='order-card' style='border-left-color: ${borderColor};'>
+                        <h3>
+                            <div>โต๊ะ: <span style='color:#d63031; font-size: 24px;'>${order.tableNo}</span>${peopleText}</div>
+                            <span class='action-badge ${badgeClass}'>${actionType}</span>
+                        </h3>
+                        <div style='font-size: 13px; color: #57606f; margin-bottom: 8px;'>⏱ สั่งเวลา: ${timeText}</div>
+                        <div style='margin-bottom:5px;'>${itemsHtml}</div>
+                    </div>`;
             });
             container.innerHTML = html;
         }
 
-        async function editItemQty(tableNo, orderId, itemIndex, currentQty) {
-            let newQty = prompt("กรอกจำนวนใหม่ที่ต้องการ:", currentQty);
-            if (newQty === null || newQty.trim() === "" || isNaN(newQty)) return;
+        async function adjustQty(tableNo, orderId, itemIndex, delta) {
+            let inputId = `qty-${orderId}-${itemIndex}`;
+            let inputElement = document.getElementById(inputId);
+            if (!inputElement) return;
             
-            newQty = parseInt(newQty);
-            if (newQty <= 0) {
-                alert("จำนวนต้องมากกว่า 0 หากต้องการยกเลิกกรุณากดเสร็จสิ้นแทน");
+            let currentQty = parseInt(inputElement.value);
+            let newQty = currentQty + delta;
+            if (newQty <= 0) return; // ไม่ให้จำนวนติดลบหรือเป็น 0
+            
+            inputElement.value = newQty;
+            await saveNewQtyToDB(tableNo, orderId, itemIndex, newQty);
+        }
+
+        async function manualUpdateQty(tableNo, orderId, itemIndex, val) {
+            let newQty = parseInt(val);
+            if (isNaN(newQty) || newQty <= 0) {
+                alert("กรุณาใส่จำนวนที่ถูกต้อง (ต้องมากกว่า 0)");
                 return;
             }
+            await saveNewQtyToDB(tableNo, orderId, itemIndex, newQty);
+        }
 
+        async function saveNewQtyToDB(tableNo, orderId, itemIndex, newQty) {
             try {
                 const orderRef = db.collection("tables").doc(String(tableNo)).collection("orders").doc(orderId);
                 const doc = await orderRef.get();
-                
                 if (doc.exists) {
                     let data = doc.data();
                     let detailLines = data.details ? String(data.details).split('\n') : [];
@@ -277,7 +306,7 @@
                     }
                 }
             } catch (err) {
-                alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message);
+                console.error("เกิดข้อผิดพลาดในการอัปเดตจำนวน: ", err);
             }
         }
 
@@ -320,8 +349,8 @@
             let allCompletedOrders = [];
             
             try {
-                let startDate = new Date(selectedDateStr + "T00:00:00");
-                let endDate = new Date(selectedDateStr + "T23:59:59");
+                let startDate = new Date(`${selectedDateStr}T00:00:00`);
+                let endDate = new Date(`${selectedDateStr}T23:59:59`);
                 const tablesSnapshot = await db.collection("tables").get();
                 
                 for (let i = 0; i < tablesSnapshot.docs.length; i++) {
@@ -333,7 +362,7 @@
                         .where("timestamp", "<=", endDate)
                         .get();
                         
-                    ordersSnapshot.forEach(function(orderDoc) {
+                    ordersSnapshot.forEach(orderDoc => {
                         let order = orderDoc.data();
                         order.id = orderDoc.id;
                         order.tableNo = tableNo;
@@ -342,13 +371,13 @@
                 }
 
                 if (allCompletedOrders.length === 0) {
-                    container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>ไม่มีประวัติการทำออเดอร์ในวันที่ " + selectedDateStr + "</p>";
+                    container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>ไม่มีประวัติการทำออเดอร์ในวันที่ ${selectedDateStr}</p>`;
                     return;
                 }
 
-                allCompletedOrders.sort(function(a, b) { return b.timestamp.toMillis() - a.timestamp.toMillis(); }); 
+                allCompletedOrders.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis()); 
                 let html = "";
-                allCompletedOrders.forEach(function(order) {
+                allCompletedOrders.forEach(order => {
                     let actionType = order.action || "สั่งอาหาร";
                     let timeText = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH') : "";
                     
@@ -356,22 +385,26 @@
                     let detailTextArray = [];
                     for(let i=0; i<detailLines.length; i++) {
                         if(detailLines[i].trim() !== "") {
-                            detailTextArray.push(detailLines[i] + " <span style='color: #27ae60; font-size: 13px; margin-left: 6px; font-weight: normal;'>✅ ทำเสร็จแล้ว</span>");
+                            detailTextArray.push(`${detailLines[i]} <span style='color: #27ae60; font-size: 13px; margin-left: 6px; font-weight: normal;'>✅ ทำเสร็จแล้ว</span>`);
                         }
                     }
                     let detailText = detailTextArray.join('<br>');
 
-                    html += "<div class='order-card completed'>" +
-                            "<h3><div>โต๊ะ: " + order.tableNo + "</div>" +
-                            "<span class='action-badge' style='background:#747d8c;'>" + actionType + "</span></h3>" +
-                            "<div style='font-size: 13px; color: #57606f; margin-bottom: 8px;'>⏱ " + timeText + "</div>" +
-                            "<div style='margin-bottom:15px; font-weight:bold; color: #2f3542; line-height: 1.8;'>" + detailText + "</div></div>";
+                    html += `
+                        <div class='order-card completed'>
+                            <h3>
+                                <div>โต๊ะ: ${order.tableNo}</div>
+                                <span class='action-badge' style='background:#747d8c;'>${actionType}</span>
+                            </h3>
+                            <div style='font-size: 13px; color: #57606f; margin-bottom: 8px;'>⏱ ${timeText}</div>
+                            <div style='margin-bottom:15px; font-weight:bold; color: #2f3542; line-height: 1.8;'>${detailText}</div>
+                        </div>`;
                 });
                 container.innerHTML = html;
 
             } catch (err) {
                 console.error("Error loading completed orders:", err);
-                container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาดในการโหลดประวัติ: " + err.message + "</p>";
+                container.innerHTML = `<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาดในการโหลดประวัติ (อาจต้องกดสร้าง Index ใน Console): ${err.message}</p>`;
             }
         }
     </script>
