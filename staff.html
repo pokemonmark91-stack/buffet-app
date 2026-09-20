@@ -743,7 +743,7 @@
                 action: "เปิดโต๊ะ",
                 details: detailText,
                 amount: totalAmount,
-                kitchenStatus: "-",
+                kitchenStatus: "เตรียม", // 👈 แก้ไขตรงนี้จาก "-" เป็น "เตรียม"
                 shiftId: currentShift ? currentShift.shiftId : "",
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
@@ -1064,23 +1064,41 @@
         return document.getElementById('manageTNo').dataset.tno || ""; 
     }
 
-    async function addPerson() {
-        var tNo = getActiveTable();
-        if(!tNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
-        var ppl = parseInt(document.getElementById('addPplAmount').value) || 1;
+    async function openNewTable() {
+        var tNo = document.getElementById('tNo').value.trim();
+        var pplAdult = parseInt(document.getElementById('pplAdult').value) || 0;
+        var pplChild = parseInt(document.getElementById('pplChild').value) || 0;
+        var pkgPrice = parseFloat(document.getElementById('pkg').value) || 0;
+        
+        if(!tNo) return alert("กรุณาระบุเลขโต๊ะ");
+        if(pplAdult + pplChild <= 0) return alert("กรุณาระบุจำนวนลูกค้าอย่างน้อย 1 ท่าน");
 
-        var data = { 
-            tableNo: tNo, 
-            action: "เพิ่มลูกค้า", 
-            details: "เพิ่มลูกค้า " + ppl + " ท่าน", 
-            amount: 0, 
-            toKitchen: false,
-            shiftId: currentShift ? currentShift.shiftId : ""
-        };
+        var childPrice = pkgPrice / 2;
+        var totalAmount = (pplAdult * pkgPrice) + (pplChild * childPrice);
+        var detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + pplAdult + " ท่าน, เด็ก " + pplChild + " ท่าน - แพ็กเกจ " + pkgPrice + " บ.)";
 
-        await recordAction(data);
-        alert("✅ บันทึกเพิ่มคนสำเร็จ!");
-        checkBill();
+        try {
+            await db.collection("tables").doc(tNo).set({
+                tableNo: tNo,
+                status: "ไม่ว่าง",
+                packagePrice: pkgPrice
+            }, { merge: true });
+
+            await db.collection("tables").doc(tNo).collection("orders").add({
+                action: "เปิดโต๊ะ",
+                details: detailText,
+                amount: totalAmount,
+                kitchenStatus: "เตรียม", // 👈 แก้ไขตรงนี้จาก "-" เป็น "เตรียม"
+                shiftId: currentShift ? currentShift.shiftId : "",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            alert("✅ เปิดโต๊ะ " + tNo + " สำเร็จ!");
+            loadDashboard();
+            selectTable(tNo);
+        } catch (err) {
+            alert("❌ " + err.message);
+        }
     }
 
     function toggleSoup() {
