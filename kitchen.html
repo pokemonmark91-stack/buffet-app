@@ -160,11 +160,11 @@
                     let child = parseInt(tData.children || tData.childCount || tData.child || 0) || 0;
                     let totalP = parseInt(tData.totalPeople || tData.people || tData.pax || 0) || 0;
                     
-                    let totalPeople = 0;
+                    let tablePeople = 0;
                     if (totalP > 0) {
-                        totalPeople = totalP;
+                        tablePeople = totalP;
                     } else if ((adult + child) > 0) {
-                        totalPeople = adult + child;
+                        tablePeople = adult + child;
                     }
 
                     let unsub = db.collection("tables").doc(tableNo).collection("orders")
@@ -175,7 +175,18 @@
                                 let order = orderDoc.data();
                                 order.id = orderDoc.id;
                                 order.tableNo = tableNo;
-                                order.totalPeople = totalPeople;
+                                
+                                // 🔍 ถ้าระบบโต๊ะยังไม่มีจำนวนคน ให้ลองแกะตัวเลขจากข้อความ details ของบิล "เปิดโต๊ะ" แทน
+                                let finalPeople = tablePeople;
+                                if (finalPeople === 0 && order.details) {
+                                    let matchAdult = String(order.details).match(/ผู้ใหญ่\s*(\d+)/);
+                                    let matchChild = String(order.details).match(/เด็ก\s*(\d+)/);
+                                    let a = matchAdult ? parseInt(matchAdult[1]) : 0;
+                                    let c = matchChild ? parseInt(matchChild[1]) : 0;
+                                    if ((a + c) > 0) finalPeople = a + c;
+                                }
+                                order.totalPeople = finalPeople;
+
                                 allPendingOrders.push(order);
                             });
                             renderPendingOrders(allPendingOrders, container);
