@@ -733,17 +733,21 @@
         var detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + pplAdult + " ท่าน, เด็ก " + pplChild + " ท่าน - แพ็กเกจ " + pkgPrice + " บ.)";
 
         try {
+            // 👇 แก้ไขบล็อกนี้: เพิ่มการบันทึกจำนวนคนลงในข้อมูลโต๊ะ
             await db.collection("tables").doc(tNo).set({
                 tableNo: tNo,
                 status: "ไม่ว่าง",
-                packagePrice: pkgPrice
+                packagePrice: pkgPrice,
+                adults: pplAdult,                     // <-- ส่งจำนวนผู้ใหญ่ไปเก็บ
+                children: pplChild,                   // <-- ส่งจำนวนเด็กไปเก็บ
+                totalPeople: pplAdult + pplChild      // <-- ส่งจำนวนคนรวมไปเก็บ
             }, { merge: true });
 
             await db.collection("tables").doc(tNo).collection("orders").add({
                 action: "เปิดโต๊ะ",
                 details: detailText,
                 amount: totalAmount,
-                kitchenStatus: "เตรียม", // 👈 แก้ไขตรงนี้จาก "-" เป็น "เตรียม"
+                kitchenStatus: "เตรียม", 
                 shiftId: currentShift ? currentShift.shiftId : "",
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
