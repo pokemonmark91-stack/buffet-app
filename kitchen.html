@@ -154,41 +154,48 @@
 
                 tablesSnapshot.forEach(function(doc) {
                     let tableNo = doc.id;
-                    let tData = doc.data() || {};
                     
-                    let adult = parseInt(tData.adults || tData.adultCount || tData.adult || 0) || 0;
-                    let child = parseInt(tData.children || tData.childCount || tData.child || 0) || 0;
-                    let totalP = parseInt(tData.totalPeople || tData.people || tData.pax || 0) || 0;
-                    
-                    let tablePeople = 0;
-                    if (totalP > 0) {
-                        tablePeople = totalP;
-                    } else if ((adult + child) > 0) {
-                        tablePeople = adult + child;
-                    }
-
                     let unsub = db.collection("tables").doc(tableNo).collection("orders")
                         .where("kitchenStatus", "==", "เตรียม")
-                        .onSnapshot(function(snapshot) {
+                        .onSnapshot(async function(snapshot) {
+                            
+                            // 1. ดึงข้อมูลโต๊ะล่าสุดทุกครั้งที่มีออเดอร์ขยับ เพื่อให้ได้จำนวนคนชัวร์ๆ
+                            let tableDoc = await db.collection("tables").doc(tableNo).get();
+                            let tData = tableDoc.data() || {};
+                            let adult = parseInt(tData.adults || tData.adultCount || tData.adult || 0) || 0;
+                            let child = parseInt(tData.children || tData.childCount || tData.child || 0) || 0;
+                            let totalP = parseInt(tData.totalPeople || tData.people || tData.pax || 0) || 0;
+                            let tablePeople = totalP > 0 ? totalP : (adult + child);
+
+                            // 2. แกะจำนวนคนจากบิล "เปิดโต๊ะ" เผื่อฐานข้อมูลโต๊ะรอบแรกยังไม่มา
+                            let fallbackPeople = 0;
+                            snapshot.forEach(function(orderDoc) {
+                                let order = orderDoc.data();
+                                if (order.details && String(order.details).includes("เปิดโต๊ะ")) {
+                                    let matchAdult = String(order.details).match(/ผู้ใหญ่\s*(\d+)/);
+                                    let matchChild = String(order.details).match(/เด็ก\s*(\d+)/);
+                                    let a = matchAdult ? parseInt(matchAdult[1]) : 0;
+                                    let c = matchChild ? parseInt(matchChild[1]) : 0;
+                                    if ((a + c) > 0) fallbackPeople = a + c;
+                                }
+                            });
+
+                            // 3. สรุปจำนวนคนที่จะใช้แสดงผล
+                            let finalPeople = tablePeople > 0 ? tablePeople : fallbackPeople;
+
                             allPendingOrders = allPendingOrders.filter(function(o) { return o.tableNo !== tableNo; });
+                            
                             snapshot.forEach(function(orderDoc) {
                                 let order = orderDoc.data();
                                 order.id = orderDoc.id;
                                 order.tableNo = tableNo;
                                 
-                                // 🔍 ถ้าระบบโต๊ะยังไม่มีจำนวนคน ให้ลองแกะตัวเลขจากข้อความ details ของบิล "เปิดโต๊ะ" แทน
-                                let finalPeople = tablePeople;
-                                if (finalPeople === 0 && order.details) {
-                                    let matchAdult = String(order.details).match(/ผู้ใหญ่\s*(\d+)/);
-                                    let matchChild = String(order.details).match(/เด็ก\s*(\d+)/);
-                                    let a = matchAdult ? parseInt(matchAdult[1]) : 0;
-                                    let c = matchChild ? parseInt(matchChild[1]) : 0;
-                                    if ((a + c) > 0) finalPeople = a + c;
-                                }
-                                order.totalPeople = finalPeople;
-
+                                // 👇 ยัดจำนวนคนที่สรุปได้ ใส่เข้าไปในทุกๆ ออเดอร์ของโต๊ะนี้
+                                order.totalPeople = finalPeople; 
+                                
                                 allPendingOrders.push(order);
                             });
+                            
                             renderPendingOrders(allPendingOrders, container);
                         });
                     unsubscribes.push(unsub);
