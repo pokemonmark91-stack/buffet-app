@@ -88,14 +88,16 @@
         </div>
 
         <!-- เพิ่มลูกค้า -->
-        <div class="p-2 bg-light rounded border mb-3">
-            <h6 class="fw-bold small mb-2">👥 ลูกค้ามาเพิ่ม</h6>
-            <div class="input-group input-group-sm">
-                <input type="number" id="addPplAmount" class="form-control" value="1" min="1">
-                <span class="input-group-text">ท่าน</span>
-                <button class="btn btn-outline-secondary" onclick="addPerson()">บันทึกเพิ่มคน</button>
-            </div>
-        </div>
+        <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #dfe4ea; border-radius: 8px; background: #f1f2f6;">
+    <label style="font-weight: bold; color: #2f3542; margin-bottom: 8px; display: block;">👥 ลูกค้ามาเพิ่ม</label>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <span style="font-size: 14px;">ผู้ใหญ่:</span>
+        <input type="number" id="addAdultQty" min="0" value="0" class="form-control" style="width: 70px; text-align: center;">
+        <span style="font-size: 14px;">เด็ก:</span>
+        <input type="number" id="addChildQty" min="0" value="0" class="form-control" style="width: 70px; text-align: center;">
+        <button type="button" onclick="addPerson()" style="background: #3742fa; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px;">บันทึกเพิ่มคน</button>
+    </div>
+</div>
 
         <!-- สั่งเพิ่มเตา / น้ำซุป -->
         <div class="p-2 bg-light rounded border mb-3">
@@ -1460,6 +1462,92 @@
             alert("❌ เกิดข้อผิดพลาด: " + err.message);
         }
     }
+
+            async function addPerson() {
+    // 1. เช็คก่อนว่าพนักงานได้เลือกโต๊ะที่กำลังจัดการอยู่หรือยัง
+    // (ลองเช็คตัวแปรที่ใช้เก็บเลขโต๊ะในโค้ดของคุณ อาจจะชื่อ selectedTableNo หรือ currentTable)
+    let tableNo = typeof selectedTableNo !== 'undefined' ? selectedTableNo : 
+                 (typeof selectedTable !== 'undefined' ? selectedTable : 
+                 (typeof currentTable !== 'undefined' ? currentTable : null));
+
+    if (!tableNo) {
+        alert("กรุณาเลือกโต๊ะที่ต้องการเพิ่มลูกค้าก่อนครับ");
+        return;
+    }
+
+    // 2. อ่านค่าจากช่องกรอกผู้ใหญ่และเด็ก
+    let addAdults = parseInt(document.getElementById('addAdultQty').value) || 0;
+    let addChildren = parseInt(document.getElementById('addChildQty').value) || 0;
+
+    if (addAdults === 0 && addChildren === 0) {
+        alert("กรุณาระบุจำนวนลูกค้าที่ต้องการเพิ่ม (ผู้ใหญ่ หรือ เด็ก)");
+        return;
+    }
+
+    try {
+        let tableRef = db.collection("tables").doc(tableNo);
+        let tableDoc = await tableRef.get();
+
+        if (!tableDoc.exists) {
+            alert("ไม่พบข้อมูลโต๊ะนี้ในระบบ");
+            return;
+        }
+
+        // 3. ดึงจำนวนคนเดิมที่มีอยู่แล้วในโต๊ะนี้ออกมา
+        let tData = tableDoc.data();
+        let currentAdults = parseInt(tData.adults || tData.adultCount || 0) || 0;
+        let currentChildren = parseInt(tData.children || tData.childCount || 0) || 0;
+        let currentTotal = parseInt(tData.totalPeople || 0) || 0;
+
+        // 4. เอาจำนวนคนเดิม + จำนวนคนที่มาเพิ่ม
+        let newAdults = currentAdults + addAdults;
+        let newChildren = currentChildren + addChildren;
+        
+        let newTotal = 0;
+        if (currentTotal > 0) {
+            newTotal = currentTotal + addAdults + addChildren;
+        } else {
+            newTotal = newAdults + newChildren;
+        }
+
+        // 5. บันทึกจำนวนคนอัปเดตใหม่ ทับลงไปในฐานข้อมูลโต๊ะ
+        await tableRef.update({
+            adults: newAdults,
+            adultCount: newAdults,
+            children: newChildren,
+            childCount: newChildren,
+            totalPeople: newTotal
+        });
+
+        // 6. สร้างบิลแจ้งเตือนไปที่ "หน้าครัว" เพื่อให้พนักงานเตรียมจานชามเพิ่ม
+        let detailsStr = "";
+        if (addAdults > 0 && addChildren > 0) {
+            detailsStr = "ผู้ใหญ่เพิ่ม " + addAdults + ", เด็กเพิ่ม " + addChildren;
+        } else if (addAdults > 0) {
+            detailsStr = "ผู้ใหญ่เพิ่ม " + addAdults;
+        } else if (addChildren > 0) {
+            detailsStr = "เด็กเพิ่ม " + addChildren;
+        }
+
+        await tableRef.collection("orders").add({
+            action: "เพิ่มลูกค้า",
+            details: detailsStr,
+            status: "pending",
+            kitchenStatus: "เตรียม",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        alert("เพิ่มลูกค้าเข้าโต๊ะเรียบร้อยแล้ว!\nยอดปัจจุบัน: ผู้ใหญ่ " + newAdults + " ท่าน, เด็ก " + newChildren + " ท่าน");
+        
+        // 7. รีเซ็ตค่าในช่องกรอกกลับเป็นเลข 0
+        document.getElementById('addAdultQty').value = 0;
+        document.getElementById('addChildQty').value = 0;
+
+    } catch (err) {
+        console.error("Error adding person:", err);
+        alert("เกิดข้อผิดพลาดในการบันทึก: " + err.message);
+    }
+}
 </script>
 </body>
 </html>
