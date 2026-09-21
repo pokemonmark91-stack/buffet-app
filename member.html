@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ข้อมูลสมาชิก</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Sarabun', sans-serif; 
+      background: #f1f2f6; 
+      margin: 0; 
+      padding: 20px 15px; 
+      color: #2f3542; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      min-height: 100vh; 
+      -webkit-tap-highlight-color: transparent; 
+    }
+    .card { 
+      background: white; 
+      padding: 25px 20px; 
+      border-radius: 20px; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
+      width: 100%; 
+      max-width: 390px; 
+      text-align: center; 
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* การ์ดบัตรสมาชิก VIP */
+    .vip-card {
+      background: linear-gradient(135deg, #2c3e50, #000000);
+      color: #ffffff;
+      border-radius: 16px;
+      padding: 20px;
+      margin: 15px 0;
+      text-align: left;
+      position: relative;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 215, 0, 0.3);
+    }
+    .vip-card::after {
+      content: 'MEMBER';
+      position: absolute;
+      right: -10px;
+      bottom: -15px;
+      font-size: 55px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.04);
+      letter-spacing: 2px;
+      pointer-events: none;
+    }
+    .profile-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+    .profile-img { 
+      width: 65px; 
+      height: 65px; 
+      border-radius: 50%; 
+      object-fit: cover; 
+      border: 2px solid #ffd700; 
+    }
+    .profile-info h3 {
+      margin: 0;
+      font-size: 18px;
+      color: #fff;
+    }
+    .profile-info p {
+      margin: 3px 0 0 0;
+      font-size: 13px;
+      color: #f1c40f;
+      font-weight: 500;
+    }
+
+    .card-details {
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      padding-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .detail-item {
+      font-size: 12px;
+      color: #bdc3c7;
+    }
+    .detail-item span {
+      display: block;
+      font-size: 14px;
+      color: #fff;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* กล่องโชว์แต้มสะสม */
+    .points-box {
+      background: #f8f9fa;
+      border: 2px dashed #06C755;
+      border-radius: 14px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    .points-val {
+      font-size: 32px;
+      font-weight: 800;
+      color: #06C755;
+      line-height: 1;
+      margin-top: 5px;
+    }
+
+    /* ปุ่มกดต่างๆ */
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .btn-action { 
+      width: 100%; 
+      padding: 14px; 
+      border: none; 
+      border-radius: 12px; 
+      font-size: 15px; 
+      font-weight: 700; 
+      font-family: 'Sarabun', sans-serif; 
+      cursor: pointer; 
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-green { background-color: #06C755; color: white; box-shadow: 0 4px 12px rgba(6, 199, 85, 0.25); }
+    .btn-orange { background-color: #ff9f43; color: white; box-shadow: 0 4px 12px rgba(255, 159, 67, 0.25); }
+    .btn-action:active { transform: scale(0.98); }
+
+    /* Loading state */
+    .spinner { 
+      width: 40px; 
+      height: 40px; 
+      border: 4px solid #f3f3f3; 
+      border-top: 4px solid #06C755; 
+      border-radius: 50%; 
+      animation: spin 1s linear infinite; 
+      margin: 20px auto; 
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+
+  <!-- LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+
+  <div class="card">
+    
+    <!-- 1. โหลดข้อมูล -->
+    <div id="loadingState">
+      <div class="spinner"></div>
+      <p style="color: #57606f; font-weight: 600; font-size: 14px;">กำลังโหลดข้อมูลสมาชิก...</p>
+    </div>
+
+    <!-- 2. แสดงผลข้อมูลสมาชิก (ถ้าเคยสมัครแล้ว) -->
+    <div id="memberContent" style="display: none;">
+      <h2 style="margin: 0; font-size: 20px; color: #2f3542;">บัตรสมาชิกของคุณ</h2>
+      
+      <!-- การ์ดจำลอง -->
+      <div class="vip-card">
+        <div class="profile-header">
+          <img id="userAvatar" class="profile-img" src="" alt="Profile">
+          <div class="profile-info">
+            <h3 id="memberName">คุณ...</h3>
+            <p><i class="fa-solid fa-crown"></i> สมาชิกทั่วไป</p>
+          </div>
+        </div>
+        <div class="card-details">
+          <div class="detail-item">
+            เบอร์โทรศัพท์
+            <span id="memberPhone">08X-XXX-XXXX</span>
+          </div>
+          <div class="detail-item" style="text-align: right;">
+            เป็นสมาชิกเมื่อ
+            <span id="memberDate">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- แต้มสะสม -->
+      <div class="points-box">
+        <span style="font-size: 13px; color: #57606f; font-weight: 600;">แต้มสะสมปัจจุบัน</span>
+        <div class="points-val"><span id="memberPoints">0</span> <span style="font-size: 16px; font-weight: normal; color: #2f3542;">แต้ม</span></div>
+      </div>
+
+      <!-- ปุ่มกดนำทาง -->
+      <div class="btn-group">
+        <button class="btn-action btn-green" onclick="window.goToCustomer()">
+          <i class="fa-solid fa-utensils"></i> ไปหน้าสั่งอาหาร
+        </button>
+      </div>
+    </div>
+
+    <!-- 3. กรณีที่ยังไม่ได้เป็นสมาชิก -->
+    <div id="noMemberState" style="display: none; padding: 20px 0;">
+      <i class="fa-solid fa-user-slash" style="font-size: 50px; color: #ff4757; margin-bottom: 15px;"></i>
+      <h3 style="margin: 0 0 10px 0; color: #2f3542;">ยังไม่ได้เป็นสมาชิก</h3>
+      <p style="color: #747d8c; font-size: 14px; margin-bottom: 20px;">สมัครสมาชิกวันนี้เพื่อรับสิทธิพิเศษ และสะสมแต้มส่วนลด!</p>
+      <button class="btn-action btn-orange" onclick="window.goToRegister()">
+        <i class="fa-solid fa-user-plus"></i> สมัครสมาชิกเลย
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Firebase Modular SDK V10 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // ค่าคอนฟิก Firebase ตัวเดิมของคุณ
+    const firebaseConfig = {
+      apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+      authDomain: "buffet-system-9b165.firebaseapp.com",
+      projectId: "buffet-system-9b165",
+      storageBucket: "buffet-system-9b165.firebasestorage.app",
+      messagingSenderId: "144497251618",
+      appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+      measurementId: "G-82JK3EL1HL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const LIFF_ID = "2011490016-dCbAfdtG"; // ใช้ LIFF ID เดียวกันได้ครับ
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzSlGSP_IGvT9QwssaDDr5-2ZZ_p20xdwk6NVi0W0N2IddxPkNEPDorLvaY8pu5Z4m8/exec";
+    const REGISTER_PAGE_URL = "YOUR_REGISTER_PAGE_URL"; // วางลิงก์หน้าสมัครสมาชิกของคุณที่นี่
+
+    let lineUID = "";
+
+    window.goToCustomer = function() {
+      window.location.replace(`${WEB_APP_URL}?page=customer&uid=${lineUID}`);
+    };
+
+    window.goToRegister = function() {
+      window.location.href = REGISTER_PAGE_URL;
+    };
+
+    async function initMemberPage() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+
+        const profile = await liff.getProfile();
+        lineUID = profile.userId;
+
+        // ดึงข้อมูลสมาชิกจาก Firestore Collection "members"
+        const docRef = doc(db, "members", lineUID);
+        const docSnap = await getDoc(docRef);
+
+        document.getElementById("loadingState").style.display = "none";
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+
+          // เติมข้อมูลลงหน้าการ์ด
+          document.getElementById("userAvatar").src = profile.pictureUrl || "https://via.placeholder.com/65";
+          document.getElementById("memberName").innerText = data.name || profile.displayName;
+          document.getElementById("memberPhone").innerText = data.phone ? data.phone.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3") : "-";
+          document.getElementById("memberPoints").innerText = data.points || 0;
+
+          // แปลงวันที่สมัคร
+          if (data.createdAt) {
+            const dateObj = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+            document.getElementById("memberDate").innerText = dateObj.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' });
+          } else {
+            document.getElementById("memberDate").innerText = "-";
+          }
+
+          document.getElementById("memberContent").style.display = "block";
+        } else {
+          // ถ้ายังไม่ได้สมัคร
+          document.getElementById("noMemberState").style.display = "block";
+        }
+
+      } catch (err) {
+        console.error("LIFF/Firestore Error:", err);
+        alert("เกิดข้อผิดพลาดในการโหลดข้อมูล: " + err.message);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', initMemberPage);
+  </script>
+</body>
+</html>
