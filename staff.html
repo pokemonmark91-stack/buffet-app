@@ -1464,18 +1464,15 @@
     }
 
             async function addPerson() {
-    // 1. เช็คก่อนว่าพนักงานได้เลือกโต๊ะที่กำลังจัดการอยู่หรือยัง
-    // (ลองเช็คตัวแปรที่ใช้เก็บเลขโต๊ะในโค้ดของคุณ อาจจะชื่อ selectedTableNo หรือ currentTable)
-    let tableNo = typeof selectedTableNo !== 'undefined' ? selectedTableNo : 
-                 (typeof selectedTable !== 'undefined' ? selectedTable : 
-                 (typeof currentTable !== 'undefined' ? currentTable : null));
-
-    if (!tableNo) {
+    // 1. ดึงเลขโต๊ะปัจจุบัน (ใช้ getActiveTable ตามโครงสร้างเดิมของคุณ)
+    var tNo = typeof getActiveTable === 'function' ? getActiveTable() : null;
+    
+    if (!tNo) {
         alert("กรุณาเลือกโต๊ะที่ต้องการเพิ่มลูกค้าก่อนครับ");
         return;
     }
 
-    // 2. อ่านค่าจากช่องกรอกผู้ใหญ่และเด็ก
+    // 2. อ่านค่าจากช่องผู้ใหญ่และเด็ก
     let addAdults = parseInt(document.getElementById('addAdultQty').value) || 0;
     let addChildren = parseInt(document.getElementById('addChildQty').value) || 0;
 
@@ -1485,7 +1482,7 @@
     }
 
     try {
-        let tableRef = db.collection("tables").doc(tableNo);
+        let tableRef = db.collection("tables").doc(tNo);
         let tableDoc = await tableRef.get();
 
         if (!tableDoc.exists) {
@@ -1493,59 +1490,64 @@
             return;
         }
 
-        // 3. ดึงจำนวนคนเดิมที่มีอยู่แล้วในโต๊ะนี้ออกมา
+        // 3. ดึงจำนวนคนเดิม + คำนวณยอดใหม่
         let tData = tableDoc.data();
         let currentAdults = parseInt(tData.adults || tData.adultCount || 0) || 0;
         let currentChildren = parseInt(tData.children || tData.childCount || 0) || 0;
         let currentTotal = parseInt(tData.totalPeople || 0) || 0;
 
-        // 4. เอาจำนวนคนเดิม + จำนวนคนที่มาเพิ่ม
         let newAdults = currentAdults + addAdults;
         let newChildren = currentChildren + addChildren;
-        
-        let newTotal = 0;
-        if (currentTotal > 0) {
-            newTotal = currentTotal + addAdults + addChildren;
-        } else {
-            newTotal = newAdults + newChildren;
-        }
+        let newTotal = currentTotal > 0 ? (currentTotal + addAdults + addChildren) : (newAdults + newChildren);
 
-        // 5. บันทึกจำนวนคนอัปเดตใหม่ ทับลงไปในฐานข้อมูลโต๊ะ
+        // 4. บันทึกยอดคนใหม่ลงฐานข้อมูล
         await tableRef.update({
             adults: newAdults,
-            adultCount: newAdults,
             children: newChildren,
-            childCount: newChildren,
             totalPeople: newTotal
         });
 
-        // 6. สร้างบิลแจ้งเตือนไปที่ "หน้าครัว" เพื่อให้พนักงานเตรียมจานชามเพิ่ม
-        let detailsStr = "";
-        if (addAdults > 0 && addChildren > 0) {
-            detailsStr = "ผู้ใหญ่เพิ่ม " + addAdults + ", เด็กเพิ่ม " + addChildren;
-        } else if (addAdults > 0) {
-            detailsStr = "ผู้ใหญ่เพิ่ม " + addAdults;
-        } else if (addChildren > 0) {
-            detailsStr = "เด็กเพิ่ม " + addChildren;
+        // 5. สรุปข้อความแจ้งเตือนไปหน้าครัว
+        let detailsStr = "เพิ่มลูกค้า (";
+        let parts = [];
+        if (addAdults > 0) parts.push("ผู้ใหญ่ " + addAdults + " ท่าน");
+        if (addChildren > 0) parts.push("เด็ก " + addChildren + " ท่าน");
+        detailsStr += parts.join(", ") + ")";
+
+        // 6. บันทึกรายการลงบิล (ใช้ recordAction ตามระบบเดิมของคุณเพื่อให้บิลเด้งไปครัว)
+        var data = { 
+            tableNo: tNo, 
+            action: "เพิ่มลูกค้า", 
+            details: detailsStr, 
+            amount: 0, 
+            toKitchen: true, 
+            shiftId: (typeof currentShift !== 'undefined' && currentShift) ? currentShift.shiftId : ""
+        };
+
+        if (typeof recordAction === "function") {
+            await recordAction(data);
+        } else {
+            await tableRef.collection("orders").add({
+                action: "เพิ่มลูกค้า",
+                details: detailsStr,
+                kitchenStatus: "เตรียม",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
         }
 
-        await tableRef.collection("orders").add({
-            action: "เพิ่มลูกค้า",
-            details: detailsStr,
-            status: "pending",
-            kitchenStatus: "เตรียม",
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        alert("เพิ่มลูกค้าเข้าโต๊ะเรียบร้อยแล้ว!\nยอดปัจจุบัน: ผู้ใหญ่ " + newAdults + " ท่าน, เด็ก " + newChildren + " ท่าน");
+        alert("✅ เพิ่มลูกค้าเข้าโต๊ะ " + tNo + " สำเร็จ!\nยอดปัจจุบัน: ผู้ใหญ่ " + newAdults + " ท่าน, เด็ก " + newChildren + " ท่าน");
         
-        // 7. รีเซ็ตค่าในช่องกรอกกลับเป็นเลข 0
+        // 7. รีเซ็ตช่องกรอก และรีเฟรชบิล
         document.getElementById('addAdultQty').value = 0;
         document.getElementById('addChildQty').value = 0;
+        
+        if (typeof checkBill === "function") {
+            checkBill();
+        }
 
     } catch (err) {
         console.error("Error adding person:", err);
-        alert("เกิดข้อผิดพลาดในการบันทึก: " + err.message);
+        alert("❌ เกิดข้อผิดพลาด: " + err.message);
     }
 }
 </script>
