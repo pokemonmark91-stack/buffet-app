@@ -145,6 +145,14 @@
             container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>กำลังโหลดออเดอร์ล่าสุด...</p>";
             let allPendingOrders = [];
             
+            // ล้างการเชื่อมต่อเดิมทิ้งก่อน
+            if (typeof unsubscribes !== 'undefined') {
+                unsubscribes.forEach(function(u) { if(typeof u === 'function') u(); });
+                unsubscribes = [];
+            } else {
+                window.unsubscribes = [];
+            }
+
             try {
                 const tablesSnapshot = await db.collection("tables").get();
                 if (tablesSnapshot.empty) {
@@ -152,24 +160,21 @@
                     return;
                 }
 
-                // วนลูปรายโต๊ะ
-                tablesSnapshot.forEach(async function(doc) {
+                // ใช้ for...of เพื่อดึงข้อมูลทีละโต๊ะ ป้องกัน Error 400 จาก Firebase
+                for (let doc of tablesSnapshot.docs) {
                     let tableNo = doc.id;
                     let tData = doc.data() || {};
                     
-                    // 1. ลองดึงจำนวนคนจากข้อมูลโต๊ะก่อน
                     let adult = parseInt(tData.adults || tData.adultCount || 0) || 0;
                     let child = parseInt(tData.children || tData.childCount || 0) || 0;
-                    let totalP = parseInt(tData.totalPeople || 0) || 0;
-                    let finalPeople = totalP > 0 ? totalP : (adult + child);
+                    let finalPeople = (parseInt(tData.totalPeople || 0) || 0) || (adult + child);
 
-                    // 2. ท่าไม้ตาย: ถ้ายังเป็น 0 ให้ไปคุ้ยหาจาก "ประวัติออเดอร์ทั้งหมด" ของโต๊ะนี้ (รวมบิลที่เชฟกดเสร็จแล้ว)
+                    // ถ้าในฐานข้อมูลไม่มีจำนวนคน ให้ไปค้นจากประวัติบิล
                     if (finalPeople === 0) {
                         try {
                             let historySnap = await db.collection("tables").doc(tableNo).collection("orders").get();
                             historySnap.forEach(function(hDoc) {
                                 let hOrder = hDoc.data();
-                                // ถ้าเจอบิลที่เขียนว่าเปิดโต๊ะ ให้ดึงตัวเลขมาเลย
                                 if (hOrder.details && String(hOrder.details).includes("เปิดโต๊ะ")) {
                                     let matchAdult = String(hOrder.details).match(/ผู้ใหญ่\s*(\d+)/);
                                     let matchChild = String(hOrder.details).match(/เด็ก\s*(\d+)/);
@@ -179,11 +184,11 @@
                                 }
                             });
                         } catch(e) {
-                            console.error("Error fetching history for table " + tableNo, e);
+                            console.warn("ไม่สามารถดึงประวัติโต๊ะ " + tableNo + " ได้");
                         }
                     }
 
-                    // 3. ดึงออเดอร์ที่สถานะ "เตรียม" และยัดจำนวนคนเข้าไปในทุกใบ
+                    // ฟังการอัปเดตออเดอร์ล่าสุด และยัดจำนวนคนที่ได้เข้าทุกบิล
                     let unsub = db.collection("tables").doc(tableNo).collection("orders")
                         .where("kitchenStatus", "==", "เตรียม")
                         .onSnapshot(function(snapshot) {
@@ -194,20 +199,21 @@
                                 let order = orderDoc.data();
                                 order.id = orderDoc.id;
                                 order.tableNo = tableNo;
-                                order.totalPeople = finalPeople; // <- ใส่จำนวนคนที่หาเจอแน่นอน
+                                order.totalPeople = finalPeople; 
                                 allPendingOrders.push(order);
                             });
                             
                             renderPendingOrders(allPendingOrders, container);
                         });
                     unsubscribes.push(unsub);
-                });
+                }
 
             } catch (err) {
                 console.error("Error loading kitchen orders:", err);
                 container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: " + err.message + "</p>";
             }
         }
+        
         function renderPendingOrders(orders, container) {
             if (orders.length === 0) {
                 container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีออเดอร์ค้างทำในขณะนี้</p>";
