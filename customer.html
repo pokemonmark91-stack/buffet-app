@@ -499,124 +499,43 @@
             }
         }
 
-        async function loadCustomerBill() {
-    let billArea = document.getElementById('billArea');
-    if (!tableNo) {
-        billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>กรุณาระบุเลขโต๊ะก่อนครับ</div>";
-        return;
-    }
+        async function openNewTable() {
+    var tNo = document.getElementById('tNo').value.trim();
+    var pplAdult = parseInt(document.getElementById('pplAdult').value) || 0;
+    var pplChild = parseInt(document.getElementById('pplChild').value) || 0;
+    var pkgPrice = parseFloat(document.getElementById('pkg').value) || 0;
     
-    billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังโหลดยอดบิล...</div>";
+    if(!tNo) return alert("กรุณาระบุเลขโต๊ะ");
+    if(pplAdult + pplChild <= 0) return alert("กรุณาระบุจำนวนลูกค้าอย่างน้อย 1 ท่าน");
+
+    var childPrice = Math.ceil(pkgPrice / 2); // 👈 ปัดเศษราคาเด็กขึ้น เช่น 159 -> 80 บาท
+    var totalAmount = (pplAdult * pkgPrice) + (pplChild * childPrice);
+    var detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + pplAdult + " ท่าน, เด็ก " + pplChild + " ท่าน - แพ็กเกจ " + pkgPrice + " บ.)";
 
     try {
-        const tableDoc = await db.collection("tables").doc(String(tableNo)).get();
-        let tData = tableDoc.exists ? tableDoc.data() : {};
+        await db.collection("tables").doc(tNo).set({
+            tableNo: tNo,
+            status: "ไม่ว่าง",
+            packagePrice: pkgPrice,
+            adults: pplAdult,
+            children: pplChild,
+            totalPeople: pplAdult + pplChild
+        }, { merge: true });
 
-        db.collection("tables").doc(String(tableNo)).collection("orders")
-            .orderBy("timestamp", "asc")
-            .onSnapshot(function(snapshot) {
-                let totalAmount = 0;
-                let html = `<ul class="list-group list-group-flush mb-3">`;
+        await db.collection("tables").doc(tNo).collection("orders").add({
+            action: "เปิดโต๊ะ",
+            details: detailText,
+            amount: totalAmount,
+            kitchenStatus: "เตรียม", 
+            shiftId: (typeof currentShift !== 'undefined' && currentShift) ? currentShift.shiftId : "",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-                let pkgName = tData.package || tData.packageName || tData.selectPackage || tData.pkg || "";
-                let adultCount = parseInt(tData.adults || tData.adultCount || tData.adult || 0);
-                let childCount = parseInt(tData.children || tData.childCount || tData.child || 0);
-                let basePrice = parseFloat(tData.packagePrice || tData.price || 0);
-
-                if (!basePrice && pkgName) {
-                    let match = String(pkgName).match(/\d+/);
-                    if (match) basePrice = parseFloat(match[0]);
-                }
-
-                if (adultCount > 0 && basePrice > 0) {
-                    let adultTotal = adultCount * basePrice;
-                    totalAmount += adultTotal;
-                    html += `<li class="list-group-item d-flex justify-content-between align-items-start px-2 py-2 bg-light rounded-2 mb-1">
-                                <div>
-                                    <div class="fw-bold text-dark" style="font-size: 14px;">👨‍👩‍👧 บุฟเฟต์ผู้ใหญ่ (${pkgName || 'ปกติ'})</div>
-                                    <small class="text-muted">${basePrice} ฿ × ${adultCount} ท่าน</small>
-                                </div>
-                                <span class="fw-bold text-dark">${adultTotal.toLocaleString()} ฿</span>
-                             </li>`;
-                }
-
-                if (childCount > 0 && basePrice > 0) {
-                    let childPrice = basePrice * 0.5;
-                    let childTotal = childCount * childPrice;
-                    totalAmount += childTotal;
-                    html += `<li class="list-group-item d-flex justify-content-between align-items-start px-2 py-2 bg-light rounded-2 mb-1">
-                                <div>
-                                    <div class="fw-bold text-dark" style="font-size: 14px;">👶 บุฟเฟต์เด็ก (50%)</div>
-                                    <small class="text-muted">${childPrice} ฿ × ${childCount} ท่าน</small>
-                                </div>
-                                <span class="fw-bold text-dark">${childTotal.toLocaleString()} ฿</span>
-                             </li>`;
-                }
-
-                if (!snapshot.empty) {
-                    snapshot.forEach(doc => {
-                        let item = doc.data();
-                        totalAmount += (item.amount || 0);
-
-                        let timeText = "";
-                        if (item.timestamp) {
-                            let dateObj = typeof item.timestamp.toDate === 'function' ? item.timestamp.toDate() : new Date();
-                            timeText = dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น.";
-                        } else {
-                            timeText = "กำลังบันทึก...";
-                        }
-
-                        // 📌 ส่วนที่แก้ไข: เช็คสถานะทีละรายการว่าในครัวกดเสร็จหรือยัง
-                        let completedItems = item.completedItems || []; // ดึงข้อมูลรายการที่เสร็จแล้วจากฐานข้อมูล
-                        let isAllCompleted = item.kitchenStatus === "เสร็จ"; // ถ้ายกทั้งบิลเสร็จแล้ว ก็ให้เป็นจริงทั้งหมด
-
-                        let detailLines = item.details ? String(item.details).split('\n') : [];
-                        
-                        let detailText = detailLines.map((line, idx) => {
-                            if(line.trim() !== "") {
-                                let kBadge = "";
-                                // ถ้ารายการนี้ (idx) ถูกกดเสร็จแล้ว หรือทั้งบิลเสร็จแล้ว ให้ขึ้นว่า 'เสิร์ฟแล้ว'
-                                if (isAllCompleted || completedItems.includes(idx)) {
-                                    kBadge = '<span class="badge bg-success ms-2" style="font-size: 10px;">เสิร์ฟแล้ว</span>';
-                                } else {
-                                    kBadge = '<span class="badge bg-warning text-dark ms-2" style="font-size: 10px;">กำลังทำ</span>';
-                                }
-                                return `${line} ${kBadge}`;
-                            }
-                            return "";
-                        }).filter(line => line !== "").join('<br>');
-
-                        html += `<li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
-                                    <div>
-                                        <div class="fw-bold text-dark" style="font-size: 14px;">
-                                            ${item.action || 'สั่งอาหาร'} 
-                                            <span class="text-secondary ms-1 fw-normal" style="font-size: 11px;">🕒 ${timeText}</span>
-                                        </div>
-                                        <small class="text-muted d-block mt-1" style="font-size: 13px; line-height: 1.8;">${detailText}</small>
-                                    </div>
-                                    <span class="fw-bold text-danger">${(item.amount || 0).toLocaleString()} ฿</span>
-                                 </li>`;
-                    });
-                }
-
-                if (totalAmount === 0 && snapshot.empty) {
-                    billArea.innerHTML = "<div class='alert alert-warning text-center m-0'>ยังไม่มีรายการสั่งอาหารในรอบนี้</div>";
-                    return;
-                }
-
-                html += `</ul>
-                         <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center" style="border: 1px dashed #dc3545;">
-                             <span class="fw-bold text-dark">ยอดสุทธิรวมทั้งหมด:</span>
-                             <span class="fw-bold text-danger fs-4">${totalAmount.toLocaleString()} ฿</span>
-                         </div>`;
-
-                billArea.innerHTML = html;
-            }, function(err) {
-                billArea.innerHTML = `<div class='alert alert-danger'>เกิดข้อผิดพลาด: ${err.message}</div>`;
-            });
+        alert("✅ เปิดโต๊ะ " + tNo + " สำเร็จ!");
+        loadDashboard();
+        selectTable(tNo);
     } catch (err) {
-        console.error("Error loading bill:", err);
-        billArea.innerHTML = `<div class='alert alert-danger'>ไม่สามารถโหลดข้อมูลบิลได้</div>`;
+        alert("❌ " + err.message);
     }
 }
     </script>
