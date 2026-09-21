@@ -119,7 +119,9 @@
         }
 
         function clearListeners() {
-            unsubscribes.forEach(function(unsub) { unsub(); });
+            unsubscribes.forEach(function(unsub) { 
+                if (typeof unsub === 'function') unsub(); 
+            });
             unsubscribes = [];
         }
 
@@ -140,73 +142,112 @@
             return result;
         }
 
-        async function loadKitchenOrders() {
-    let container = document.getElementById('kitchenContainer');
-    container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>กำลังโหลดออเดอร์ล่าสุด...</p>";
-    
-    // ล้าง listener เก่าเพื่อป้องกันความจำซ้อน
-    if (window.kitchenUnsubs) {
-        window.kitchenUnsubs.forEach(function(u) { if (typeof u === 'function') u(); });
-    }
-    window.kitchenUnsubs = [];
+        // 📌 คำนวณจำนวนคนแบบรวมยอดแม่นยำ (รองรับการเพิ่มลูกค้าระหว่างทาง)
+        function calculateTotalPeople(tableData, ordersSnap) {
+            let docAdults = parseInt(tableData.adults || tableData.adultCount || 0) || 0;
+            let docChildren = parseInt(tableData.children || tableData.childCount || 0) || 0;
+            let docTotal = parseInt(tableData.totalPeople || 0) || 0;
+            let tableDocPeople = docTotal > 0 ? docTotal : (docAdults + docChildren);
 
-    try {
-        // ฟังการเปลี่ยนแปลงของโต๊ะแบบ Real-time (onSnapshot)
-        let unsubTables = db.collection("tables").onSnapshot(async function(tablesSnapshot) {
-            let allPendingOrders = [];
+            let historyPeople = 0;
+            if (ordersSnap && !ordersSnap.empty) {
+                ordersSnap.forEach(function(hDoc) {
+                    let data = hDoc.data();
+                    let action = String(data.action || "");
+                    let details = String(data.details || "");
 
-            if (tablesSnapshot.empty) {
-                container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีโต๊ะที่เปิดบริการในขณะนี้</p>";
-                return;
-            }
-
-            for (let doc of tablesSnapshot.docs) {
-                let tableNo = doc.id;
-                let tData = doc.data() || {};
-
-                // คำนวณจำนวนคนล่าสุดจากข้อมูลโต๊ะ (รวมผู้ใหญ่ + เด็ก ที่เพิ่มเข้ามาใหม่)
-                let adult = parseInt(tData.adults || tData.adultCount || 0) || 0;
-                let child = parseInt(tData.children || tData.childCount || 0) || 0;
-                let totalP = parseInt(tData.totalPeople || 0) || 0;
-                let tablePeople = totalP > 0 ? totalP : (adult + child);
-
-                // ดึงรายการอาหารที่สถานะ "เตรียม"
-                let ordersSnap = await db.collection("tables").doc(tableNo).collection("orders")
-                    .where("kitchenStatus", "==", "เตรียม")
-                    .get();
-
-                // สำรอง: ถ้าจำนวนคนยังเป็น 0 ให้ไปรวมคนจากประวัติบิล "เปิดโต๊ะ" + "เพิ่มลูกค้า"
-                if (tablePeople === 0) {
-                    let historySnap = await db.collection("tables").doc(tableNo).collection("orders").get();
-                    historySnap.forEach(function(hDoc) {
-                        let details = String(hDoc.data().details || "");
+                    if (action.includes("เปิดโต๊ะ") || action.includes("เพิ่มลูกค้า") || details.includes("ผู้ใหญ่") || details.includes("เด็ก")) {
                         let matchAdult = details.match(/ผู้ใหญ่\s*(\d+)/);
                         let matchChild = details.match(/เด็ก\s*(\d+)/);
                         let a = matchAdult ? parseInt(matchAdult[1]) : 0;
                         let c = matchChild ? parseInt(matchChild[1]) : 0;
-                        tablePeople += (a + c);
-                    });
-                }
-
-                ordersSnap.forEach(function(orderDoc) {
-                    let order = orderDoc.data();
-                    order.id = orderDoc.id;
-                    order.tableNo = tableNo;
-                    order.totalPeople = tablePeople; // ฝังจำนวนคนอัปเดตล่าสุดเข้าไปทุกใบ
-                    allPendingOrders.push(order);
+                        historyPeople += (a + c);
+                    }
                 });
             }
 
-            renderPendingOrders(allPendingOrders, container);
-        });
+            return Math.max(tableDocPeople, historyPeople);
+        }
 
-        window.kitchenUnsubs.push(unsubTables);
+        // 📌 ดึงออเดอร์ห้องครัวแบบ Real-time และแก้ Error 400
+        function loadKitchenOrders() {
+            let container = document.getElementById('kitchenContainer');
+            container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>กำลังโหลดออเดอร์ล่าสุด...</p>";
 
-    } catch (err) {
-        console.error("Error loading kitchen orders:", err);
-        container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: " + err.message + "</p>";
-    }
-}
+            clearListeners();
+
+            let isUpdating = false;
+
+            // ฟังเฉพาะออเดอร์ที่สถานะ "เตรียม" ผ่าน collectionGroup
+            let unsub = db.collectionGroup("orders")
+                .where("kitchenStatus", "==", "เตรียม")
+                .onSnapshot(async function(snapshot) {
+                    if (isUpdating) return;
+                    isUpdating = true;
+
+                    try {
+                        if (snapshot.empty) {
+                            container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีออเดอร์ค้างทำในขณะนี้</p>";
+                            isUpdating = false;
+                            return;
+                        }
+
+                        let rawOrders = [];
+                        let tableNumbers = new Set();
+
+                        snapshot.forEach(doc => {
+                            let orderData = doc.data();
+                            orderData.id = doc.id;
+                            
+                            // ดึงเลขโต๊ะจากพาธแม่ (tables/TABLE_NO/orders)
+                            let tableNo = (doc.ref.parent && doc.ref.parent.parent) ? doc.ref.parent.parent.id : (orderData.tableNo || "");
+                            orderData.tableNo = tableNo;
+
+                            if (tableNo) {
+                                tableNumbers.add(tableNo);
+                                rawOrders.push(orderData);
+                            }
+                        });
+
+                        // ดึงข้อมูลจำนวนคนที่อัปเดตแล้วของแต่ละโต๊ะพร้อมกัน
+                        let tableInfoMap = {};
+                        let fetchPromises = Array.from(tableNumbers).map(async (tNo) => {
+                            try {
+                                let [tDoc, oSnap] = await Promise.all([
+                                    db.collection("tables").doc(tNo).get(),
+                                    db.collection("tables").doc(tNo).collection("orders").get()
+                                ]);
+
+                                let tData = tDoc.exists ? tDoc.data() : {};
+                                tableInfoMap[tNo] = calculateTotalPeople(tData, oSnap);
+                            } catch (err) {
+                                console.error("Error fetching table info for " + tNo, err);
+                                tableInfoMap[tNo] = 0;
+                            }
+                        });
+
+                        await Promise.all(fetchPromises);
+
+                        // ใส่จำนวนคนที่ถูกต้องลงในออเดอร์แต่ละใบ
+                        rawOrders.forEach(order => {
+                            order.totalPeople = tableInfoMap[order.tableNo] || 0;
+                        });
+
+                        renderPendingOrders(rawOrders, container);
+
+                    } catch (err) {
+                        console.error("Error in kitchen orders snapshot:", err);
+                        container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: " + err.message + "</p>";
+                    } finally {
+                        isUpdating = false;
+                    }
+                }, function(error) {
+                    console.error("Snapshot error:", error);
+                    container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาดในการดึงข้อมูล: " + error.message + "</p>";
+                });
+
+            unsubscribes.push(unsub);
+        }
         
         function renderPendingOrders(orders, container) {
             if (orders.length === 0) {
@@ -214,6 +255,7 @@
                 return;
             }
 
+            // เรียงตามเวลาเก่าไปใหม่
             orders.sort(function(a, b) {
                 let timeA = a.timestamp ? a.timestamp.toMillis() : 0;
                 let timeB = b.timestamp ? b.timestamp.toMillis() : 0;
@@ -413,12 +455,17 @@
                     return;
                 }
 
-                allCompletedOrders.sort(function(a, b) { return b.timestamp.toMillis() - a.timestamp.toMillis(); }); 
+                allCompletedOrders.sort(function(a, b) { 
+                    let timeA = a.timestamp ? a.timestamp.toMillis() : 0;
+                    let timeB = b.timestamp ? b.timestamp.toMillis() : 0;
+                    return timeB - timeA; 
+                }); 
+
                 let html = "";
                 for (let i = 0; i < allCompletedOrders.length; i++) {
                     let order = allCompletedOrders[i];
                     let actionType = order.action || "สั่งอาหาร";
-                    let timeText = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH') : "";
+                    let timeText = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
                     
                     let detailLines = order.details ? String(order.details).split('\n') : [];
                     let detailTextArray = [];
