@@ -499,45 +499,72 @@
             }
         }
 
-        async function openNewTable() {
-    var tNo = document.getElementById('tNo').value.trim();
-    var pplAdult = parseInt(document.getElementById('pplAdult').value) || 0;
-    var pplChild = parseInt(document.getElementById('pplChild').value) || 0;
-    var pkgPrice = parseFloat(document.getElementById('pkg').value) || 0;
-    
-    if(!tNo) return alert("กรุณาระบุเลขโต๊ะ");
-    if(pplAdult + pplChild <= 0) return alert("กรุณาระบุจำนวนลูกค้าอย่างน้อย 1 ท่าน");
+                // 📌 3. ฟังก์ชันดึงข้อมูลบิลของลูกค้า (แก้ไขยอดเงินซ้ำซ้อน)
+        async function loadCustomerBill() {
+            if (!tableNo) {
+                document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
+                return;
+            }
 
-    var childPrice = Math.ceil(pkgPrice / 2); // 👈 ปัดเศษราคาเด็กขึ้น เช่น 159 -> 80 บาท
-    var totalAmount = (pplAdult * pkgPrice) + (pplChild * childPrice);
-    var detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + pplAdult + " ท่าน, เด็ก " + pplChild + " ท่าน - แพ็กเกจ " + pkgPrice + " บ.)";
+            const billArea = document.getElementById('billArea');
+            billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังดึงข้อมูลบิล...</div>";
 
-    try {
-        await db.collection("tables").doc(tNo).set({
-            tableNo: tNo,
-            status: "ไม่ว่าง",
-            packagePrice: pkgPrice,
-            adults: pplAdult,
-            children: pplChild,
-            totalPeople: pplAdult + pplChild
-        }, { merge: true });
+            try {
+                // ดึงรายการสั่งซื้อทั้งหมดของโต๊ะนี้ เรียงตามเวลา
+                let ordersSnap = await db.collection("tables").doc(String(tableNo)).collection("orders").orderBy("timestamp", "asc").get();
+                
+                if (ordersSnap.empty) {
+                    billArea.innerHTML = "<div class='text-center my-3 text-muted'>ยังไม่มีรายการสั่งอาหารครับ</div>";
+                    return;
+                }
 
-        await db.collection("tables").doc(tNo).collection("orders").add({
-            action: "เปิดโต๊ะ",
-            details: detailText,
-            amount: totalAmount,
-            kitchenStatus: "เตรียม", 
-            shiftId: (typeof currentShift !== 'undefined' && currentShift) ? currentShift.shiftId : "",
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+                let html = "";
+                let totalAmount = 0;
 
-        alert("✅ เปิดโต๊ะ " + tNo + " สำเร็จ!");
-        loadDashboard();
-        selectTable(tNo);
-    } catch (err) {
-        alert("❌ " + err.message);
-    }
-}
+                ordersSnap.forEach(function(doc) {
+                    let order = doc.data();
+                    let amount = parseFloat(order.amount) || 0;
+                    
+                    // 👉 นำยอดเงินจากรายการบิลมารวมกันตรงๆ (ไม่เอาจำนวนคนไปคูณแพ็กเกจซ้ำ)
+                    totalAmount += amount; 
+
+                    // แปลงเวลาให้สวยงาม
+                    let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
+                    
+                    // ป้ายกำกับสถานะ
+                    let statusBadge = "";
+                    if (order.kitchenStatus === "เสร็จ" || order.kitchenStatus === "เสร็จแล้ว") {
+                        statusBadge = "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>";
+                    } else if (order.kitchenStatus === "เตรียม") {
+                        statusBadge = "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
+                    }
+
+                    // สร้างหน้าตาบิลแต่ละรายการ
+                    html += `
+                    <div class='d-flex justify-content-between align-items-center py-2' style='border-bottom: 1px dashed #eee;'>
+                        <div>
+                            <div class='fw-bold text-dark' style='font-size: 14px;'>${order.action || "สั่งอาหาร"} ${statusBadge}</div>
+                            <div class='text-muted' style='font-size: 12px;'>${(order.details || "").replace(/\n/g, '<br>')}</div>
+                            <div class='text-muted' style='font-size: 11px;'>เวลา ${timeStr}</div>
+                        </div>
+                        <div class='fw-bold text-danger' style='font-size: 15px;'>${amount > 0 ? amount.toLocaleString() + ' ฿' : ''}</div>
+                    </div>`;
+                });
+
+                // แถบสรุปยอดรวมด้านล่างสุด
+                html += `
+                <div class='d-flex justify-content-between align-items-center mt-3 p-3 bg-light rounded-3' style='border: 1px solid #ff7675;'>
+                    <h6 class='m-0 fw-bold text-dark'>ยอดสุทธิรวมทั้งหมด:</h6>
+                    <h5 class='m-0 fw-bold text-danger'>${totalAmount.toLocaleString()} ฿</h5>
+                </div>`;
+
+                billArea.innerHTML = html;
+
+            } catch (err) {
+                console.error("Error loading customer bill:", err);
+                billArea.innerHTML = "<div class='text-center my-3 text-danger'>เกิดข้อผิดพลาด: " + err.message + "</div>";
+            }
+        }
     </script>
 </body>
 </html>
