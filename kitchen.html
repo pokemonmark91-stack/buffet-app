@@ -152,47 +152,49 @@
                     return;
                 }
 
-                tablesSnapshot.forEach(function(doc) {
+                // วนลูปรายโต๊ะ
+                tablesSnapshot.forEach(async function(doc) {
                     let tableNo = doc.id;
+                    let tData = doc.data() || {};
                     
-                    let unsub = db.collection("tables").doc(tableNo).collection("orders")
-                        .where("kitchenStatus", "==", "เตรียม")
-                        .onSnapshot(async function(snapshot) {
-                            
-                            // 1. ดึงข้อมูลโต๊ะล่าสุดทุกครั้งที่มีออเดอร์ขยับ เพื่อให้ได้จำนวนคนชัวร์ๆ
-                            let tableDoc = await db.collection("tables").doc(tableNo).get();
-                            let tData = tableDoc.data() || {};
-                            let adult = parseInt(tData.adults || tData.adultCount || tData.adult || 0) || 0;
-                            let child = parseInt(tData.children || tData.childCount || tData.child || 0) || 0;
-                            let totalP = parseInt(tData.totalPeople || tData.people || tData.pax || 0) || 0;
-                            let tablePeople = totalP > 0 ? totalP : (adult + child);
+                    // 1. ลองดึงจำนวนคนจากข้อมูลโต๊ะก่อน
+                    let adult = parseInt(tData.adults || tData.adultCount || 0) || 0;
+                    let child = parseInt(tData.children || tData.childCount || 0) || 0;
+                    let totalP = parseInt(tData.totalPeople || 0) || 0;
+                    let finalPeople = totalP > 0 ? totalP : (adult + child);
 
-                            // 2. แกะจำนวนคนจากบิล "เปิดโต๊ะ" เผื่อฐานข้อมูลโต๊ะรอบแรกยังไม่มา
-                            let fallbackPeople = 0;
-                            snapshot.forEach(function(orderDoc) {
-                                let order = orderDoc.data();
-                                if (order.details && String(order.details).includes("เปิดโต๊ะ")) {
-                                    let matchAdult = String(order.details).match(/ผู้ใหญ่\s*(\d+)/);
-                                    let matchChild = String(order.details).match(/เด็ก\s*(\d+)/);
+                    // 2. ท่าไม้ตาย: ถ้ายังเป็น 0 ให้ไปคุ้ยหาจาก "ประวัติออเดอร์ทั้งหมด" ของโต๊ะนี้ (รวมบิลที่เชฟกดเสร็จแล้ว)
+                    if (finalPeople === 0) {
+                        try {
+                            let historySnap = await db.collection("tables").doc(tableNo).collection("orders").get();
+                            historySnap.forEach(function(hDoc) {
+                                let hOrder = hDoc.data();
+                                // ถ้าเจอบิลที่เขียนว่าเปิดโต๊ะ ให้ดึงตัวเลขมาเลย
+                                if (hOrder.details && String(hOrder.details).includes("เปิดโต๊ะ")) {
+                                    let matchAdult = String(hOrder.details).match(/ผู้ใหญ่\s*(\d+)/);
+                                    let matchChild = String(hOrder.details).match(/เด็ก\s*(\d+)/);
                                     let a = matchAdult ? parseInt(matchAdult[1]) : 0;
                                     let c = matchChild ? parseInt(matchChild[1]) : 0;
-                                    if ((a + c) > 0) fallbackPeople = a + c;
+                                    if ((a + c) > 0) finalPeople = a + c;
                                 }
                             });
+                        } catch(e) {
+                            console.error("Error fetching history for table " + tableNo, e);
+                        }
+                    }
 
-                            // 3. สรุปจำนวนคนที่จะใช้แสดงผล
-                            let finalPeople = tablePeople > 0 ? tablePeople : fallbackPeople;
-
+                    // 3. ดึงออเดอร์ที่สถานะ "เตรียม" และยัดจำนวนคนเข้าไปในทุกใบ
+                    let unsub = db.collection("tables").doc(tableNo).collection("orders")
+                        .where("kitchenStatus", "==", "เตรียม")
+                        .onSnapshot(function(snapshot) {
+                            
                             allPendingOrders = allPendingOrders.filter(function(o) { return o.tableNo !== tableNo; });
                             
                             snapshot.forEach(function(orderDoc) {
                                 let order = orderDoc.data();
                                 order.id = orderDoc.id;
                                 order.tableNo = tableNo;
-                                
-                                // 👇 ยัดจำนวนคนที่สรุปได้ ใส่เข้าไปในทุกๆ ออเดอร์ของโต๊ะนี้
-                                order.totalPeople = finalPeople; 
-                                
+                                order.totalPeople = finalPeople; // <- ใส่จำนวนคนที่หาเจอแน่นอน
                                 allPendingOrders.push(order);
                             });
                             
@@ -206,7 +208,6 @@
                 container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ff4757;'>เกิดข้อผิดพลาด: " + err.message + "</p>";
             }
         }
-
         function renderPendingOrders(orders, container) {
             if (orders.length === 0) {
                 container.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #ced6e0;'>🎉 ไม่มีออเดอร์ค้างทำในขณะนี้</p>";
