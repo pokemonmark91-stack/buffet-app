@@ -142,19 +142,19 @@
             return result;
         }
 
-                // 📌 1. ฟังก์ชันอ่านจำนวนคนจากข้อความ (รองรับทุกรูปแบบ เช่น "ผู้ใหญ่ x 4", "ผู้ใหญ่ 4 ท่าน", "ผู้ใหญ่ (4)")
+                // 📌 1. ฟังก์ชันอ่านจำนวนคนจากข้อความ (ดักจับเฉพาะคำว่า ผู้ใหญ่ / เด็ก / ลูกค้า / ท่าน / คน)
         function parseCustomerCountFromText(text) {
             if (!text) return 0;
             let str = String(text);
             let total = 0;
 
-            // ดักจับรูปแบบ: ผู้ใหญ่ x 4, ผู้ใหญ่ 4, ผู้ใหญ่ (4), เด็ก x 2 ฯลฯ
+            // ดักจับรูปแบบ: ผู้ใหญ่ 3, เด็ก 1, ผู้ใหญ่ x 3, ลูกค้า 3
             let matches = str.matchAll(/(?:ผู้ใหญ่|เด็ก|ลูกค้า)\s*(?:x|\*|:|\()?\s*(\d+)/gi);
             for (const match of matches) {
                 total += parseInt(match[1]) || 0;
             }
 
-            // ถ้าแบบแรกไม่เจอ ให้ลองหาตัวเลขหน้าคำว่า คน หรือ ท่าน (เช่น 4 ท่าน)
+            // ถ้ายังไม่เจอ ให้ลองหาตัวเลขหน้าคำว่า คน หรือ ท่าน (เช่น 3 ท่าน, 2 คน)
             if (total === 0) {
                 let altMatches = str.matchAll(/(\d+)\s*(?:คน|ท่าน)/gi);
                 for (const match of altMatches) {
@@ -162,51 +162,39 @@
                 }
             }
 
-            // สำรอง: ถ้ายังไม่เจอ ให้ลองหา x 4 หรือ (x4)
-            if (total === 0) {
-                let xMatches = str.matchAll(/(?:x|\(x)\s*(\d+)/gi);
-                for (const match of xMatches) {
-                    total += parseInt(match[1]) || 0;
-                }
-            }
-
             return total;
         }
 
-        // 📌 2. คำนวณจำนวนคนแบบรวมยอดแม่นยำ (คำนวณเปิดโต๊ะ + เพิ่มลูกค้าระหว่างทาง)
+        // 📌 2. คำนวณจำนวนคนของโต๊ะแบบแม่นยำ (ข้ามออเดอร์สั่งอาหารทั้งหมด)
         function calculateTotalPeople(tableData, ordersSnap) {
+            // ดึงจากข้อมูลโต๊ะหลักก่อน
             let docAdults = parseInt(tableData.adults || tableData.adultCount || tableData.adult || 0) || 0;
             let docChildren = parseInt(tableData.children || tableData.childCount || tableData.child || 0) || 0;
             let docTotal = parseInt(tableData.totalPeople || tableData.customerCount || tableData.peopleCount || tableData.people || 0) || 0;
-            let tableDocPeople = docTotal > 0 ? docTotal : (docAdults + docChildren);
+            
+            let tablePeople = docTotal > 0 ? docTotal : (docAdults + docChildren);
 
-            let sumFromOrders = 0;
-            let addedFromOrders = 0;
+            let orderPeople = 0;
 
+            // กรองหาเฉพาะรายการที่เป็น "เปิดโต๊ะ" หรือ "เพิ่มลูกค้า" เท่านั้น
             if (ordersSnap && !ordersSnap.empty) {
                 ordersSnap.forEach(function(hDoc) {
                     let data = hDoc.data();
                     let action = String(data.action || "");
                     let details = String(data.details || "");
 
-                    let countInThisOrder = parseCustomerCountFromText(details);
-
-                    if (action.includes("เพิ่มลูกค้า")) {
-                        addedFromOrders += countInThisOrder;
-                    }
-                    
-                    if (action.includes("เปิดโต๊ะ") || action.includes("เพิ่มลูกค้า") || details.includes("ผู้ใหญ่") || details.includes("เด็ก") || details.includes("ลูกค้า")) {
-                        sumFromOrders += countInThisOrder;
+                    // เช็คเฉพาะ action ที่เกี่ยวกับการจัดการลูกค้าเท่านั้น (ข้ามจานอาหาร)
+                    if (action.includes("เปิดโต๊ะ") || action.includes("เพิ่มลูกค้า")) {
+                        orderPeople += parseCustomerCountFromText(details);
                     }
                 });
             }
 
-            // ถ้ารวมจากประวัติออเดอร์ได้ ให้ใช้ค่ายอดรวมออเดอร์เป็นหลัก
-            if (sumFromOrders > 0) {
-                return Math.max(sumFromOrders, tableDocPeople + addedFromOrders);
-            }
-
-            return tableDocPeople + addedFromOrders;
+            // คืนค่าจำนวนคนที่ถูกต้อง
+            if (tablePeople > 0) return tablePeople;
+            if (orderPeople > 0) return orderPeople;
+            
+            return 0;
         }
 
         // 📌 ดึงออเดอร์ห้องครัวแบบ Real-time และแก้ Error 400
