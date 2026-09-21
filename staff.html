@@ -722,45 +722,44 @@
     /* --- ระบบจัดการโต๊ะ & ออเดอร์ (Firestore) ------------ */
     /* ---------------------------------------------------- */
     async function openNewTable() {
-        var tNo = document.getElementById('tNo').value.trim();
-        var pplAdult = parseInt(document.getElementById('pplAdult').value) || 0;
-        var pplChild = parseInt(document.getElementById('pplChild').value) || 0;
-        var pkgPrice = parseFloat(document.getElementById('pkg').value) || 0;
-        
-        if(!tNo) return alert("กรุณาระบุเลขโต๊ะ");
-        if(pplAdult + pplChild <= 0) return alert("กรุณาระบุจำนวนลูกค้าอย่างน้อย 1 ท่าน");
+    var tNo = document.getElementById('tNo').value.trim();
+    var pplAdult = parseInt(document.getElementById('pplAdult').value) || 0;
+    var pplChild = parseInt(document.getElementById('pplChild').value) || 0;
+    var pkgPrice = parseFloat(document.getElementById('pkg').value) || 0;
+    
+    if(!tNo) return alert("กรุณาระบุเลขโต๊ะ");
+    if(pplAdult + pplChild <= 0) return alert("กรุณาระบุจำนวนลูกค้าอย่างน้อย 1 ท่าน");
 
-        var childPrice = pkgPrice / 2;
-        var totalAmount = (pplAdult * pkgPrice) + (pplChild * childPrice);
-        var detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + pplAdult + " ท่าน, เด็ก " + pplChild + " ท่าน - แพ็กเกจ " + pkgPrice + " บ.)";
+    var childPrice = Math.ceil(pkgPrice / 2); // 👈 ปัดเศษราคาเด็กขึ้น เช่น 159 -> 80 บาท
+    var totalAmount = (pplAdult * pkgPrice) + (pplChild * childPrice);
+    var detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + pplAdult + " ท่าน, เด็ก " + pplChild + " ท่าน - แพ็กเกจ " + pkgPrice + " บ.)";
 
-        try {
-            // 👇 แก้ไขบล็อกนี้: เพิ่มการบันทึกจำนวนคนลงในข้อมูลโต๊ะ
-            await db.collection("tables").doc(tNo).set({
-                tableNo: tNo,
-                status: "ไม่ว่าง",
-                packagePrice: pkgPrice,
-                adults: pplAdult,                     // <-- ส่งจำนวนผู้ใหญ่ไปเก็บ
-                children: pplChild,                   // <-- ส่งจำนวนเด็กไปเก็บ
-                totalPeople: pplAdult + pplChild      // <-- ส่งจำนวนคนรวมไปเก็บ
-            }, { merge: true });
+    try {
+        await db.collection("tables").doc(tNo).set({
+            tableNo: tNo,
+            status: "ไม่ว่าง",
+            packagePrice: pkgPrice,
+            adults: pplAdult,
+            children: pplChild,
+            totalPeople: pplAdult + pplChild
+        }, { merge: true });
 
-            await db.collection("tables").doc(tNo).collection("orders").add({
-                action: "เปิดโต๊ะ",
-                details: detailText,
-                amount: totalAmount,
-                kitchenStatus: "เตรียม", 
-                shiftId: currentShift ? currentShift.shiftId : "",
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
+        await db.collection("tables").doc(tNo).collection("orders").add({
+            action: "เปิดโต๊ะ",
+            details: detailText,
+            amount: totalAmount,
+            kitchenStatus: "เตรียม", 
+            shiftId: (typeof currentShift !== 'undefined' && currentShift) ? currentShift.shiftId : "",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-            alert("✅ เปิดโต๊ะ " + tNo + " สำเร็จ!");
-            loadDashboard();
-            selectTable(tNo);
-        } catch (err) {
-            alert("❌ " + err.message);
-        }
+        alert("✅ เปิดโต๊ะ " + tNo + " สำเร็จ!");
+        loadDashboard();
+        selectTable(tNo);
+    } catch (err) {
+        alert("❌ " + err.message);
     }
+}
 
     async function recordAction(data) {
         try {
@@ -1464,7 +1463,6 @@
     }
 
             async function addPerson() {
-    // 1. ดึงเลขโต๊ะปัจจุบัน (ใช้ getActiveTable ตามโครงสร้างเดิมของคุณ)
     var tNo = typeof getActiveTable === 'function' ? getActiveTable() : null;
     
     if (!tNo) {
@@ -1472,7 +1470,6 @@
         return;
     }
 
-    // 2. อ่านค่าจากช่องผู้ใหญ่และเด็ก
     let addAdults = parseInt(document.getElementById('addAdultQty').value) || 0;
     let addChildren = parseInt(document.getElementById('addChildQty').value) || 0;
 
@@ -1490,8 +1487,16 @@
             return;
         }
 
-        // 3. ดึงจำนวนคนเดิม + คำนวณยอดใหม่
-        let tData = tableDoc.data();
+        let tData = tableDoc.data() || {};
+        
+        // 1. ดึงราคาแพ็กเกจโต๊ะนี้ และคำนวณราคาเด็กแบบปัดเศษขึ้น (Math.ceil)
+        let pkgPrice = parseFloat(tData.packagePrice) || 0;
+        let childPrice = Math.ceil(pkgPrice / 2); // 👈 เช่น 159 / 2 = 79.5 ปัดขึ้นเป็น 80
+        
+        // 2. คำนวณยอดเงินรวมของคนที่เพิ่มเข้ามา
+        let addAmount = (addAdults * pkgPrice) + (addChildren * childPrice);
+
+        // 3. รวมจำนวนคนใหม่
         let currentAdults = parseInt(tData.adults || tData.adultCount || 0) || 0;
         let currentChildren = parseInt(tData.children || tData.childCount || 0) || 0;
         let currentTotal = parseInt(tData.totalPeople || 0) || 0;
@@ -1500,26 +1505,26 @@
         let newChildren = currentChildren + addChildren;
         let newTotal = currentTotal > 0 ? (currentTotal + addAdults + addChildren) : (newAdults + newChildren);
 
-        // 4. บันทึกยอดคนใหม่ลงฐานข้อมูล
+        // 4. บันทึกจำนวนคนลงโต๊ะ
         await tableRef.update({
             adults: newAdults,
             children: newChildren,
             totalPeople: newTotal
         });
 
-        // 5. สรุปข้อความแจ้งเตือนไปหน้าครัว
+        // 5. รายละเอียดบิล
         let detailsStr = "เพิ่มลูกค้า (";
         let parts = [];
         if (addAdults > 0) parts.push("ผู้ใหญ่ " + addAdults + " ท่าน");
         if (addChildren > 0) parts.push("เด็ก " + addChildren + " ท่าน");
         detailsStr += parts.join(", ") + ")";
 
-        // 6. บันทึกรายการลงบิล (ใช้ recordAction ตามระบบเดิมของคุณเพื่อให้บิลเด้งไปครัว)
+        // 6. ส่งยอดเงิน (addAmount) ไปเข้าบิล
         var data = { 
             tableNo: tNo, 
             action: "เพิ่มลูกค้า", 
             details: detailsStr, 
-            amount: 0, 
+            amount: addAmount, // 👈 บันทึกราคาที่ต้องคิดเพิ่ม
             toKitchen: true, 
             shiftId: (typeof currentShift !== 'undefined' && currentShift) ? currentShift.shiftId : ""
         };
@@ -1530,14 +1535,14 @@
             await tableRef.collection("orders").add({
                 action: "เพิ่มลูกค้า",
                 details: detailsStr,
+                amount: addAmount,
                 kitchenStatus: "เตรียม",
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
 
-        alert("✅ เพิ่มลูกค้าเข้าโต๊ะ " + tNo + " สำเร็จ!\nยอดปัจจุบัน: ผู้ใหญ่ " + newAdults + " ท่าน, เด็ก " + newChildren + " ท่าน");
+        alert("✅ เพิ่มลูกค้าโต๊ะ " + tNo + " สำเร็จ!\nคิดเงินเพิ่ม: " + addAmount.toLocaleString() + " บาท");
         
-        // 7. รีเซ็ตช่องกรอก และรีเฟรชบิล
         document.getElementById('addAdultQty').value = 0;
         document.getElementById('addChildQty').value = 0;
         
