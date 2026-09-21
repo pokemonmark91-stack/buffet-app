@@ -165,38 +165,37 @@
             return total;
         }
 
-        // 📌 2. คำนวณจำนวนคนของโต๊ะแบบแม่นยำ (ข้ามออเดอร์สั่งอาหารทั้งหมด)
+        // 📌 คำนวณจำนวนคนของโต๊ะแบบแม่นยำ (ดึงจากออเดอร์เปิดโต๊ะก่อน เพื่อป้องกันข้อมูลเก่าค้าง)
         function calculateTotalPeople(tableData, ordersSnap) {
-            // ดึงจากข้อมูลโต๊ะหลักก่อน
-            let docAdults = parseInt(tableData.adults || tableData.adultCount || tableData.adult || 0) || 0;
-            let docChildren = parseInt(tableData.children || tableData.childCount || tableData.child || 0) || 0;
-            let docTotal = parseInt(tableData.totalPeople || tableData.customerCount || tableData.peopleCount || tableData.people || 0) || 0;
-            
-            let tablePeople = docTotal > 0 ? docTotal : (docAdults + docChildren);
-
             let orderPeople = 0;
 
-            // กรองหาเฉพาะรายการที่เป็น "เปิดโต๊ะ" หรือ "เพิ่มลูกค้า" เท่านั้น
+            // 1. ดึงจำนวนคนจากออเดอร์ "เปิดโต๊ะ" และ "เพิ่มลูกค้า" (แม่นยำที่สุดตามสลิปจริง)
             if (ordersSnap && !ordersSnap.empty) {
                 ordersSnap.forEach(function(hDoc) {
                     let data = hDoc.data();
                     let action = String(data.action || "");
                     let details = String(data.details || "");
 
-                    // เช็คเฉพาะ action ที่เกี่ยวกับการจัดการลูกค้าเท่านั้น (ข้ามจานอาหาร)
+                    // นับเฉพาะออเดอร์เปิดโต๊ะ หรือเพิ่มลูกค้าเท่านั้น
                     if (action.includes("เปิดโต๊ะ") || action.includes("เพิ่มลูกค้า")) {
                         orderPeople += parseCustomerCountFromText(details);
                     }
                 });
             }
 
-            // คืนค่าจำนวนคนที่ถูกต้อง
-            if (tablePeople > 0) return tablePeople;
-            if (orderPeople > 0) return orderPeople;
-            
-            return 0;
-        }
+            // ถ้ามีรายการเปิดโต๊ะ/เพิ่มลูกค้า ให้ใช้ยอดนี้ทันที (ไม่ไปดึงค่าเก่าที่อาจค้างในโต๊ะ)
+            if (orderPeople > 0) {
+                return orderPeople;
+            }
 
+            // 2. สำรอง: ถ้าในออเดอร์ไม่มีระบุไว้ ค่อยไปดึงจากข้อมูลโต๊ะหลัก
+            let docAdults = parseInt(tableData.adults || tableData.adultCount || tableData.adult || 0) || 0;
+            let docChildren = parseInt(tableData.children || tableData.childCount || tableData.child || 0) || 0;
+            let docTotal = parseInt(tableData.totalPeople || tableData.customerCount || tableData.peopleCount || tableData.people || 0) || 0;
+
+            return docTotal > 0 ? docTotal : (docAdults + docChildren);
+        }
+        
         // 📌 ดึงออเดอร์ห้องครัวแบบ Real-time และแก้ Error 400
         function loadKitchenOrders() {
             let container = document.getElementById('kitchenContainer');
