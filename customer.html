@@ -586,6 +586,7 @@
             }
         }
 
+        // 📌 ฟังก์ชันโหลดบิลที่ปรับปรุงตำแหน่ง ป้ายสถานะ และ ชื่อคนสั่ง
         async function loadCustomerBill() {
             if (!tableNo) {
                 document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
@@ -609,54 +610,64 @@
                 ordersSnap.forEach(function(doc) {
                     let order = doc.data();
                     let amount = parseFloat(order.amount) || 0;
-                    
                     totalAmount += amount; 
 
                     let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
                     
-                    // 1. กำหนดหัวข้อ: ถ้ามีชื่อคนสั่งให้แสดงชื่อ ถ้าไม่มีใช้ action เดิม (เปิดโต๊ะ, สั่งเตา/ซุป)
-                    let headerTitle = (order.orderedBy && order.orderedBy.displayName) 
-                                        ? order.orderedBy.displayName 
-                                        : (order.action || "สั่งอาหาร");
+                    // 1. กำหนดหัวข้อ: "action ชื่อผู้สั่ง"
+                    let orderAction = order.action || "สั่งอาหาร";
+                    let orderedByName = (order.orderedBy && order.orderedBy.displayName) ? order.orderedBy.displayName : "";
+                    
+                    let headerTitle = orderAction;
+                    // ถ้ามีชื่อคนสั่ง และ action คือ สั่งอาหาร ให้เติมชื่อคนสั่งต่อท้าย (เช่น "สั่งอาหาร Man")
+                    if (orderedByName && orderAction === "สั่งอาหาร") {
+                        headerTitle = `${orderAction} ${orderedByName}`;
+                    }
 
-                    // 2. กำหนดป้ายสถานะ
+                    // 2. กำหนดป้ายสถานะ (กำลังทำ / เสร็จแล้ว)
                     let statusBadge = "";
                     if (order.kitchenStatus === "เสร็จ" || order.kitchenStatus === "เสร็จแล้ว") {
                         statusBadge = "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>";
-                    } else if (order.kitchenStatus === "เตรียม") {
+                    } else if (order.kitchenStatus === "เตรียม" || order.kitchenStatus === "กำลังทำ") {
                         statusBadge = "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
                     }
 
-                    // 3. แยกรายการอาหารออกจาก order.details และต่อท้ายด้วยสถานะ
+                    // 3. จัดการป้ายสถานะและรายการอาหาร
                     let detailsHtml = "";
+                    // สำหรับรายการที่ไม่ใช่การ 'สั่งอาหาร' (เช่น เปิดโต๊ะ) เอาป้ายสถานะไปไว้ที่หัวข้อ
+                    let headerBadge = (orderAction !== "สั่งอาหาร") ? statusBadge : "";
+
                     if (order.details) {
-                        let detailsArray = order.details.trim().split('\n'); // แยกด้วยขึ้นบรรทัดใหม่
-                        detailsArray.forEach(item => {
-                            if (item.trim() !== "") {
-                                // ถ้าไม่ใช่เปิดโต๊ะ หรือ สั่งเตา/ซุป ให้เติมสถานะหลังรายการอาหาร
-                                if(order.action === "สั่งอาหาร") {
-                                    detailsHtml += `<div>${item} ${statusBadge}</div>`;
-                                } else {
-                                     // ถ้าเป็นการเปิดโต๊ะ หรือ สั่งเตา ให้แสดงปกติ ไม่ต้องมีป้ายหลังรายการย่อย
-                                    detailsHtml += `<div>${item}</div>`;
-                                }
-                            }
-                        });
+                        let items = order.details.trim().split('\n');
+                        detailsHtml = items.map(item => {
+                            let trimmedItem = item.trim();
+                            if (!trimmedItem) return "";
+                            
+                            // ถ้ารายการคือ 'สั่งอาหาร' ให้ใส่ badge ท้ายรายการย่อย
+                            let itemBadge = (orderAction === "สั่งอาหาร") ? statusBadge : "";
+                            
+                            return `
+                            <div class="d-flex align-items-center justify-content-between my-1">
+                                <span class="text-secondary" style="font-size: 13px;">${trimmedItem}</span>
+                                <div>${itemBadge}</div>
+                            </div>`;
+                        }).join('');
                     }
 
-                    // สำหรับรายการที่ไม่ใช่การ 'สั่งอาหาร' (เช่น เปิดโต๊ะ) เอาป้ายสถานะไปไว้ที่หัวข้อเหมือนเดิม
-                    let headerBadge = (order.action !== "สั่งอาหาร") ? statusBadge : "";
-
                     html += `
-                    <div class='d-flex justify-content-between align-items-start py-2' style='border-bottom: 1px dashed #eee;'>
-                        <div class='flex-grow-1'>
-                            <div class='fw-bold text-dark' style='font-size: 14px;'>${headerTitle} ${headerBadge}</div>
-                            <div class='text-muted mt-1' style='font-size: 13px;'>${detailsHtml}</div>
-                            <div class='text-muted mt-1' style='font-size: 11px;'>เวลา ${timeStr}</div>
+                    <div class='py-2' style='border-bottom: 1px dashed #eee;'>
+                        <div class='d-flex justify-content-between align-items-center mb-1'>
+                            <div class='fw-bold text-dark' style='font-size: 15px;'>
+                                ${headerTitle} ${headerBadge}
+                            </div>
+                            <div class='fw-bold text-danger' style='font-size: 15px;'>
+                                ${amount > 0 ? amount.toLocaleString() + ' ฿' : ''}
+                            </div>
                         </div>
-                        <div class='fw-bold text-danger text-end ps-2' style='font-size: 15px; min-width: 60px;'>
-                            ${amount > 0 ? amount.toLocaleString() + ' ฿' : ''}
+                        <div class='ps-1 my-1'>
+                            ${detailsHtml}
                         </div>
+                        <div class='text-muted' style='font-size: 11px;'>เวลา ${timeStr}</div>
                     </div>`;
                 });
 
