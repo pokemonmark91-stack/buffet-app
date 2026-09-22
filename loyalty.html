@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>บัตรสะสมแต้ม</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Sarabun', sans-serif; 
+      background: #f1f2f6; 
+      margin: 0; 
+      padding: 20px 15px; 
+      color: #2f3542; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      min-height: 100vh; 
+      -webkit-tap-highlight-color: transparent; 
+    }
+    .card { 
+      background: white; 
+      padding: 25px 20px; 
+      border-radius: 20px; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
+      width: 100%; 
+      max-width: 390px; 
+      text-align: center; 
+      position: relative;
+    }
+
+    /* กล่องข้อมูลย่อผู้ใช้ */
+    .user-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #f8f9fa;
+      padding: 12px 15px;
+      border-radius: 14px;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    .user-img {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #06C755;
+    }
+    .user-info h4 {
+      margin: 0;
+      font-size: 15px;
+      color: #2f3542;
+    }
+    .user-info p {
+      margin: 2px 0 0 0;
+      font-size: 12px;
+      color: #747d8c;
+    }
+
+    /* แผงตารางแสตมป์ 10 ช่อง */
+    .stamp-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      background: #e8faf0;
+      border: 2px dashed #06C755;
+      padding: 20px 12px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+    }
+    .stamp-slot {
+      aspect-ratio: 1;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px dashed #b2bec3;
+      color: #dfe4ea;
+      font-size: 20px;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    /* สไตล์แสตมป์ที่ได้รับแล้ว */
+    .stamp-slot.active {
+      background: linear-gradient(135deg, #06C755, #009933);
+      border: 2px solid #06C755;
+      color: #ffffff;
+      box-shadow: 0 4px 10px rgba(6, 199, 85, 0.35);
+      transform: scale(1.05);
+    }
+    /* ช่องของรางวัลใหญ่ (ช่องที่ 10) */
+    .stamp-slot.reward-slot {
+      border-color: #ff9f43;
+      color: #ff9f43;
+    }
+    .stamp-slot.reward-slot.active {
+      background: linear-gradient(135deg, #ff9f43, #ee5253);
+      border-color: #ff9f43;
+      color: #ffffff;
+      box-shadow: 0 4px 10px rgba(255, 159, 67, 0.4);
+    }
+
+    /* สรุปแต้มและเงื่อนไข */
+    .reward-banner {
+      background: linear-gradient(135deg, #2f3542, #57606f);
+      color: white;
+      padding: 15px;
+      border-radius: 14px;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    .reward-banner h5 {
+      margin: 0 0 5px 0;
+      font-size: 14px;
+      color: #f1c40f;
+    }
+    .reward-banner p {
+      margin: 0;
+      font-size: 12px;
+      color: #dcdde1;
+      line-height: 1.4;
+    }
+
+    /* Loading Spinner */
+    .spinner { 
+      width: 40px; 
+      height: 40px; 
+      border: 4px solid #f3f3f3; 
+      border-top: 4px solid #06C755; 
+      border-radius: 50%; 
+      animation: spin 1s linear infinite; 
+      margin: 20px auto; 
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+
+  <!-- LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+
+  <div class="card">
+    
+    <!-- 1. สถานะกำลังโหลด -->
+    <div id="loadingState">
+      <div class="spinner"></div>
+      <p style="color: #57606f; font-weight: 600; font-size: 14px;">กำลังโหลดบัตรสะสมแต้ม...</p>
+    </div>
+
+    <!-- 2. ส่วนแสดงบัตรสะสมแต้ม -->
+    <div id="loyaltyContent" style="display: none;">
+      
+      <!-- ข้อมูลผู้ใช้งาน -->
+      <div class="user-header">
+        <img id="userImg" class="user-img" src="" alt="Profile">
+        <div class="user-info">
+          <h4 id="userName">คุณ...</h4>
+          <p>สะสมทั้งหมด: <strong id="totalPointsText" style="color:#06C755;">0</strong> แต้ม</p>
+        </div>
+      </div>
+
+      <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #2f3542;">บัตรสะสมแสตมป์</h3>
+      <p style="margin: 0 0 15px 0; font-size: 13px; color: #747d8c;">สะสมครบ 10 ดวง รับทันทีส่วนลดบุฟเฟต์!</p>
+
+      <!-- ตารางแสตมป์ 10 ช่อง -->
+      <div class="stamp-grid" id="stampGrid">
+        <!-- JS จะสร้างช่องแสตมป์ 1-10 ให้อัตโนมัติ -->
+      </div>
+
+      <!-- สิทธิประโยชน์ / กติกา -->
+      <div class="reward-banner">
+        <h5><i class="fa-solid fa-gift"></i> เงื่อนไขการสะสมแต้ม</h5>
+        <p>• ทานบุฟเฟต์ทุก 1 ท่าน รับทันที 1 แสตมป์<br>• สะสมครบ 10 แสตมป์ แสดงหน้านี้กับพนักงานเพื่อรับส่วนลดในมื้อถัดไป</p>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Firebase Modular SDK V10 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+      authDomain: "buffet-system-9b165.firebaseapp.com",
+      projectId: "buffet-system-9b165",
+      storageBucket: "buffet-system-9b165.firebasestorage.app",
+      messagingSenderId: "144497251618",
+      appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+      measurementId: "G-82JK3EL1HL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ⚠️ อย่าลืมใส่ LIFF ID ตัวใหม่สำหรับบัตรสะสมแต้ม
+    const LIFF_ID = "ใส่_LIFF_ID_ของบัตรสะสมแต้มที่นี่"; 
+    let lineUID = "";
+
+    // ฟังก์ชันวาดดวงแสตมป์ 10 ช่อง
+    function renderStamps(points) {
+      const stampGrid = document.getElementById("stampGrid");
+      stampGrid.innerHTML = "";
+
+      // คำนวณจำนวนแสตมป์รอบปัจจุบัน (1-10)
+      const currentStamps = points % 10 === 0 && points > 0 ? 10 : points % 10;
+
+      for (let i = 1; i <= 10; i++) {
+        const slot = document.createElement("div");
+        slot.className = "stamp-slot";
+        
+        if (i === 10) {
+          slot.classList.add("reward-slot");
+        }
+
+        if (i <= currentStamps) {
+          slot.classList.add("active");
+          slot.innerHTML = i === 10 ? '<i class="fa-solid fa-crown"></i>' : '<i class="fa-solid fa-check"></i>';
+        } else {
+          slot.innerHTML = i === 10 ? '<i class="fa-solid fa-gift"></i>' : i;
+        }
+
+        stampGrid.appendChild(slot);
+      }
+    }
+
+    async function initLoyaltyCard() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+
+        const profile = await liff.getProfile();
+        lineUID = profile.userId;
+
+        document.getElementById("userImg").src = profile.pictureUrl || "https://via.placeholder.com/45";
+        document.getElementById("userName").innerText = profile.displayName;
+
+        // ดึงข้อมูลแต้มจาก Firestore Collection "members"
+        const docRef = doc(db, "members", lineUID);
+        const docSnap = await getDoc(docRef);
+
+        let userPoints = 0;
+        if (docSnap.exists()) {
+          userPoints = docSnap.data().points || 0;
+        }
+
+        document.getElementById("totalPointsText").innerText = userPoints;
+        renderStamps(userPoints);
+
+        document.getElementById("loadingState").style.display = "none";
+        document.getElementById("loyaltyContent").style.display = "block";
+
+      } catch (err) {
+        console.error("Loyalty Page Error:", err);
+        alert("เกิดข้อผิดพลาดในการโหลดข้อมูล: " + err.message);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', initLoyaltyCard);
+  </script>
+</body>
+</html>
