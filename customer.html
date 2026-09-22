@@ -589,7 +589,7 @@
         // ตัวแปรสำหรับ Real-time listener ของบิล
         let unsubscribeBill = null;
 
-        // 📌 ฟังก์ชันโหลดบิล (แยกเช็คสถานะรายเมนูอาหารให้ตรงกับหน้าครัว)
+        // 📌 ฟังก์ชันโหลดบิล (เชื่อมโยงกับ completedItems ของฝั่งครัวอย่างแม่นยำ)
         function loadCustomerBill() {
             if (!tableNo) {
                 document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
@@ -623,7 +623,7 @@
 
                         let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
                         
-                        // 1. หัวข้อรายการสั่งซื้อ
+                        // 1. กำหนดหัวข้อ: "สั่งอาหาร [ชื่อคนสั่ง]"
                         let orderAction = order.action || "สั่งอาหาร";
                         let orderedByName = (order.orderedBy && order.orderedBy.displayName) ? order.orderedBy.displayName : "";
                         
@@ -632,7 +632,7 @@
                             headerTitle = `สั่งอาหาร ${orderedByName}`;
                         }
 
-                        // 2. เช็คสถานะภาพรวมบิล
+                        // 2. เช็คสถานะภาพรวมบิล (ถ้า kitchenStatus เป็น "เสร็จ" ถือว่าเสร็จทั้งหมด)
                         let docStatus = order.kitchenStatus || "";
                         let isAllDone = (docStatus === "เสร็จ" || docStatus === "เสร็จแล้ว");
                         
@@ -643,46 +643,21 @@
                                 : "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
                         }
 
-                        // 3. แยกเช็คสถานะย่อยรายเมนู
+                        // ดึงข้อมูลรายการ index ที่ครัวกดเสร็จแล้วจาก completedItems
+                        let completedItems = order.completedItems || [];
+
+                        // 3. แยกเช็คสถานะย่อยรายเมนูตาม Index ของแอร์เรย์
                         let detailsHtml = "";
                         if (order.details) {
                             let items = order.details.trim().split('\n');
                             
-                            detailsHtml = items.map(item => {
+                            detailsHtml = items.map((item, idx) => {
                                 let trimmedItem = item.trim();
                                 if (!trimmedItem) return "";
 
                                 if (orderAction === "สั่งอาหาร") {
-                                    // ดึงเฉพาะชื่ออาหาร เช่น "หมูสับ x 1" -> ตัดเหลือแค่ "หมูสับ"
-                                    let foodName = trimmedItem.split('x')[0].trim();
-                                    
-                                    let isItemDone = isAllDone; // ถ้าทั้งบิลเสร็จ ถือว่าเสร็จทั้งหมด
-
-                                    // ตรวจสอบจากโครงสร้างข้อมูลที่ครัวส่งอัปเดตกลับมา
-                                    if (!isItemDone) {
-                                        if (order.itemStatuses) {
-                                            let st = order.itemStatuses[foodName] || order.itemStatuses[trimmedItem];
-                                            if (st === "เสร็จ" || st === "เสร็จแล้ว" || st === "done" || st === true) {
-                                                isItemDone = true;
-                                            }
-                                        }
-                                        if (order.doneItems && Array.isArray(order.doneItems)) {
-                                            if (order.doneItems.includes(foodName) || order.doneItems.includes(trimmedItem)) {
-                                                isItemDone = true;
-                                            }
-                                        }
-                                        if (order.completedItems && Array.isArray(order.completedItems)) {
-                                            if (order.completedItems.includes(foodName) || order.completedItems.includes(trimmedItem)) {
-                                                isItemDone = true;
-                                            }
-                                        }
-                                        if (trimmedItem.includes('✅') || trimmedItem.includes('เสร็จ') || trimmedItem.includes('เรียบร้อย')) {
-                                            isItemDone = true;
-                                        }
-                                    }
-
-                                    // ลบข้อความสัญลักษณ์คงเหลือ
-                                    let cleanName = trimmedItem.replace(/✅|เสร็จแล้ว|เรียบร้อย/g, '').trim();
+                                    // เช็คว่าเมนูนี้ Index ตรงกับที่ครัวกดเสร็จใน completedItems หรือยัง
+                                    let isItemDone = isAllDone || completedItems.includes(idx);
 
                                     let itemBadge = isItemDone 
                                         ? "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>"
@@ -690,7 +665,7 @@
 
                                     return `
                                     <div class="d-flex align-items-center justify-content-between my-1">
-                                        <span class="text-secondary" style="font-size: 13px;">${cleanName}</span>
+                                        <span class="text-secondary" style="font-size: 13px;">${trimmedItem}</span>
                                         <div>${itemBadge}</div>
                                     </div>`;
                                 } else {
