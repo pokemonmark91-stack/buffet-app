@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>โปรโมชั่นพิเศษ</title>
+    <!-- โหลด LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap');
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        body {
+            background-color: #f7f9fc;
+            color: #333;
+            padding-bottom: 30px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff7e5f, #feb47b);
+            color: white;
+            padding: 30px 20px 20px;
+            text-align: center;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .promo-container {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .promo-card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .promo-card:active {
+            transform: scale(0.98);
+        }
+
+        .promo-image {
+            width: 100%;
+            height: 150px;
+            background-color: #eee;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+
+        /* ใส่รูปตัวอย่าง (คุณสามารถเปลี่ยน URL รูปภาพได้ในภายหลัง) */
+        .img-1 { background-image: url('https://images.unsplash.com/photo-1544148103-0773bf10d330?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'); }
+        .img-2 { background-image: url('https://images.unsplash.com/photo-1555939594-58d7cb561ad1?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'); }
+        .img-3 { background-image: url('https://images.unsplash.com/photo-1513104890138-7c749659a591?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'); }
+
+        .promo-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ff3b30;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .promo-content {
+            padding: 15px;
+        }
+
+        .promo-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ff7e5f;
+            margin-bottom: 5px;
+        }
+
+        .promo-desc {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .promo-date {
+            font-size: 12px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Loading Screen */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #f3f3f3; border-top: 4px solid #ff7e5f;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <!-- หน้าจอโหลด -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; color: #666;">กำลังโหลดโปรโมชั่น...</p>
+    </div>
+
+    <!-- ส่วนหัว -->
+    <div class="header">
+        <h1>🎉 โปรโมชั่นพิเศษ</h1>
+        <p>สิทธิพิเศษและส่วนลดสำหรับลูกค้าคนสำคัญ</p>
+    </div>
+
+    <!-- รายการโปรโมชั่น -->
+    <div class="promo-container">
+        
+        <!-- โปรที่ 1 -->
+        <div class="promo-card">
+            <div class="promo-image img-1">
+                <div class="promo-badge">HOT 🔥</div>
+            </div>
+            <div class="promo-content">
+                <h3 class="promo-title">มา 4 จ่าย 3 คุ้มยกแก๊ง!</h3>
+                <p class="promo-desc">ชวนเพื่อนมาฟินกับบุฟเฟ่ต์สุดคุ้ม มาครบ 4 ท่าน จ่ายเพียง 3 ท่านเท่านั้น! (เฉพาะราคาผู้ใหญ่)</p>
+                <div class="promo-date">📅 หมดเขต: 31 ตุลาคม 2569</div>
+            </div>
+        </div>
+
+        <!-- โปรที่ 2 -->
+        <div class="promo-card">
+            <div class="promo-image img-2">
+                <div class="promo-badge">NEW ✨</div>
+            </div>
+            <div class="promo-content">
+                <h3 class="promo-title">โปรโมชั่นวันเกิด ลดทันที 10%</h3>
+                <p class="promo-desc">ฉลองวันเกิดที่ร้าน รับส่วนลดค่าอาหาร 10% สำหรับเจ้าของวันเกิด (เพียงแสดงบัตรประชาชน)</p>
+                <div class="promo-date">📅 หมดเขต: ตลอดปี 2569</div>
+            </div>
+        </div>
+
+        <!-- โปรที่ 3 -->
+        <div class="promo-card">
+            <div class="promo-image img-3"></div>
+            <div class="promo-content">
+                <h3 class="promo-title">แอดไลน์ปั๊บ รับฟรีน้ำอัดลมรีฟิล</h3>
+                <p class="promo-desc">สำหรับลูกค้าใหม่ที่เพิ่มเพื่อนผ่าน LINE Official Account รับฟรี! น้ำอัดลมรีฟิล 1 แก้ว</p>
+                <div class="promo-date">📅 หมดเขต: จนกว่าจะมีการเปลี่ยนแปลง</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ⚠️ อย่าลืมใส่ LIFF ID ของหน้าโปรโมชั่น
+        const LIFF_ID = "ใส่_LIFF_ID_ของหน้าโปรโมชั่นที่นี่"; 
+
+        async function initializeLiff() {
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                } else {
+                    // โหลดเสร็จ ซ่อนหน้าจอ Loading
+                    document.getElementById('loading').style.display = 'none';
+                }
+            } catch (err) {
+                console.error('LIFF Init Error:', err);
+                alert("เกิดข้อผิดพลาดในการโหลดระบบ LINE");
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // เริ่มการทำงานเมื่อเปิดหน้า
+        window.onload = initializeLiff;
+    </script>
+</body>
+</html>
