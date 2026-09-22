@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ประวัติใบเสร็จ</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Sarabun', sans-serif; 
+      background: #f1f2f6; 
+      margin: 0; 
+      padding: 20px 15px; 
+      color: #2f3542; 
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+    .header h2 {
+      margin: 0;
+      color: #2f3542;
+      font-size: 22px;
+    }
+    .header p {
+      margin: 5px 0 0 0;
+      color: #747d8c;
+      font-size: 14px;
+    }
+
+    /* กล่องใบเสร็จแต่ละรายการ */
+    .receipt-card {
+      background: white;
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      border-left: 5px solid #06C755;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .receipt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px dashed #dfe4ea;
+      padding-bottom: 10px;
+    }
+    .receipt-date {
+      font-weight: 600;
+      color: #2f3542;
+      font-size: 15px;
+    }
+    .receipt-status {
+      background: #e8faf0;
+      color: #06C755;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .receipt-body {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .receipt-details p {
+      margin: 0 0 5px 0;
+      font-size: 13px;
+      color: #57606f;
+    }
+    .receipt-total {
+      text-align: right;
+    }
+    .receipt-total p {
+      margin: 0;
+      font-size: 12px;
+      color: #747d8c;
+    }
+    .receipt-total h3 {
+      margin: 0;
+      color: #ff4757;
+      font-size: 18px;
+    }
+
+    /* สถานะว่างเปล่า */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #a4b0be;
+    }
+    .empty-state i {
+      font-size: 50px;
+      margin-bottom: 15px;
+      color: #ced6e0;
+    }
+
+    /* Loading Spinner */
+    .spinner { 
+      width: 40px; 
+      height: 40px; 
+      border: 4px solid #f3f3f3; 
+      border-top: 4px solid #06C755; 
+      border-radius: 50%; 
+      animation: spin 1s linear infinite; 
+      margin: 40px auto; 
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+
+  <!-- LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+
+  <div class="header">
+    <h2>ประวัติการทานอาหาร</h2>
+    <p>รายการใบเสร็จย้อนหลังของคุณ</p>
+  </div>
+
+  <!-- สถานะกำลังโหลด -->
+  <div id="loadingState">
+    <div class="spinner"></div>
+    <p style="text-align: center; color: #57606f; font-weight: 600;">กำลังโหลดข้อมูล...</p>
+  </div>
+
+  <!-- กล่องแสดงรายการใบเสร็จ -->
+  <div id="receiptContainer" style="display: none;">
+    <!-- รายการใบเสร็จจะถูกแทรกที่นี่โดย JavaScript -->
+  </div>
+
+  <!-- กรณีไม่มีประวัติ -->
+  <div id="emptyState" class="empty-state" style="display: none;">
+    <i class="fa-solid fa-receipt"></i>
+    <h3 style="margin: 0 0 10px 0; color: #747d8c;">ยังไม่มีประวัติการทาน</h3>
+    <p style="margin: 0; font-size: 14px;">เมื่อคุณชำระเงิน ประวัติจะแสดงที่นี่</p>
+  </div>
+
+  <!-- Firebase Modular SDK V10 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+      authDomain: "buffet-system-9b165.firebaseapp.com",
+      projectId: "buffet-system-9b165",
+      storageBucket: "buffet-system-9b165.firebasestorage.app",
+      messagingSenderId: "144497251618",
+      appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+      measurementId: "G-82JK3EL1HL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ⚠️ อย่าลืมสร้าง LIFF ID ใหม่สำหรับหน้าใบเสร็จ แล้วนำมาใส่ที่นี่
+    const LIFF_ID = "ใส่_LIFF_ID_ของประวัติใบเสร็จที่นี่"; 
+    let lineUID = "";
+
+    // ฟังก์ชันแปลงรูปแบบวันที่
+    function formatDate(timestamp) {
+      if (!timestamp) return "-";
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString('th-TH', { 
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    async function loadReceipts() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+
+        const profile = await liff.getProfile();
+        lineUID = profile.userId;
+
+        // ค้นหาใบเสร็จที่ตรงกับ UID ของลูกค้ารายนี้
+        const q = query(collection(db, "receipts"), where("uid", "==", lineUID));
+        const querySnapshot = await getDocs(q);
+
+        document.getElementById("loadingState").style.display = "none";
+
+        if (querySnapshot.empty) {
+          document.getElementById("emptyState").style.display = "block";
+          return;
+        }
+
+        // ดึงข้อมูลมาใส่ Array และเรียงลำดับจากใหม่ไปเก่า
+        let receiptsData = [];
+        querySnapshot.forEach((doc) => {
+          receiptsData.push({ id: doc.id, ...doc.data() });
+        });
+        
+        receiptsData.sort((a, b) => {
+          const timeA = a.timestamp ? (a.timestamp.toDate ? a.timestamp.toDate() : new Date(a.timestamp)) : 0;
+          const timeB = b.timestamp ? (b.timestamp.toDate ? b.timestamp.toDate() : new Date(b.timestamp)) : 0;
+          return timeB - timeA;
+        });
+
+        // วาด UI กล่องใบเสร็จ
+        const container = document.getElementById("receiptContainer");
+        
+        receiptsData.forEach(data => {
+          const card = document.createElement("div");
+          card.className = "receipt-card";
+          card.innerHTML = `
+            <div class="receipt-header">
+              <span class="receipt-date"><i class="fa-regular fa-calendar"></i> ${formatDate(data.timestamp)}</span>
+              <span class="receipt-status"><i class="fa-solid fa-circle-check"></i> ชำระแล้ว</span>
+            </div>
+            <div class="receipt-body">
+              <div class="receipt-details">
+                <p><i class="fa-solid fa-users"></i> จำนวนลูกค้า: <strong>${data.headcount || 0} ท่าน</strong></p>
+                <p><i class="fa-solid fa-star"></i> แต้มที่ได้รับ: <strong>+${data.pointsEarned || 0} แต้ม</strong></p>
+              </div>
+              <div class="receipt-total">
+                <p>ยอดสุทธิ</p>
+                <h3>฿${(data.totalAmount || 0).toLocaleString()}</h3>
+              </div>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+
+        container.style.display = "block";
+
+      } catch (err) {
+        console.error("Receipts Page Error:", err);
+        alert("เกิดข้อผิดพลาดในการโหลดข้อมูล: " + err.message);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', loadReceipts);
+  </script>
+</body>
+</html>
