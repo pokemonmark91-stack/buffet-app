@@ -6,6 +6,8 @@
     <title>สั่งอาหาร - ลูกค้า</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background-color: #f4f6f8; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding-bottom: 90px; }
         .header-bg { background-color: #e64a19; color: white; padding: 12px; border-radius: 0 0 15px 15px; }
@@ -32,6 +34,9 @@
         .menu-img { width: 100%; height: 110px; object-fit: cover; background-color: #eee; }
         .qty-btn { width: 28px; height: 28px; padding: 0; border-radius: 50%; font-weight: bold; line-height: 1; }
         .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; box-shadow: 0 -3px 10px rgba(0,0,0,0.1); padding: 12px 20px; z-index: 1000; }
+        
+        /* ซ่อน Scrollbar ของรายชื่อเพื่อนร่วมโต๊ะ */
+        #membersList::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body>
@@ -44,7 +49,7 @@
 
     <div class="container">
         <!-- แถบแสดงเลขโต๊ะ + ปุ่มเปลี่ยนโต๊ะ -->
-        <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 px-3 rounded-3 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center mb-2 bg-white p-2 px-3 rounded-3 shadow-sm">
             <div>
                 <span class="fw-bold text-dark">📍 โต๊ะของคุณ: <span id="displayTableNo" class="text-danger fs-5">?</span></span>
                 <small id="displayPackage" class="d-block text-muted" style="font-size: 12px;"></small>
@@ -52,6 +57,16 @@
             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="openTableSelectModal()">
                 ✏️ เปลี่ยนโต๊ะ
             </button>
+        </div>
+
+        <!-- 📌 แถบแสดงเพื่อนร่วมโต๊ะ (Real-time) -->
+        <div id="tableMembersBox" class="bg-white p-2 px-3 rounded-3 shadow-sm mb-3" style="display: none;">
+            <p class="m-0 mb-2" style="font-size: 13px; color: #747d8c; font-weight: 600;">
+                <i class="fa-solid fa-users text-success"></i> สมาชิกโต๊ะนี้:
+            </p>
+            <div id="membersList" class="d-flex gap-2" style="overflow-x: auto; padding-bottom: 5px; scrollbar-width: none;">
+                <!-- รูปโปรไฟล์และชื่อเพื่อนๆ จะมาแสดงตรงนี้ -->
+            </div>
         </div>
 
         <!-- แถบแยกหมวดหมู่ (Category Tabs) -->
@@ -104,7 +119,7 @@
         </div>
     </div>
 
-    <!-- 📌 Modal ป๊อบอัพยืนยันการสั่งอาหาร (ปรับเหมือนป๊อบอัพดูบิล) -->
+    <!-- Modal ป๊อบอัพยืนยันการสั่งอาหาร -->
     <div class="modal fade" id="confirmOrderModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow" style="border-radius: 15px;">
@@ -174,9 +189,29 @@
         let allMenuItems = []; 
         let selectedCategory = 'all';
 
-        window.onload = function() {
+        // 📌 ตัวแปรเก็บข้อมูล User
+        let userUid = "";
+        let currentUser = null;
+        let unsubscribeTable = null; // ตัวจัดการยกเลิก Real-time Listener
+
+        window.onload = async function() {
             const urlParams = new URLSearchParams(window.location.search);
-            let tNo = urlParams.get('tableNo');
+            // รองรับทั้ง ?table=1 และ ?tableNo=1
+            let tNo = urlParams.get('table') || urlParams.get('tableNo');
+            userUid = urlParams.get('uid');
+
+            // 📌 ถ้ามี uid ดึงข้อมูลโปรไฟล์ผู้ใช้จาก Firestore
+            if (userUid) {
+                try {
+                    const userDoc = await db.collection("members").doc(userUid).get();
+                    if (userDoc.exists) {
+                        currentUser = userDoc.data();
+                        currentUser.uid = userUid; // เก็บ uid ไว้ใช้ตอนส่ง Order
+                    }
+                } catch (e) {
+                    console.error("Error fetching user data:", e);
+                }
+            }
             
             if (!tNo) {
                 openTableSelectModal();
@@ -250,6 +285,9 @@
             document.getElementById('categoryContainer').style.display = 'flex';
             document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดข้อมูลแพ็กเกจและเมนู...</div>";
 
+            // 📌 เรียกใช้ฟังก์ชันแสดงรายชื่อสมาชิกในโต๊ะแบบ Real-time
+            listenTableMembers(tableNo);
+
             try {
                 const tableDoc = await db.collection("tables").doc(String(tableNo)).get();
                 if (tableDoc.exists) {
@@ -280,6 +318,45 @@
                 console.error("Error fetching table package:", err);
                 await loadMenu();
             }
+        }
+
+        // 📌 ฟังก์ชันใหม่สำหรับดึงข้อมูลสมาชิกในโต๊ะแบบ Real-time
+        function listenTableMembers(tNo) {
+            if (unsubscribeTable) unsubscribeTable(); // ยกเลิกการฟังอันเก่า (ถ้ามี)
+            
+            const tableMembersBox = document.getElementById('tableMembersBox');
+            const membersList = document.getElementById('membersList');
+            
+            unsubscribeTable = db.collection("tables").doc(String(tNo))
+                .onSnapshot((doc) => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        const members = data.activeMembers || [];
+                        
+                        if (members.length > 0) {
+                            tableMembersBox.style.display = 'block';
+                            membersList.innerHTML = ''; // ล้างค่าเดิม
+                            
+                            members.forEach(m => {
+                                let imgUrl = m.pictureUrl || "https://placehold.co/40x40?text=U";
+                                let displayName = m.displayName || m.name || "ลูกค้า";
+                                
+                                membersList.innerHTML += `
+                                    <div class="text-center" style="min-width: 55px;">
+                                        <img src="${imgUrl}" style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid #06C755; object-fit: cover;">
+                                        <p style="margin: 3px 0 0 0; font-size: 11px; color: #2f3542; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55px;">
+                                            ${displayName}
+                                        </p>
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            tableMembersBox.style.display = 'none';
+                        }
+                    }
+                }, (error) => {
+                    console.error("Error listening to table members:", error);
+                });
         }
 
         async function loadMenu() {
@@ -420,7 +497,6 @@
             document.getElementById('cartCount').innerText = totalItems;
         }
 
-        // 📌 1. เปิด Modal ป๊อบอัพยืนยันการสั่งอาหาร (แทนที่ confirm เดิม)
         function submitOrder() {
             if (!tableNo) return alert("กรุณาระบุเลขโต๊ะก่อนสั่งอาหารครับ!");
             
@@ -456,7 +532,6 @@
             confirmModal.show();
         }
 
-        // 📌 2. ส่งรายการอาหารเข้า Firebase เมื่อกดปุ่มยืนยันใน Modal
         async function confirmAndSendOrder() {
             let btn = document.getElementById('btnConfirmSend');
             btn.disabled = true;
@@ -473,13 +548,25 @@
             }
 
             try {
-                await db.collection("tables").doc(String(tableNo)).collection("orders").add({
+                // 📌 เตรียมข้อมูลออร์เดอร์ที่จะส่งเข้า Firebase
+                let orderData = {
                     action: "สั่งอาหาร",
                     details: orderDetails.trim(),
                     amount: totalAmount,
                     kitchenStatus: "เตรียม",
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                };
+
+                // 📌 ถ้ามีข้อมูลผู้สั่ง ให้แนบลงไปด้วย
+                if (currentUser) {
+                    orderData.orderedBy = {
+                        uid: currentUser.uid,
+                        displayName: currentUser.displayName || currentUser.name || "ลูกค้า",
+                        pictureUrl: currentUser.pictureUrl || ""
+                    };
+                }
+
+                await db.collection("tables").doc(String(tableNo)).collection("orders").add(orderData);
 
                 // ปิด Modal ยืนยัน
                 let modalEl = document.getElementById('confirmOrderModal');
@@ -499,7 +586,6 @@
             }
         }
 
-                // 📌 3. ฟังก์ชันดึงข้อมูลบิลของลูกค้า (แก้ไขยอดเงินซ้ำซ้อน)
         async function loadCustomerBill() {
             if (!tableNo) {
                 document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
@@ -510,7 +596,6 @@
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังดึงข้อมูลบิล...</div>";
 
             try {
-                // ดึงรายการสั่งซื้อทั้งหมดของโต๊ะนี้ เรียงตามเวลา
                 let ordersSnap = await db.collection("tables").doc(String(tableNo)).collection("orders").orderBy("timestamp", "asc").get();
                 
                 if (ordersSnap.empty) {
@@ -525,13 +610,10 @@
                     let order = doc.data();
                     let amount = parseFloat(order.amount) || 0;
                     
-                    // 👉 นำยอดเงินจากรายการบิลมารวมกันตรงๆ (ไม่เอาจำนวนคนไปคูณแพ็กเกจซ้ำ)
                     totalAmount += amount; 
 
-                    // แปลงเวลาให้สวยงาม
                     let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
                     
-                    // ป้ายกำกับสถานะ
                     let statusBadge = "";
                     if (order.kitchenStatus === "เสร็จ" || order.kitchenStatus === "เสร็จแล้ว") {
                         statusBadge = "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>";
@@ -539,7 +621,6 @@
                         statusBadge = "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
                     }
 
-                    // สร้างหน้าตาบิลแต่ละรายการ
                     html += `
                     <div class='d-flex justify-content-between align-items-center py-2' style='border-bottom: 1px dashed #eee;'>
                         <div>
@@ -551,7 +632,6 @@
                     </div>`;
                 });
 
-                // แถบสรุปยอดรวมด้านล่างสุด
                 html += `
                 <div class='d-flex justify-content-between align-items-center mt-3 p-3 bg-light rounded-3' style='border: 1px solid #ff7675;'>
                     <h6 class='m-0 fw-bold text-dark'>ยอดสุทธิรวมทั้งหมด:</h6>
