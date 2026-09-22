@@ -586,10 +586,10 @@
             }
         }
 
-        // ประกาศตัวแปรนี้ไว้นอกฟังก์ชัน (เพื่อใช้ล้างการดึงข้อมูลซ้ำซ้อน)
+        // ตัวแปรสำหรับ Real-time listener ของบิล
         let unsubscribeBill = null;
 
-        // 📌 ฟังก์ชันโหลดบิล (ปรับปรุงเป็น Real-time และแก้บัคสถานะค้าง)
+        // 📌 ฟังก์ชันโหลดบิล (แยกเช็คสถานะรายเมนูอาหารให้ตรงกับหน้าครัว)
         function loadCustomerBill() {
             if (!tableNo) {
                 document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
@@ -599,12 +599,11 @@
             const billArea = document.getElementById('billArea');
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังดึงข้อมูลบิล...</div>";
 
-            // ยกเลิกการดึงข้อมูลเก่าถ้ามี เพื่อไม่ให้มันทำงานซ้อนกัน
             if (unsubscribeBill) {
                 unsubscribeBill();
             }
 
-            // เปลี่ยนจาก .get() เป็น .onSnapshot() เพื่อให้ข้อมูลอัปเดตทันทีที่ครัวกด
+            // Real-time ดึงข้อมูลออร์เดอร์
             unsubscribeBill = db.collection("tables").doc(String(tableNo)).collection("orders")
                 .orderBy("timestamp", "asc")
                 .onSnapshot(function(ordersSnap) {
@@ -624,28 +623,27 @@
 
                         let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
                         
-                        // 1. กำหนดหัวข้อ: ให้แสดงคำว่า "สั่งอาหาร " นำหน้าชื่อเสมอ
+                        // 1. หัวข้อรายการสั่งซื้อ
                         let orderAction = order.action || "สั่งอาหาร";
                         let orderedByName = (order.orderedBy && order.orderedBy.displayName) ? order.orderedBy.displayName : "";
                         
                         let headerTitle = orderAction;
                         if (orderedByName && orderAction === "สั่งอาหาร") {
-                            headerTitle = `สั่งอาหาร ${orderedByName}`; // ผลลัพธ์: สั่งอาหาร Man
+                            headerTitle = `สั่งอาหาร ${orderedByName}`;
                         }
 
-                        // 2. สถานะของบิลรวม (เสร็จ หรือ กำลังทำ)
-                        let docStatus = order.kitchenStatus;
-                        let isDocDone = (docStatus === "เสร็จ" || docStatus === "เสร็จแล้ว");
+                        // 2. เช็คสถานะภาพรวมบิล
+                        let docStatus = order.kitchenStatus || "";
+                        let isAllDone = (docStatus === "เสร็จ" || docStatus === "เสร็จแล้ว");
                         
                         let headerBadge = "";
-                        // ป้ายสถานะสำหรับรายการที่ไม่ใช่อาหาร (เช่น เปิดโต๊ะ)
                         if (orderAction !== "สั่งอาหาร") {
-                            headerBadge = isDocDone 
+                            headerBadge = isAllDone 
                                 ? "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>" 
                                 : "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
                         }
 
-                        // 3. จัดการรายการอาหารย่อย
+                        // 3. แยกเช็คสถานะย่อยรายเมนู
                         let detailsHtml = "";
                         if (order.details) {
                             let items = order.details.trim().split('\n');
@@ -654,25 +652,53 @@
                                 let trimmedItem = item.trim();
                                 if (!trimmedItem) return "";
 
-                                let itemBadge = "";
                                 if (orderAction === "สั่งอาหาร") {
-                                    // เช็คว่าครัวกดเสร็จเฉพาะรายการนี้หรือยัง (มักจะมีคำว่า ✅ หรือ เสร็จ ต่อท้ายในระบบครัว)
-                                    let isItemDoneLocally = trimmedItem.includes('✅') || trimmedItem.includes('เสร็จ') || trimmedItem.includes('เรียบร้อย');
+                                    // ดึงเฉพาะชื่ออาหาร เช่น "หมูสับ x 1" -> ตัดเหลือแค่ "หมูสับ"
+                                    let foodName = trimmedItem.split('x')[0].trim();
                                     
-                                    if (isDocDone || isItemDoneLocally) {
-                                        itemBadge = "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>";
-                                        // ลบข้อความที่ระบบครัวอาจติดมาออก เพื่อให้ลูกค้าเห็นแค่ชื่ออาหารสะอาดๆ
-                                        trimmedItem = trimmedItem.replace(/✅|เสร็จแล้ว|เรียบร้อย/g, '').trim();
-                                    } else {
-                                        itemBadge = "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
+                                    let isItemDone = isAllDone; // ถ้าทั้งบิลเสร็จ ถือว่าเสร็จทั้งหมด
+
+                                    // ตรวจสอบจากโครงสร้างข้อมูลที่ครัวส่งอัปเดตกลับมา
+                                    if (!isItemDone) {
+                                        if (order.itemStatuses) {
+                                            let st = order.itemStatuses[foodName] || order.itemStatuses[trimmedItem];
+                                            if (st === "เสร็จ" || st === "เสร็จแล้ว" || st === "done" || st === true) {
+                                                isItemDone = true;
+                                            }
+                                        }
+                                        if (order.doneItems && Array.isArray(order.doneItems)) {
+                                            if (order.doneItems.includes(foodName) || order.doneItems.includes(trimmedItem)) {
+                                                isItemDone = true;
+                                            }
+                                        }
+                                        if (order.completedItems && Array.isArray(order.completedItems)) {
+                                            if (order.completedItems.includes(foodName) || order.completedItems.includes(trimmedItem)) {
+                                                isItemDone = true;
+                                            }
+                                        }
+                                        if (trimmedItem.includes('✅') || trimmedItem.includes('เสร็จ') || trimmedItem.includes('เรียบร้อย')) {
+                                            isItemDone = true;
+                                        }
                                     }
+
+                                    // ลบข้อความสัญลักษณ์คงเหลือ
+                                    let cleanName = trimmedItem.replace(/✅|เสร็จแล้ว|เรียบร้อย/g, '').trim();
+
+                                    let itemBadge = isItemDone 
+                                        ? "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>"
+                                        : "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
+
+                                    return `
+                                    <div class="d-flex align-items-center justify-content-between my-1">
+                                        <span class="text-secondary" style="font-size: 13px;">${cleanName}</span>
+                                        <div>${itemBadge}</div>
+                                    </div>`;
+                                } else {
+                                    return `
+                                    <div class="my-1">
+                                        <span class="text-secondary" style="font-size: 13px;">${trimmedItem}</span>
+                                    </div>`;
                                 }
-                                
-                                return `
-                                <div class="d-flex align-items-center justify-content-between my-1">
-                                    <span class="text-secondary" style="font-size: 13px;">${trimmedItem}</span>
-                                    <div>${itemBadge}</div>
-                                </div>`;
                             }).join('');
                         }
 
