@@ -586,8 +586,11 @@
             }
         }
 
-        // 📌 ฟังก์ชันโหลดบิลที่ปรับปรุงตำแหน่ง ป้ายสถานะ และ ชื่อคนสั่ง
-        async function loadCustomerBill() {
+        // ประกาศตัวแปรนี้ไว้นอกฟังก์ชัน (เพื่อใช้ล้างการดึงข้อมูลซ้ำซ้อน)
+        let unsubscribeBill = null;
+
+        // 📌 ฟังก์ชันโหลดบิล (ปรับปรุงเป็น Real-time และแก้บัคสถานะค้าง)
+        function loadCustomerBill() {
             if (!tableNo) {
                 document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
                 return;
@@ -596,93 +599,112 @@
             const billArea = document.getElementById('billArea');
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังดึงข้อมูลบิล...</div>";
 
-            try {
-                let ordersSnap = await db.collection("tables").doc(String(tableNo)).collection("orders").orderBy("timestamp", "asc").get();
-                
-                if (ordersSnap.empty) {
-                    billArea.innerHTML = "<div class='text-center my-3 text-muted'>ยังไม่มีรายการสั่งอาหารครับ</div>";
-                    return;
-                }
+            // ยกเลิกการดึงข้อมูลเก่าถ้ามี เพื่อไม่ให้มันทำงานซ้อนกัน
+            if (unsubscribeBill) {
+                unsubscribeBill();
+            }
 
-                let html = "";
-                let totalAmount = 0;
-
-                ordersSnap.forEach(function(doc) {
-                    let order = doc.data();
-                    let amount = parseFloat(order.amount) || 0;
-                    totalAmount += amount; 
-
-                    let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
+            // เปลี่ยนจาก .get() เป็น .onSnapshot() เพื่อให้ข้อมูลอัปเดตทันทีที่ครัวกด
+            unsubscribeBill = db.collection("tables").doc(String(tableNo)).collection("orders")
+                .orderBy("timestamp", "asc")
+                .onSnapshot(function(ordersSnap) {
                     
-                    // 1. กำหนดหัวข้อ: "action ชื่อผู้สั่ง"
-                    let orderAction = order.action || "สั่งอาหาร";
-                    let orderedByName = (order.orderedBy && order.orderedBy.displayName) ? order.orderedBy.displayName : "";
-                    
-                    let headerTitle = orderAction;
-                    // ถ้ามีชื่อคนสั่ง และ action คือ สั่งอาหาร ให้เติมชื่อคนสั่งต่อท้าย (เช่น "สั่งอาหาร Man")
-                    if (orderedByName && orderAction === "สั่งอาหาร") {
-                        headerTitle = `${orderAction} ${orderedByName}`;
+                    if (ordersSnap.empty) {
+                        billArea.innerHTML = "<div class='text-center my-3 text-muted'>ยังไม่มีรายการสั่งอาหารครับ</div>";
+                        return;
                     }
 
-                    // 2. กำหนดป้ายสถานะ (กำลังทำ / เสร็จแล้ว)
-                    let statusBadge = "";
-                    if (order.kitchenStatus === "เสร็จ" || order.kitchenStatus === "เสร็จแล้ว") {
-                        statusBadge = "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>";
-                    } else if (order.kitchenStatus === "เตรียม" || order.kitchenStatus === "กำลังทำ") {
-                        statusBadge = "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
-                    }
+                    let html = "";
+                    let totalAmount = 0;
 
-                    // 3. จัดการป้ายสถานะและรายการอาหาร
-                    let detailsHtml = "";
-                    // สำหรับรายการที่ไม่ใช่การ 'สั่งอาหาร' (เช่น เปิดโต๊ะ) เอาป้ายสถานะไปไว้ที่หัวข้อ
-                    let headerBadge = (orderAction !== "สั่งอาหาร") ? statusBadge : "";
+                    ordersSnap.forEach(function(doc) {
+                        let order = doc.data();
+                        let amount = parseFloat(order.amount) || 0;
+                        totalAmount += amount; 
 
-                    if (order.details) {
-                        let items = order.details.trim().split('\n');
-                        detailsHtml = items.map(item => {
-                            let trimmedItem = item.trim();
-                            if (!trimmedItem) return "";
+                        let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
+                        
+                        // 1. กำหนดหัวข้อ: ให้แสดงคำว่า "สั่งอาหาร " นำหน้าชื่อเสมอ
+                        let orderAction = order.action || "สั่งอาหาร";
+                        let orderedByName = (order.orderedBy && order.orderedBy.displayName) ? order.orderedBy.displayName : "";
+                        
+                        let headerTitle = orderAction;
+                        if (orderedByName && orderAction === "สั่งอาหาร") {
+                            headerTitle = `สั่งอาหาร ${orderedByName}`; // ผลลัพธ์: สั่งอาหาร Man
+                        }
+
+                        // 2. สถานะของบิลรวม (เสร็จ หรือ กำลังทำ)
+                        let docStatus = order.kitchenStatus;
+                        let isDocDone = (docStatus === "เสร็จ" || docStatus === "เสร็จแล้ว");
+                        
+                        let headerBadge = "";
+                        // ป้ายสถานะสำหรับรายการที่ไม่ใช่อาหาร (เช่น เปิดโต๊ะ)
+                        if (orderAction !== "สั่งอาหาร") {
+                            headerBadge = isDocDone 
+                                ? "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>" 
+                                : "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
+                        }
+
+                        // 3. จัดการรายการอาหารย่อย
+                        let detailsHtml = "";
+                        if (order.details) {
+                            let items = order.details.trim().split('\n');
                             
-                            // ถ้ารายการคือ 'สั่งอาหาร' ให้ใส่ badge ท้ายรายการย่อย
-                            let itemBadge = (orderAction === "สั่งอาหาร") ? statusBadge : "";
-                            
-                            return `
-                            <div class="d-flex align-items-center justify-content-between my-1">
-                                <span class="text-secondary" style="font-size: 13px;">${trimmedItem}</span>
-                                <div>${itemBadge}</div>
-                            </div>`;
-                        }).join('');
-                    }
+                            detailsHtml = items.map(item => {
+                                let trimmedItem = item.trim();
+                                if (!trimmedItem) return "";
+
+                                let itemBadge = "";
+                                if (orderAction === "สั่งอาหาร") {
+                                    // เช็คว่าครัวกดเสร็จเฉพาะรายการนี้หรือยัง (มักจะมีคำว่า ✅ หรือ เสร็จ ต่อท้ายในระบบครัว)
+                                    let isItemDoneLocally = trimmedItem.includes('✅') || trimmedItem.includes('เสร็จ') || trimmedItem.includes('เรียบร้อย');
+                                    
+                                    if (isDocDone || isItemDoneLocally) {
+                                        itemBadge = "<span class='badge bg-success ms-2' style='font-size:10px;'>เสร็จแล้ว</span>";
+                                        // ลบข้อความที่ระบบครัวอาจติดมาออก เพื่อให้ลูกค้าเห็นแค่ชื่ออาหารสะอาดๆ
+                                        trimmedItem = trimmedItem.replace(/✅|เสร็จแล้ว|เรียบร้อย/g, '').trim();
+                                    } else {
+                                        itemBadge = "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
+                                    }
+                                }
+                                
+                                return `
+                                <div class="d-flex align-items-center justify-content-between my-1">
+                                    <span class="text-secondary" style="font-size: 13px;">${trimmedItem}</span>
+                                    <div>${itemBadge}</div>
+                                </div>`;
+                            }).join('');
+                        }
+
+                        html += `
+                        <div class='py-2' style='border-bottom: 1px dashed #eee;'>
+                            <div class='d-flex justify-content-between align-items-center mb-1'>
+                                <div class='fw-bold text-dark' style='font-size: 15px;'>
+                                    ${headerTitle} ${headerBadge}
+                                </div>
+                                <div class='fw-bold text-danger' style='font-size: 15px;'>
+                                    ${amount > 0 ? amount.toLocaleString() + ' ฿' : ''}
+                                </div>
+                            </div>
+                            <div class='ps-1 my-1'>
+                                ${detailsHtml}
+                            </div>
+                            <div class='text-muted' style='font-size: 11px;'>เวลา ${timeStr}</div>
+                        </div>`;
+                    });
 
                     html += `
-                    <div class='py-2' style='border-bottom: 1px dashed #eee;'>
-                        <div class='d-flex justify-content-between align-items-center mb-1'>
-                            <div class='fw-bold text-dark' style='font-size: 15px;'>
-                                ${headerTitle} ${headerBadge}
-                            </div>
-                            <div class='fw-bold text-danger' style='font-size: 15px;'>
-                                ${amount > 0 ? amount.toLocaleString() + ' ฿' : ''}
-                            </div>
-                        </div>
-                        <div class='ps-1 my-1'>
-                            ${detailsHtml}
-                        </div>
-                        <div class='text-muted' style='font-size: 11px;'>เวลา ${timeStr}</div>
+                    <div class='d-flex justify-content-between align-items-center mt-3 p-3 bg-light rounded-3' style='border: 1px solid #ff7675;'>
+                        <h6 class='m-0 fw-bold text-dark'>ยอดสุทธิรวมทั้งหมด:</h6>
+                        <h5 class='m-0 fw-bold text-danger'>${totalAmount.toLocaleString()} ฿</h5>
                     </div>`;
+
+                    billArea.innerHTML = html;
+
+                }, function(error) {
+                    console.error("Error listening to customer bill:", error);
+                    billArea.innerHTML = "<div class='text-center my-3 text-danger'>เกิดข้อผิดพลาด: " + error.message + "</div>";
                 });
-
-                html += `
-                <div class='d-flex justify-content-between align-items-center mt-3 p-3 bg-light rounded-3' style='border: 1px solid #ff7675;'>
-                    <h6 class='m-0 fw-bold text-dark'>ยอดสุทธิรวมทั้งหมด:</h6>
-                    <h5 class='m-0 fw-bold text-danger'>${totalAmount.toLocaleString()} ฿</h5>
-                </div>`;
-
-                billArea.innerHTML = html;
-
-            } catch (err) {
-                console.error("Error loading customer bill:", err);
-                billArea.innerHTML = "<div class='text-center my-3 text-danger'>เกิดข้อผิดพลาด: " + err.message + "</div>";
-            }
         }
     </script>
 </body>
