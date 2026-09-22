@@ -4,16 +4,18 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>สมัครสมาชิกบุฟเฟต์</title>
+  <title>สมัครสมาชิกและเข้าสู่โต๊ะอาหาร</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <style>
     * { box-sizing: border-box; }
     body { font-family: 'Sarabun', sans-serif; background: #f1f2f6; margin: 0; padding: 20px 15px; color: #2f3542; display: flex; justify-content: center; align-items: center; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
     .card { background: white; padding: 30px 20px; border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.08); width: 100%; max-width: 380px; text-align: center; }
+    .table-badge { display: inline-block; background: #eccc68; color: #2f3542; font-weight: 700; font-size: 14px; padding: 4px 12px; border-radius: 20px; margin-bottom: 15px; }
     .profile-wrapper { position: relative; display: inline-block; margin-bottom: 12px; }
     .profile-img { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; border: 3px solid #06C755; box-shadow: 0 4px 10px rgba(6, 199, 85, 0.2); }
     h2 { margin: 5px 0; font-size: 20px; font-weight: 700; color: #2f3542; }
@@ -36,6 +38,9 @@
 <body>
 
   <div class="card">
+    <!-- แสดงหมายเลขโต๊ะ -->
+    <div id="tableBadge" class="table-badge"><i class="fa-solid fa-utensils"></i> โต๊ะ: <span id="displayTableNo">-</span></div>
+
     <div id="loadingState">
       <div class="spinner"></div>
       <p id="loadingText" style="color: #0984e3; margin: 0; font-weight: bold; font-size: 14px;">กำลังเตรียมระบบ...</p>
@@ -55,7 +60,7 @@
         <label for="name">ชื่อ-นามสกุล / ชื่อเล่น</label>
         <input type="text" id="name" placeholder="ระบุชื่อของคุณ">
       </div>
-      <button type="button" id="btnSubmit" class="btn-submit" onclick="window.submitRegister()">สมัครสมาชิก</button>
+      <button type="button" id="btnSubmit" class="btn-submit" onclick="window.submitRegister()">สมัครสมาชิก & เข้าสู่โต๊ะ</button>
     </div>
 
     <div id="alreadyMemberState" style="display: none;">
@@ -76,7 +81,7 @@
   <script type="module">
     // นำเข้า Firebase SDK
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // กำหนดค่าคอนฟิกของ Firebase
     const firebaseConfig = {
@@ -95,16 +100,62 @@
 
     const LIFF_ID = "2011490016-dCbAfdtG"; 
     let lineUID = "";
+    let userProfileData = null;
     const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 24 24' fill='none' stroke='%23ced6e0' stroke-width='1.5'><circle cx='12' cy='8' r='4'/><path d='M20 21a8 8 0 0 0-16 0'/></svg>";
 
     const WEB_APP_URL = "https://pokemonmark91-stack.github.io/buffet-app/customer"; 
 
-    // ใช้ window. เพื่อให้ปุ่มในหน้า HTML สามารถเรียกใช้งานได้
-    window.goToCustomerPage = function() {
-      window.location.replace(`${WEB_APP_URL}?page=customer&uid=${lineUID}`);
+    // ดึงหมายเลขโต๊ะจาก URL (ตัวอย่าง URL: index.html?table=1 หรือ index.html?tableNo=1)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tableNo = urlParams.get('table') || urlParams.get('tableNo') || '1';
+    document.getElementById("displayTableNo").innerText = tableNo;
+
+    // 📌 ฟังก์ชันนำลูกค้าเข้าโต๊ะ (เช็คอินบันทึกชื่อลง Firestore ในโต๊ะนั้น)
+    async function joinTable(tableId, profile) {
+      if (!tableId || !profile) return;
+      const tableRef = doc(db, "tables", String(tableId));
+      
+      const memberObj = {
+        uid: profile.userId,
+        displayName: profile.displayName || "ลูกค้า",
+        pictureUrl: profile.pictureUrl || DEFAULT_AVATAR
+      };
+
+      try {
+        const tableSnap = await getDoc(tableRef);
+        if (tableSnap.exists()) {
+          const data = tableSnap.data();
+          let activeMembers = data.activeMembers || [];
+          
+          // กรองเพื่อไม่ให้มี uid ซ้ำ แล้วอัปเดตข้อมูลล่าสุดเข้าไป
+          activeMembers = activeMembers.filter(m => m.uid !== profile.userId);
+          activeMembers.push(memberObj);
+
+          await updateDoc(tableRef, {
+            activeMembers: activeMembers,
+            status: "occupied",
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          // หากยังไม่มี Document ของโต๊ะนี้ ให้สร้างขึ้นใหม่
+          await setDoc(tableRef, {
+            tableNo: String(tableId),
+            status: "occupied",
+            activeMembers: [memberObj],
+            createdAt: serverTimestamp()
+          });
+        }
+      } catch (err) {
+        console.error("Join Table Error:", err);
+      }
     }
 
-    // 📌 ฟังก์ชันสำหรับกดปุ่มสมัครสมาชิก (บันทึกเสร็จแล้วเด้งเข้าหน้า customer ทันที)
+    // 📌 ฟังก์ชันพาไปหน้าสั่งอาหาร (ส่งค่า uid และ table ไปด้วย)
+    window.goToCustomerPage = function() {
+      window.location.replace(`${WEB_APP_URL}?page=customer&uid=${lineUID}&table=${tableNo}`);
+    }
+
+    // 📌 ฟังก์ชันสมัครสมาชิก
     window.submitRegister = async function() {
       const phone = document.getElementById("phone").value;
       const name = document.getElementById("name").value;
@@ -123,17 +174,24 @@
       btn.innerText = "กำลังบันทึกข้อมูล...";
 
       try {
-        // บันทึกข้อมูลลง Firestore ใน collection ชื่อ "members"
+        // 1. บันทึกข้อมูลลง Firestore คอลเลกชัน "members"
         await setDoc(doc(db, "members", lineUID), {
           userId: lineUID,
           phone: phone,
           name: name,
+          displayName: userProfileData ? userProfileData.displayName : name,
+          pictureUrl: userProfileData ? userProfileData.pictureUrl : "",
           points: 0,
           role: "member",
           createdAt: serverTimestamp()
         });
         
-        // เด้งเข้าหน้า customer ทันที (พร้อมส่ง uid ไปด้วย)
+        // 2. นำผู้ใช้เข้าโต๊ะ
+        if (userProfileData) {
+          await joinTable(tableNo, userProfileData);
+        }
+
+        // 3. เด้งเข้าหน้า customer ทันที
         window.goToCustomerPage();
         
       } catch (err) {
@@ -167,6 +225,7 @@
         stepLog.innerText = "Step 3: กำลังดึงโปรไฟล์ LINE...";
         const profile = await liff.getProfile();
         lineUID = profile.userId;
+        userProfileData = profile;
 
         const profilePic = profile.pictureUrl || DEFAULT_AVATAR;
         document.getElementById("profileImage").src = profilePic;
@@ -175,8 +234,11 @@
         document.getElementById("memberDisplayName").innerText = profile.displayName;
         document.getElementById("name").value = profile.displayName;
 
-        stepLog.innerText = "Step 4: กำลังตรวจสอบฐานข้อมูล Firebase...";
+        stepLog.innerText = "Step 4: กำลังตรวจสอบฐานข้อมูล Firebase และเข้าสู่โต๊ะ...";
         
+        // บันทึก/อัปเดตสมาชิกเข้าโต๊ะทันที
+        await joinTable(tableNo, profile);
+
         // ตรวจสอบข้อมูลสมาชิกจาก Firestore
         const docRef = doc(db, "members", lineUID);
         const docSnap = await getDoc(docRef);
@@ -189,7 +251,7 @@
           document.getElementById("alreadyMemberState").style.display = "block";
           setTimeout(() => { window.goToCustomerPage(); }, 1500);
         } else {
-          // ถ้าไม่มีข้อมูล ให้แสดงฟอร์มสมัคร
+          // ถ้ายังไม่ได้เป็นสมาชิก ให้แสดงฟอร์มสมัคร
           document.getElementById("registerForm").style.display = "block";
         }
 
