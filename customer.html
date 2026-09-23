@@ -82,7 +82,7 @@
         </div>
     </div>
 
-    <!-- แถบล่างสุด: ซ่อนไว้ก่อนจนกว่าจะเลือกโต๊ะ -->
+    <!-- แถบล่างสุด -->
     <div id="bottomBar" class="bottom-bar justify-content-between align-items-center" style="display: none;">
         <div>
             <small class="text-muted d-block">รายการที่เลือก</small>
@@ -129,9 +129,7 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-2">ตรวจสอบรายการอาหารที่เลือกก่อนส่งเข้าครัว</p>
-                    <div id="confirmOrderList">
-                        <!-- รายการสรุปอาหารจะแสดงตรงนี้ -->
-                    </div>
+                    <div id="confirmOrderList"></div>
                 </div>
                 <div class="modal-footer border-0 pt-0 d-flex gap-2">
                     <button type="button" class="btn btn-light rounded-pill flex-fill fw-bold text-secondary" data-bs-dismiss="modal">แก้ไขรายการ</button>
@@ -189,10 +187,32 @@
         let allMenuItems = []; 
         let selectedCategory = 'all';
 
-        // 📌 ตัวแปรเก็บข้อมูล User
         let userUid = "";
         let currentUser = null;
-        let unsubscribeTable = null; // ตัวจัดการยกเลิก Real-time Listener
+        let unsubscribeTable = null; 
+        let unsubscribeGlobalSync = null;
+
+        // 📌 ฟังก์ชันตรวจสอบสมาชิกซ้ำ (เช็คทุกมิติ: uid, phone, displayName)
+        function isSameMember(m1, m2) {
+            if (!m1 || !m2) return false;
+            let getId = x => typeof x === 'object' ? (x.uid || x.id || "") : x;
+            let getPhone = x => typeof x === 'object' ? (x.phone || "") : "";
+            let getName = x => typeof x === 'object' ? (x.displayName || x.name || "") : x;
+
+            let id1 = String(getId(m1)).trim();
+            let id2 = String(getId(m2)).trim();
+            if (id1 && id2 && id1 === id2) return true;
+
+            let phone1 = String(getPhone(m1)).trim();
+            let phone2 = String(getPhone(m2)).trim();
+            if (phone1 && phone2 && phone1 === phone2) return true;
+
+            let name1 = String(getName(m1)).trim();
+            let name2 = String(getName(m2)).trim();
+            if (name1 && name2 && name1 === name2) return true;
+
+            return false;
+        }
 
         window.onload = async function() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -215,12 +235,14 @@
                 openTableSelectModal();
             } else {
                 tableNo = tNo;
-                // ถ้ามี uid และโต๊ะ ให้บันทึกชื่อเข้าโต๊ะทันที
                 if (currentUser) {
                     await joinTable(tableNo, currentUser);
                 }
                 activateSystem();
             }
+
+            // เริ่มระบบตรวจจับการถูกย้ายโต๊ะโดยพนักงานแบบ Real-time
+            listenGlobalUserTable();
         };
 
         function openTableSelectModal() {
@@ -246,9 +268,7 @@
                     if (status === "ไม่ว่าง" || status === "occupied" || status === "busy") {
                         let pkgText = "";
                         let pName = data.package || data.packageName || data.selectPackage || data.pkg || "";
-                        if (pName) {
-                            pkgText = " (" + pName + ")";
-                        }
+                        if (pName) pkgText = " (" + pName + ")";
                         optionsHtml += '<option value="' + doc.id + '">โต๊ะ ' + doc.id + pkgText + '</option>';
                         hasOccupiedTable = true;
                     }
@@ -265,29 +285,45 @@
             }
         }
 
-        // 📌 ฟังก์ชันเข้าร่วมโต๊ะ หรือย้ายโต๊ะ (อัปเดต activeMembers ใน Firestore แบบ Real-time)
+        // 📌 ฟังก์ชันเข้าร่วมโต๊ะ (กฎเด็ดขาด: 1 คน อยู่ได้แค่ 1 โต๊ะเท่านั้น)
         async function joinTable(newTableNo, profile) {
             if (!newTableNo || !profile) return;
             try {
-                // ถ้าเคยอยู่โต๊ะอื่นมาก่อน ให้ลบออกจากโต๊ะเดิมก่อน
-                if (tableNo && String(tableNo) !== String(newTableNo)) {
-                    const oldRef = db.collection("tables").doc(String(tableNo));
-                    const oldDoc = await oldRef.get();
-                    if (oldDoc.exists) {
-                        let members = oldDoc.data().activeMembers || [];
-                        members = members.filter(m => String(m.uid || m.phone) !== String(profile.uid || profile.phone));
-                        await oldRef.update({ activeMembers: members });
-                    }
-                }
+                // 1. สแกนและลบโปรไฟล์นี้ออกจากทุกโต๊ะก่อน
+                const snap = await db.collection("tables").get();
+                const batch = db.batch();
+                let hasChanges = false;
 
-                // เพิ่มชื่อเข้าโต๊ะใหม่
+                snap.forEach(doc => {
+                    let data = doc.data() || {};
+                    let members = data.activeMembers || [];
+                    if (Array.isArray(members) && members.length > 0) {
+                        let cleanMembers = members.filter(m => !isSameMember(m, profile));
+                        if (cleanMembers.length !== members.length) {
+                            batch.update(doc.ref, { activeMembers: cleanMembers });
+                            hasChanges = true;
+                        }
+                    }
+                });
+
+                if (hasChanges) await batch.commit();
+
+                // 2. ใส่ชื่อลงโต๊ะใหม่
                 const newRef = db.collection("tables").doc(String(newTableNo));
+                const newDoc = await newRef.get();
+                let currentMembers = (newDoc.exists && newDoc.data().activeMembers) ? newDoc.data().activeMembers : [];
+                
+                currentMembers = currentMembers.filter(m => !isSameMember(m, profile));
+                currentMembers.push({
+                    uid: profile.uid || "",
+                    displayName: profile.displayName || profile.name || "ลูกค้า",
+                    pictureUrl: profile.pictureUrl || profile.picture || "",
+                    phone: profile.phone || ""
+                });
+
                 await newRef.set({
-                    activeMembers: firebase.firestore.FieldValue.arrayUnion({
-                        uid: profile.uid || "",
-                        displayName: profile.displayName || profile.name || "ลูกค้า",
-                        pictureUrl: profile.pictureUrl || profile.picture || ""
-                    })
+                    status: "ไม่ว่าง",
+                    activeMembers: currentMembers
                 }, { merge: true });
 
             } catch (err) {
@@ -299,12 +335,10 @@
             let selectVal = document.getElementById('inputTableNo').value;
             if (!selectVal) return alert("กรุณาเลือกหมายเลขโต๊ะจากรายการครับ");
             
-            let oldTable = tableNo;
             tableNo = selectVal;
             cart = {};
             document.getElementById('cartCount').innerText = '0';
 
-            // ถ้าผู้ใช้เปลี่ยนโต๊ะและมีโปรไฟล์ ให้ย้ายชื่อตามไปด้วย
             if (currentUser) {
                 await joinTable(tableNo, currentUser);
             }
@@ -316,6 +350,27 @@
             activateSystem();
         }
 
+        // 📌 ฟังการย้ายโต๊ะโดยพนักงาน ( Real-time Auto-Sync )
+        function listenGlobalUserTable() {
+            if (!currentUser) return;
+            if (unsubscribeGlobalSync) unsubscribeGlobalSync();
+
+            unsubscribeGlobalSync = db.collection("tables").onSnapshot(snapshot => {
+                snapshot.forEach(doc => {
+                    let data = doc.data() || {};
+                    let members = data.activeMembers || [];
+                    let found = members.some(m => isSameMember(m, currentUser));
+                    
+                    // ถ้าพบว่าโปรไฟล์ลูกค้าถูกพนักงานย้ายไปโต๊ะใหม่
+                    if (found && String(doc.id) !== String(tableNo)) {
+                        tableNo = String(doc.id);
+                        document.getElementById('displayTableNo').innerText = tableNo;
+                        activateSystem(); // อัปเดตหน้าจอทันที
+                    }
+                });
+            });
+        }
+
         async function activateSystem() {
             document.getElementById('displayTableNo').innerText = tableNo;
             document.getElementById('closeTableModalBtn').classList.remove('d-none');
@@ -323,7 +378,6 @@
             document.getElementById('categoryContainer').style.display = 'flex';
             document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดข้อมูลแพ็กเกจและเมนู...</div>";
 
-            // 📌 เรียกใช้ฟังก์ชันฟังข้อมูลรายชื่อสมาชิกในโต๊ะแบบ Real-time
             listenTableMembers(tableNo);
 
             try {
@@ -358,7 +412,7 @@
             }
         }
 
-        // 📌 ฟังก์ชันดึงข้อมูลสมาชิกในโต๊ะแบบ Real-time
+        // 📌 ฟังข้อมูลรายชื่อเพื่อนร่วมโต๊ะแบบ Real-time
         function listenTableMembers(tNo) {
             if (unsubscribeTable) unsubscribeTable(); 
             
@@ -376,8 +430,8 @@
                             membersList.innerHTML = ''; 
                             
                             members.forEach(m => {
-                                let imgUrl = m.pictureUrl || m.picture || "https://placehold.co/40x40?text=U";
-                                let displayName = m.displayName || m.name || "ลูกค้า";
+                                let imgUrl = (typeof m === 'object' && (m.pictureUrl || m.picture)) ? (m.pictureUrl || m.picture) : "https://placehold.co/40x40?text=U";
+                                let displayName = (typeof m === 'object') ? (m.displayName || m.name || "ลูกค้า") : String(m);
                                 
                                 membersList.innerHTML += `
                                     <div class="text-center" style="min-width: 55px;">
@@ -632,9 +686,7 @@
             const billArea = document.getElementById('billArea');
             billArea.innerHTML = "<div class='text-center my-3 text-muted'>กำลังดึงข้อมูลบิล...</div>";
 
-            if (unsubscribeBill) {
-                unsubscribeBill();
-            }
+            if (unsubscribeBill) unsubscribeBill();
 
             unsubscribeBill = db.collection("tables").doc(String(tableNo)).collection("orders")
                 .orderBy("timestamp", "asc")
