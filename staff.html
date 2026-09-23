@@ -75,19 +75,17 @@
         </div>
     </div>
 
-    <!-- ส่วนที่ 3: จัดการโต๊ะที่เลือก (สั่งอาหาร / คิดเงิน) -->
+    <!-- ส่วนที่ 3: จัดการโต๊ะที่เลือก -->
     <div class="card p-3 shadow-sm mb-4 bg-white border-primary">
         <h5 class="fw-bold text-primary mb-3">🛠️ จัดการโต๊ะที่เลือก</h5>
         <input type="text" id="manageTNo" class="form-control mb-2 bg-light fw-bold text-center" readonly value="-- กรุณาคลิกเลือกโต๊ะจากผัง --">
 
-        <!-- ปุ่ม สมาชิกในโต๊ะ / ย้ายโต๊ะ / ยกเลิกโต๊ะ -->
         <div class="d-flex gap-2 mb-3">
             <button class="btn btn-sm btn-outline-success flex-fill fw-bold" onclick="openTableMembersModal()">👥 สมาชิกในโต๊ะ</button>
             <button class="btn btn-sm btn-outline-secondary flex-fill fw-bold" onclick="openMoveTableModal()">🔄 ย้ายโต๊ะ</button>
             <button class="btn btn-sm btn-outline-danger flex-fill fw-bold" onclick="openVoidTableModal()">❌ ยกเลิกโต๊ะ</button>
         </div>
 
-        <!-- เพิ่มลูกค้า -->
         <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #dfe4ea; border-radius: 8px; background: #f1f2f6;">
             <label style="font-weight: bold; color: #2f3542; margin-bottom: 8px; display: block;">👥 ลูกค้ามาเพิ่ม</label>
             <div style="display: flex; gap: 10px; align-items: center;">
@@ -99,7 +97,6 @@
             </div>
         </div>
 
-        <!-- สั่งเพิ่มเตา / น้ำซุป -->
         <div class="p-2 bg-light rounded border mb-3">
             <h6 class="fw-bold small mb-2">🔥 สั่งเพิ่มเตา / น้ำซุป</h6>
             <select id="stoveType" class="form-select form-select-sm mb-2" onchange="toggleSoup()">
@@ -116,7 +113,6 @@
             <button class="btn btn-warning btn-sm w-100 fw-bold mt-2" onclick="orderStove()">🔥 ส่งรายการเตา/ซุป เข้าครัว</button>
         </div>
 
-        <!-- สั่งอาหาร -->
         <div class="p-2 bg-light rounded border mb-3">
             <h6 class="fw-bold small mb-2">🍲 สั่งอาหาร / บริการเสริม</h6>
             <select id="menuCategory" class="form-select form-select-sm mb-2" onchange="renderMenuGrid()">
@@ -126,16 +122,11 @@
             <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="submitOrder()">📤 ส่งรายการเข้าครัว</button>
         </div>
 
-        <!-- ปุ่มสรุปยอดบิล -->
         <button class="btn btn-warning w-100 fw-bold text-dark" onclick="checkBill()">🧾 สรุปยอดบิล / ชำระเงิน</button>
         <div id="resultArea"></div>
     </div>
 
-    <!-- ---------------------------------------------------- -->
-    <!-- ส่วนของ Modal ต่างๆ -->
-    <!-- ---------------------------------------------------- -->
-    
-    <!-- Modal: จัดการสมาชิกในโต๊ะ -->
+    <!-- Modals -->
     <div class="modal fade" id="tableMembersModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -155,7 +146,6 @@
         </div>
     </div>
 
-    <!-- Modal: ระบบสมาชิกและสะสมแต้ม -->
     <div class="modal fade" id="memberPointsModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -212,7 +202,6 @@
         </div>
     </div>
 
-    <!-- Modal: เปิดกะ -->
     <div class="modal fade" id="openShiftModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -238,7 +227,6 @@
         </div>
     </div>
 
-    <!-- Modal: ปิดกะ -->
     <div class="modal fade" id="closeShiftModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -263,7 +251,6 @@
         </div>
     </div>
 
-    <!-- Modal: บันทึกเงินเข้า-ออก -->
     <div class="modal fade" id="cashFlowModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -296,7 +283,6 @@
         </div>
     </div>
 
-    <!-- Modal: ย้ายโต๊ะ -->
     <div class="modal fade" id="moveTableModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -322,7 +308,6 @@
         </div>
     </div>
 
-    <!-- Modal: ยกเลิกโต๊ะ -->
     <div class="modal fade" id="voidTableModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -344,7 +329,6 @@
         </div>
     </div>
 
-    <!-- Modal: ประวัติบิลประจำกะ -->
     <div class="modal fade" id="billHistoryModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
@@ -374,7 +358,6 @@
         </div>
     </div>
 
-    <!-- Modal: แยกชำระเงิน -->
     <div class="modal fade" id="splitBillModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -386,13 +369,10 @@
                     <div class="alert alert-info text-center py-2 mb-3">
                         <strong style="font-size: 16px;">ยอดรวมทั้งสิ้น: <span id="splitTotalAmount" class="text-danger fw-bold">0</span> บาท</strong>
                     </div>
-
                     <div id="billListContainer"></div>
-
                     <button type="button" class="btn btn-outline-primary btn-sm w-100 mb-3 fw-bold" onclick="addBillRow()">
                         + เพิ่มรายการบิลย่อย
                     </button>
-
                     <div class="p-2 border rounded bg-light mb-3 small">
                         <div class="d-flex justify-content-between">
                             <span>รวมยอดแยกชำระ:</span>
@@ -506,17 +486,13 @@
             let memberId = "";
 
             if (typeof m === 'object' && m !== null) {
-                // ดึงชื่อรองรับทั้ง displayName, name และ phone
                 name = m.displayName || m.name || m.phone || "สมาชิก";
-                
-                // ดึงรูปโปรไฟล์
                 let imgUrl = m.pictureUrl || m.picture || m.avatar || "";
                 if (imgUrl) {
                     imgHtml = `<img src="${imgUrl}" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" class="me-2 border">`;
                 } else {
                     imgHtml = `<span class="fs-4 me-2">👤</span>`;
                 }
-                
                 memberId = m.uid || m.phone || m.id || idx;
             } else {
                 name = String(m);
@@ -547,7 +523,6 @@
             if(docSnap.exists) {
                 let members = docSnap.data().activeMembers || [];
                 
-                // กรองเอาเฉพาะคนที่ไม่ได้ถูกลบออก
                 members = members.filter((m, idx) => {
                     if (typeof m === 'object' && m !== null) {
                         let id = m.uid || m.phone || m.id;
@@ -561,7 +536,7 @@
                 await docRef.update({ activeMembers: members });
                 alert("เตะสมาชิกออกจากโต๊ะเรียบร้อย!");
                 renderTableMembers(tNo, members);
-                loadDashboard(); // อัปเดตผังโต๊ะทันที
+                loadDashboard(); 
             }
         } catch(err) {
             alert("เกิดข้อผิดพลาด: " + err.message);
@@ -889,7 +864,7 @@
             });
             await batch.commit();
 
-            await db.collection("tables").doc(oldTable).update({ status: "ว่าง" });
+            await db.collection("tables").doc(oldTable).update({ status: "ว่าง", activeMembers: [] });
 
             alert("✅ ย้ายโต๊ะสำเร็จ!");
             moveTableModalObj.hide();
@@ -1021,7 +996,6 @@
                 let tableKey = String(t.tableNo || doc.id);
                 let st = String(t.status || "").toLowerCase();
                 
-                // เช็กสถานะว่าโต๊ะไม่ว่างหรือไม่ (ครอบคลุมทุกเงื่อนไข)
                 let isOccupied = (st === "ไม่ว่าง" || st === "occupied" || st === "busy") || 
                                  (t.activeMembers && t.activeMembers.length > 0) ||
                                  ((parseInt(t.adults) || 0) + (parseInt(t.children) || 0) > 0) ||
@@ -1045,7 +1019,6 @@
                 var statusText = "ว่าง";
                 if (isActive) {
                     var tData = tableDataMap[tNo] || {};
-                    // รวมจำนวนคนจากผู้ใหญ่ + เด็ก
                     var total = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
                     if (total === 0) total = parseInt(tData.totalPeople) || 0;
                     if (total === 0 && tData.activeMembers) total = tData.activeMembers.length;
