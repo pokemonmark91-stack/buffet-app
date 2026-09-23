@@ -452,6 +452,9 @@
         fetchMenuList();
     };
 
+        // 1. เปิดหน้าจัดการสมาชิกแบบเรียลไทม์ (Real-time Sync)
+    var unsubscribeMembers = null;
+
     async function openTableMembersModal() {
         var tNo = getActiveTable();
         if(!tNo) return alert("กรุณาเลือกโต๊ะทางด้านซ้ายมือก่อนครับ");
@@ -460,16 +463,73 @@
         document.getElementById('tableMembersList').innerHTML = '<li class="list-group-item text-center text-muted small py-3">กำลังโหลดข้อมูล...</li>';
         tableMembersModalObj.show();
 
-        try {
-            const doc = await db.collection("tables").doc(tNo).get();
+        // ถ้ายกเลิกตัวฟังเก่าก่อนเปิดอันใหม่
+        if (unsubscribeMembers) unsubscribeMembers();
+
+        // ใช้ onSnapshot ดึงข้อมูลสมาชิกแบบเรียลไทม์
+        unsubscribeMembers = db.collection("tables").doc(String(tNo)).onSnapshot(function(doc) {
             if(doc.exists) {
-                const members = doc.data().activeMembers || [];
+                var members = doc.data().activeMembers || [];
                 renderTableMembers(tNo, members);
             } else {
                 document.getElementById('tableMembersList').innerHTML = '<li class="list-group-item text-center text-danger small py-3">ไม่พบข้อมูลโต๊ะ</li>';
             }
-        } catch(err) {
+        }, function(err) {
             document.getElementById('tableMembersList').innerHTML = '<li class="list-group-item text-center text-danger small py-3">เกิดข้อผิดพลาด: ' + err.message + '</li>';
+        });
+    }
+
+    // 2. ฟังก์ชันย้ายโต๊ะ (ย้ายทั้งออเดอร์ สมาชิก และจำนวนคน)
+    async function confirmMoveTable() {
+        var oldTable = document.getElementById('moveOldTable').value;
+        var newTable = document.getElementById('moveNewTable').value.trim();
+        if(!newTable) return alert("กรุณาระบุเลขโต๊ะใหม่");
+
+        try {
+            const oldTableRef = db.collection("tables").doc(String(oldTable));
+            const newTableRef = db.collection("tables").doc(String(newTable));
+            
+            const oldTableDoc = await oldTableRef.get();
+            if (!oldTableDoc.exists) return alert("ไม่พบข้อมูลโต๊ะเดิม");
+
+            const oldData = oldTableDoc.data() || {};
+            const ordersSnapshot = await oldTableRef.collection("orders").get();
+            
+            // คัดลอกข้อมูลทั้งหมด (รวมถึง activeMembers, adults, children) ไปยังโต๊ะใหม่
+            await newTableRef.set({
+                tableNo: String(newTable),
+                status: "ไม่ว่าง",
+                packagePrice: oldData.packagePrice || 0,
+                adults: oldData.adults || 0,
+                children: oldData.children || 0,
+                totalPeople: oldData.totalPeople || 0,
+                activeMembers: oldData.activeMembers || []
+            }, { merge: true });
+
+            // ย้ายรายการอาหาร
+            const batch = db.batch();
+            ordersSnapshot.forEach(doc => {
+                const newOrderRef = newTableRef.collection("orders").doc(doc.id);
+                batch.set(newOrderRef, doc.data());
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            // ล้างข้อมูลโต๊ะเดิมให้เป็นโต๊ะว่าง
+            await oldTableRef.update({ 
+                status: "ว่าง", 
+                activeMembers: [],
+                adults: 0,
+                children: 0,
+                totalPeople: 0
+            });
+
+            alert("✅ ย้ายโต๊ะจาก " + oldTable + " ไปโต๊ะ " + newTable + " สำเร็จ!");
+            moveTableModalObj.hide();
+            loadDashboard();
+            selectTable(newTable);
+        } catch (err) {
+            alert("เกิดข้อผิดพลาดในการย้ายโต๊ะ: " + err.message);
         }
     }
 
