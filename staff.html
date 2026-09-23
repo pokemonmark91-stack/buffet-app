@@ -990,57 +990,55 @@
     }
 
         async function loadDashboard() {
-    try {
-        const snapshot = await db.collection("tables").get();
-        currentPackageMap = {};
-        tableDataMap = {};
-        var activeList = [];
+        try {
+            const snapshot = await db.collection("tables").get();
+            currentPackageMap = {};
+            tableDataMap = {};
+            var activeList = [];
 
-        snapshot.forEach(doc => {
-            const t = doc.data() || {};
-            let tableKey = String(t.tableNo || doc.id);
-            let st = String(t.status || "").toLowerCase();
-            
-            let isOccupied = (st === "ไม่ว่าง" || st === "occupied" || st === "busy") || 
-                             (t.activeMembers && t.activeMembers.length > 0) ||
-                             ((parseInt(t.adults) || 0) + (parseInt(t.children) || 0) > 0) ||
-                             (parseInt(t.totalPeople) || 0) > 0;
-
-            if (isOccupied) {
-                activeList.push(tableKey);
-                currentPackageMap[tableKey] = t.packagePrice;
-                tableDataMap[tableKey] = t;
-            }
-        });
-
-        var grid = document.getElementById('tableGrid');
-        grid.innerHTML = "";
-        let gridHtml = ""; // สะสม HTML ไว้ก่อนแล้ววนลูปแสดงผลทีเดียว (เพิ่มประสิทธิภาพ)
-        
-        for(var i = 1; i <= currentTableCount; i++) {
-            var tNo = i.toString();
-            var isActive = activeList.includes(tNo);
-            var cardClass = isActive ? "bg-active text-danger" : "bg-free text-success";
-            
-            var statusText = "ว่าง";
-            if (isActive) {
-                var tData = tableDataMap[tNo] || {};
-                var total = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
-                if (total === 0) total = parseInt(tData.totalPeople) || 0;
-                if (total === 0 && tData.activeMembers) total = tData.activeMembers.length;
+            snapshot.forEach(doc => {
+                const t = doc.data() || {};
+                let tableKey = String(t.tableNo || doc.id);
+                let st = String(t.status || "").toLowerCase();
                 
-                // แก้ไขจุดนี้: ใส่ Backtick (`) ครอบ String และ HTML tag
-                statusText = total > 0 ? <span class="fw-bold fs-6">👤 ${total} คน</span> : "ไม่ว่าง";
+                let isOccupied = (st === "ไม่ว่าง" || st === "occupied" || st === "busy") || 
+                                 (t.activeMembers && t.activeMembers.length > 0) ||
+                                 ((parseInt(t.adults) || 0) + (parseInt(t.children) || 0) > 0) ||
+                                 (parseInt(t.totalPeople) || 0) > 0;
+
+                if (isOccupied) {
+                    activeList.push(tableKey);
+                    currentPackageMap[tableKey] = t.packagePrice;
+                    tableDataMap[tableKey] = t;
+                }
+            });
+
+            var grid = document.getElementById('tableGrid');
+            var gridHtml = "";
+            
+            for(var i = 1; i <= currentTableCount; i++) {
+                var tNo = i.toString();
+                var isActive = activeList.includes(tNo);
+                var cardClass = isActive ? "bg-active text-danger" : "bg-free text-success";
+                
+                var statusText = "ว่าง";
+                if (isActive) {
+                    var tData = tableDataMap[tNo] || {};
+                    var total = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
+                    if (total === 0) total = parseInt(tData.totalPeople) || 0;
+                    if (total === 0 && tData.activeMembers) total = tData.activeMembers.length;
+                    
+                    statusText = total > 0 ? '<span class="fw-bold fs-6">👤 ' + total + ' คน</span>' : "ไม่ว่าง";
+                }
+
+                gridHtml += '<div class="col-3"><div class="card table-card text-center p-2 border ' + cardClass + '" onclick="selectTable(\'' + tNo + '\')"><div class="fw-bold">โต๊ะ ' + tNo + '</div><div style="font-size: 12px; margin-top:2px;">' + statusText + '</div></div></div>';
             }
 
-            gridHtml += `<div class="col-3"><div class="card table-card text-center p-2 border ${cardClass}" onclick="selectTable('${tNo}')"><div class="fw-bold">โต๊ะ ${tNo}</div><div style="font-size: 12px; margin-top:2px;">${statusText}</div></div></div>`;
+            grid.innerHTML = gridHtml;
+        } catch (err) {
+            console.error("Error loading dashboard:", err);
         }
-
-        grid.innerHTML = gridHtml; // Render เข้า DOM เพียงครั้งเดียว
-    } catch (err) {
-        console.error("Error loading dashboard:", err);
     }
-}
 
 function selectTable(tNo) {
     document.getElementById('tNo').value = tNo;
