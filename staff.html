@@ -135,7 +135,7 @@
     <!-- ส่วนของ Modal ต่างๆ -->
     <!-- ---------------------------------------------------- -->
     
-    <!-- Modal: จัดการสมาชิกในโต๊ะ (ใหม่) -->
+    <!-- Modal: จัดการสมาชิกในโต๊ะ -->
     <div class="modal fade" id="tableMembersModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -157,7 +157,6 @@
 
     <!-- Modal: ระบบสมาชิกและสะสมแต้ม -->
     <div class="modal fade" id="memberPointsModal" tabindex="-1" aria-hidden="true">
-        <!-- โค้ดเดิมของ Modal สมาชิก -->
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
@@ -172,8 +171,6 @@
                             <button class="btn btn-primary" onclick="searchMember()">🔍 ค้นหา</button>
                         </div>
                     </div>
-
-                    <!-- พื้นที่แสดงข้อมูลสมาชิก -->
                     <div id="memberInfoSection" class="p-3 bg-light border rounded mb-2" style="display: none;">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="small text-muted">ชื่อลูกค้า:</span>
@@ -383,7 +380,7 @@
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title fw-bold">💳 แยกชำระเงิน (โต๊ะ <span id="splitTableNo">-</span>)</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info text-center py-2 mb-3">
@@ -438,16 +435,14 @@
     }
     const db = firebase.firestore();
 
-    // ตัวแปร Global
     var currentTableCount = 10;
     var currentPackageMap = {};
-    var tableDataMap = {}; // ใหม่: เก็บข้อมูลโต๊ะเพื่อดึงจำนวนคน
+    var tableDataMap = {};
     var globalMenus = []; 
     var currentPkgPrice = ""; 
     var totalTableAmount = 0;
     var billCounter = 0;
     
-    // ตัวแปร Modals
     var currentShift = null; 
     var splitModalObj = null;
     var openShiftModalObj = null;
@@ -457,7 +452,7 @@
     var voidTableModalObj = null;
     var billHistoryModalObj = null;
     var memberPointsModalObj = null;
-    var tableMembersModalObj = null; // ใหม่: Modal จัดการสมาชิกในโต๊ะ
+    var tableMembersModalObj = null;
 
     window.onload = function() {
         splitModalObj = new bootstrap.Modal(document.getElementById('splitBillModal'));
@@ -477,9 +472,6 @@
         fetchMenuList();
     };
 
-    /* ---------------------------------------------------- */
-    /* --- ระบบจัดการสมาชิกร่วมโต๊ะ (ดึงจาก activeMembers) - */
-    /* ---------------------------------------------------- */
     async function openTableMembersModal() {
         var tNo = getActiveTable();
         if(!tNo) return alert("กรุณาเลือกโต๊ะทางด้านซ้ายมือก่อนครับ");
@@ -509,21 +501,19 @@
         }
         var html = '';
         members.forEach((m) => {
-            // รองรับทั้งกรณีข้อมูลเป็น Object {phone, name} หรือเป็น String (เบอร์โทรอย่างเดียว)
             var phoneVal = typeof m === 'object' ? m.phone : m;
-            // แก้ไข: ใส่ Backtick (`) ครอบข้อความให้ถูกต้อง
-            var display = typeof m === 'object' ? (m.name ? ${m.name} (${m.phone}) : m.phone) : m;
+            var display = typeof m === 'object' ? (m.name ? m.name + " (" + m.phone + ")" : m.phone) : m;
             
-            html += `<li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div class="fw-bold text-primary">👤 ${display}</div>
-                        <button class="btn btn-sm btn-outline-danger" onclick="removeMemberFromTable('${tNo}', '${phoneVal}')">ลบออก</button>
-                     </li>`;
+            html += '<li class="list-group-item d-flex justify-content-between align-items-center">' +
+                        '<div class="fw-bold text-primary">👤 ' + display + '</div>' +
+                        '<button class="btn btn-sm btn-outline-danger" onclick="removeMemberFromTable(\'' + tNo + '\', \'' + phoneVal + '\')">ลบออก</button>' +
+                     '</li>';
         });
         list.innerHTML = html;
     }
 
     async function removeMemberFromTable(tNo, phoneToRemove) {
-        if(!confirm(`⚠️ ยืนยันการเตะเบอร์ ${phoneToRemove} ออกจากโต๊ะ ${tNo}?`)) return;
+        if(!confirm("⚠️ ยืนยันการเตะเบอร์ " + phoneToRemove + " ออกจากโต๊ะ " + tNo + "?")) return;
         
         try {
             const docRef = db.collection("tables").doc(tNo);
@@ -537,16 +527,14 @@
                 
                 await docRef.update({ activeMembers: members });
                 alert("เตะสมาชิกออกจากโต๊ะเรียบร้อย!");
-                renderTableMembers(tNo, members); // โหลดรายการใหม่
+                renderTableMembers(tNo, members);
+                loadDashboard();
             }
         } catch(err) {
             alert("เกิดข้อผิดพลาด: " + err.message);
         }
     }
 
-    /* ---------------------------------------------------- */
-    /* --- ฟังก์ชันระบบสมาชิก & สะสมแต้มหลัก ---------------- */
-    /* ---------------------------------------------------- */
     function openMemberModal() {
         document.getElementById('memberPhone').value = "";
         document.getElementById('memberInfoSection').style.display = "none";
@@ -651,9 +639,6 @@
         }
     }
 
-    /* ---------------------------------------------------- */
-    /* --- ระบบกะ (Shift Control) ----------------------- */
-    /* ---------------------------------------------------- */
     async function checkCurrentShift() {
         try {
             const snapshot = await db.collection("shifts").where("status", "==", "open").limit(1).get();
@@ -730,9 +715,6 @@
         }
     }
 
-    /* ---------------------------------------------------- */
-    /* --- ระบบเงินเข้า-ออก (Petty Cash) ------------------ */
-    /* ---------------------------------------------------- */
     function openCashFlowModal() {
         if (!currentShift) return alert("กรุณาเปิดกะการทำงานก่อนครับ");
         cashFlowModalObj.show();
@@ -796,9 +778,6 @@
         }
     }
 
-    /* ---------------------------------------------------- */
-    /* --- ระบบจัดการโต๊ะ & ออเดอร์ ------------------------ */
-    /* ---------------------------------------------------- */
     async function openNewTable() {
         var tNo = document.getElementById('tNo').value.trim();
         var pplAdult = parseInt(document.getElementById('pplAdult').value) || 0;
@@ -901,7 +880,7 @@
             ordersSnapshot.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
 
-            await db.collection("tables").doc(tNo).update({ status: "ว่าง", activeMembers: [] }); // รีเซ็ตสมาชิก
+            await db.collection("tables").doc(tNo).update({ status: "ว่าง", activeMembers: [] });
 
             await db.collection("void_logs").add({
                 tableNo: tNo,
@@ -921,9 +900,6 @@
         }
     }
 
-    /* ---------------------------------------------------- */
-    /* --- โหลดข้อมูล Dashboard & ข้อมูลโต๊ะ -------------- */
-    /* ---------------------------------------------------- */
     async function fetchMenuList() {
         try {
             const snapshot = await db.collection("menu").get();
@@ -1004,7 +980,7 @@
         try {
             const snapshot = await db.collection("tables").get();
             currentPackageMap = {};
-            tableDataMap = {}; // รีเซ็ตข้อมูลที่เก็บไว้
+            tableDataMap = {};
             var activeList = [];
 
             snapshot.forEach(doc => {
@@ -1024,7 +1000,6 @@
                 var isActive = activeList.includes(tNo);
                 var cardClass = isActive ? "bg-active text-danger" : "bg-free text-success";
                 
-                // คำนวณจำนวนคนเพื่อแสดงผลบนหน้าจอ
                 var statusText = "ว่าง";
                 if (isActive) {
                     var tData = tableDataMap[tNo];
@@ -1033,8 +1008,7 @@
                         total = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
                         if (total === 0) total = parseInt(tData.totalPeople) || 0;
                     }
-                    // แสดงจำนวนลูกค้า แทนคำว่า "ไม่ว่าง"
-                    statusText = total > 0 ? <span class="fw-bold fs-6">👤 ${total} คน</span> : "ไม่ว่าง";
+                    statusText = total > 0 ? '<span class="fw-bold fs-6">👤 ' + total + ' คน</span>' : "ไม่ว่าง";
                 }
 
                 grid.innerHTML += '<div class="col-3"><div class="card table-card text-center p-2 border ' + cardClass + '" onclick="selectTable(\'' + tNo + '\')"><div class="fw-bold">โต๊ะ ' + tNo + '</div><div style="font-size: 12px; margin-top:2px;">' + statusText + '</div></div></div>';
@@ -1195,9 +1169,6 @@
         checkBill();
     }
 
-    /* ---------------------------------------------------- */
-    /* --- เช็กบิล & ชำระเงิน ------------------------------ */
-    /* ---------------------------------------------------- */
     async function checkBill() {
         var tNo = getActiveTable();
         if(!tNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
@@ -1348,7 +1319,6 @@
                 ordersSnapshot.forEach(doc => batch.delete(doc.ref));
                 await batch.commit();
 
-                // ปรับสถานะโต๊ะเป็นว่าง และล้างสมาชิกร่วมโต๊ะ
                 await db.collection("tables").doc(tNo).update({ status: "ว่าง", activeMembers: [] });
 
                 alert("🔒 ชำระเงินสำเร็จ และปิดโต๊ะเรียบร้อย!");
@@ -1391,9 +1361,6 @@
         }
     }
 
-    /* ---------------------------------------------------- */
-    /* --- แยกชำระเงิน ------------------------------------ */
-    /* ---------------------------------------------------- */
     function openSplitBillModal(tableNo, totalAmount) {
         document.getElementById('splitTableNo').textContent = tableNo;
         document.getElementById('splitTotalAmount').textContent = totalAmount.toLocaleString();
@@ -1491,7 +1458,7 @@
             ordersSnapshot.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
 
-            await db.collection("tables").doc(tNo).update({ status: "ว่าง", activeMembers: [] }); // รีเซ็ตสมาชิกด้วย
+            await db.collection("tables").doc(tNo).update({ status: "ว่าง", activeMembers: [] });
 
             alert("✅ บันทึกการชำระเงินและปิดโต๊ะเรียบร้อย!");
             splitModalObj.hide();
@@ -1504,9 +1471,6 @@
         }
     }
 
-    /* ---------------------------------------------------- */
-    /* --- เพิ่มลูกค้า ------------------------------------- */
-    /* ---------------------------------------------------- */
     async function addPerson() {
         var tNo = typeof getActiveTable === 'function' ? getActiveTable() : null;
         if (!tNo) return alert("กรุณาเลือกโต๊ะที่ต้องการเพิ่มลูกค้าก่อนครับ");
@@ -1563,7 +1527,7 @@
             document.getElementById('addChildQty').value = 0;
             
             checkBill();
-            loadDashboard(); // รีเฟรชแดชบอร์ดให้โชว์จำนวนคนใหม่ทันที
+            loadDashboard();
 
         } catch (err) {
             console.error("Error adding person:", err);
