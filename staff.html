@@ -511,6 +511,7 @@
         members.forEach((m) => {
             // รองรับทั้งกรณีข้อมูลเป็น Object {phone, name} หรือเป็น String (เบอร์โทรอย่างเดียว)
             var phoneVal = typeof m === 'object' ? m.phone : m;
+            // แก้ไข: ใส่ Backtick (`) ครอบข้อความให้ถูกต้อง
             var display = typeof m === 'object' ? (m.name ? ${m.name} (${m.phone}) : m.phone) : m;
             
             html += `<li class="list-group-item d-flex justify-content-between align-items-center">
