@@ -500,35 +500,68 @@
             return;
         }
         var html = '';
-        members.forEach((m) => {
-            var phoneVal = typeof m === 'object' ? m.phone : m;
-            var display = typeof m === 'object' ? (m.name ? m.name + " (" + m.phone + ")" : m.phone) : m;
-            
-            html += '<li class="list-group-item d-flex justify-content-between align-items-center">' +
-                        '<div class="fw-bold text-primary">👤 ' + display + '</div>' +
-                        '<button class="btn btn-sm btn-outline-danger" onclick="removeMemberFromTable(\'' + tNo + '\', \'' + phoneVal + '\')">ลบออก</button>' +
-                     '</li>';
+        members.forEach((m, idx) => {
+            let name = "";
+            let imgHtml = "";
+            let memberId = "";
+
+            if (typeof m === 'object' && m !== null) {
+                // ดึงชื่อรองรับทั้ง displayName, name และ phone
+                name = m.displayName || m.name || m.phone || "สมาชิก";
+                
+                // ดึงรูปโปรไฟล์
+                let imgUrl = m.pictureUrl || m.picture || m.avatar || "";
+                if (imgUrl) {
+                    imgHtml = `<img src="${imgUrl}" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" class="me-2 border">`;
+                } else {
+                    imgHtml = `<span class="fs-4 me-2">👤</span>`;
+                }
+                
+                memberId = m.uid || m.phone || m.id || idx;
+            } else {
+                name = String(m);
+                imgHtml = `<span class="fs-4 me-2">👤</span>`;
+                memberId = String(m);
+            }
+
+            html += `<li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                        <div class="d-flex align-items-center fw-bold text-dark">
+                            ${imgHtml}
+                            <div>
+                                <div>${name}</div>
+                                ${(m.phone && m.phone !== name) ? <small class="text-muted d-block" style="font-size:11px;">${m.phone}</small> : ''}
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="removeMemberFromTable('${tNo}', '${memberId}', ${idx})">ลบออก</button>
+                     </li>`;
         });
         list.innerHTML = html;
     }
 
-    async function removeMemberFromTable(tNo, phoneToRemove) {
-        if(!confirm("⚠️ ยืนยันการเตะเบอร์ " + phoneToRemove + " ออกจากโต๊ะ " + tNo + "?")) return;
+    async function removeMemberFromTable(tNo, memberId, index) {
+        if(!confirm("⚠️ ยืนยันการเตะสมาชิกออกจากโต๊ะ " + tNo + "?")) return;
         
         try {
-            const docRef = db.collection("tables").doc(tNo);
+            const docRef = db.collection("tables").doc(String(tNo));
             const docSnap = await docRef.get();
             if(docSnap.exists) {
                 let members = docSnap.data().activeMembers || [];
-                members = members.filter(m => {
-                    let p = typeof m === 'object' ? m.phone : m;
-                    return p !== phoneToRemove;
+                
+                // กรองเอาเฉพาะคนที่ไม่ได้ถูกลบออก
+                members = members.filter((m, idx) => {
+                    if (typeof m === 'object' && m !== null) {
+                        let id = m.uid || m.phone || m.id;
+                        if (id) return String(id) !== String(memberId);
+                    } else {
+                        if (String(m) === String(memberId)) return false;
+                    }
+                    return idx !== index;
                 });
                 
                 await docRef.update({ activeMembers: members });
                 alert("เตะสมาชิกออกจากโต๊ะเรียบร้อย!");
                 renderTableMembers(tNo, members);
-                loadDashboard();
+                loadDashboard(); // อัปเดตผังโต๊ะทันที
             }
         } catch(err) {
             alert("เกิดข้อผิดพลาด: " + err.message);
@@ -984,11 +1017,20 @@
             var activeList = [];
 
             snapshot.forEach(doc => {
-                const t = doc.data();
-                if (t.status === "ไม่ว่าง") {
-                    activeList.push(t.tableNo);
-                    currentPackageMap[t.tableNo] = t.packagePrice;
-                    tableDataMap[t.tableNo] = t;
+                const t = doc.data() || {};
+                let tableKey = String(t.tableNo || doc.id);
+                let st = String(t.status || "").toLowerCase();
+                
+                // เช็กสถานะว่าโต๊ะไม่ว่างหรือไม่ (ครอบคลุมทุกเงื่อนไข)
+                let isOccupied = (st === "ไม่ว่าง" || st === "occupied" || st === "busy") || 
+                                 (t.activeMembers && t.activeMembers.length > 0) ||
+                                 ((parseInt(t.adults) || 0) + (parseInt(t.children) || 0) > 0) ||
+                                 (parseInt(t.totalPeople) || 0) > 0;
+
+                if (isOccupied) {
+                    activeList.push(tableKey);
+                    currentPackageMap[tableKey] = t.packagePrice;
+                    tableDataMap[tableKey] = t;
                 }
             });
 
@@ -1002,16 +1044,16 @@
                 
                 var statusText = "ว่าง";
                 if (isActive) {
-                    var tData = tableDataMap[tNo];
-                    var total = 0;
-                    if (tData) {
-                        total = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
-                        if (total === 0) total = parseInt(tData.totalPeople) || 0;
-                    }
-                    statusText = total > 0 ? '<span class="fw-bold fs-6">👤 ' + total + ' คน</span>' : "ไม่ว่าง";
+                    var tData = tableDataMap[tNo] || {};
+                    // รวมจำนวนคนจากผู้ใหญ่ + เด็ก
+                    var total = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
+                    if (total === 0) total = parseInt(tData.totalPeople) || 0;
+                    if (total === 0 && tData.activeMembers) total = tData.activeMembers.length;
+                    
+                    statusText = total > 0 ? <span class="fw-bold fs-6">👤 ${total} คน</span> : "ไม่ว่าง";
                 }
 
-                grid.innerHTML += '<div class="col-3"><div class="card table-card text-center p-2 border ' + cardClass + '" onclick="selectTable(\'' + tNo + '\')"><div class="fw-bold">โต๊ะ ' + tNo + '</div><div style="font-size: 12px; margin-top:2px;">' + statusText + '</div></div></div>';
+                grid.innerHTML += `<div class="col-3"><div class="card table-card text-center p-2 border ${cardClass}" onclick="selectTable('${tNo}')"><div class="fw-bold">โต๊ะ ${tNo}</div><div style="font-size: 12px; margin-top:2px;">${statusText}</div></div></div>`;
             }
         } catch (err) {
             console.error("Error loading dashboard:", err);
