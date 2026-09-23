@@ -495,15 +495,31 @@
             const oldData = oldTableDoc.data() || {};
             const ordersSnapshot = await oldTableRef.collection("orders").get();
             
-            // คัดลอกข้อมูลทั้งหมด (รวมถึง activeMembers, adults, children) ไปยังโต๊ะใหม่
+            const newTableDoc = await newTableRef.get();
+            let newTableData = newTableDoc.exists ? newTableDoc.data() : {};
+            let existingMembers = newTableData.activeMembers || [];
+            let oldMembers = oldData.activeMembers || [];
+
+            // รวมสมาชิกจากโต๊ะเดิมไปโต๊ะใหม่ โดยกรองไม่ให้ชื่อซ้ำกัน
+            let mergedMembers = [...existingMembers];
+            oldMembers.forEach(om => {
+                let omName = typeof om === 'object' ? (om.displayName || om.name || om.uid || om.phone) : om;
+                let exists = mergedMembers.some(em => {
+                    let emName = typeof em === 'object' ? (em.displayName || em.name || em.uid || em.phone) : em;
+                    return String(emName).trim() === String(omName).trim();
+                });
+                if (!exists) mergedMembers.push(om);
+            });
+
+            // คัดลอกข้อมูลทั้งหมดไปโต๊ะใหม่
             await newTableRef.set({
                 tableNo: String(newTable),
                 status: "ไม่ว่าง",
-                packagePrice: oldData.packagePrice || 0,
-                adults: oldData.adults || 0,
-                children: oldData.children || 0,
-                totalPeople: oldData.totalPeople || 0,
-                activeMembers: oldData.activeMembers || []
+                packagePrice: oldData.packagePrice || newTableData.packagePrice || 0,
+                adults: (parseInt(oldData.adults) || 0) + (parseInt(newTableData.adults) || 0),
+                children: (parseInt(oldData.children) || 0) + (parseInt(newTableData.children) || 0),
+                totalPeople: (parseInt(oldData.totalPeople) || 0) + (parseInt(newTableData.totalPeople) || 0),
+                activeMembers: mergedMembers
             }, { merge: true });
 
             // ย้ายรายการอาหาร
@@ -515,7 +531,7 @@
             });
             await batch.commit();
 
-            // ล้างข้อมูลโต๊ะเดิมให้เป็นโต๊ะว่าง
+            // ล้างโต๊ะเดิมให้เป็นโต๊ะว่างแบบสะอาด 100%
             await oldTableRef.update({ 
                 status: "ว่าง", 
                 activeMembers: [],
