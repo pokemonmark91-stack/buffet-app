@@ -1024,9 +1024,16 @@
                 var statusText = "ว่าง";
                 if (isActive) {
                     var tData = tableDataMap[tNo] || {};
-                    var total = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
+                    
+                    // ปรับปรุงวิธีนับจำนวนคนให้แม่นยำขึ้น:
+                    // 1. ถ้ามีคนสแกนเข้าโต๊ะ (activeMembers) ให้ยึดตามจำนวนคนใน activeMembers เป็นหลัก
+                    // 2. ถ้าไม่มีคนสแกน ให้ใช้ ผู้ใหญ่ + เด็ก ที่พนักงานคีย์ตอนเปิดโต๊ะ
+                    var memberCount = (tData.activeMembers && tData.activeMembers.length > 0) ? tData.activeMembers.length : 0;
+                    var registeredCount = (parseInt(tData.adults) || 0) + (parseInt(tData.children) || 0);
+                    
+                    // เลือกตัวเลขที่มากที่สุดหรือถูกต้องที่สุดมาแสดง
+                    var total = memberCount > 0 ? memberCount : registeredCount;
                     if (total === 0) total = parseInt(tData.totalPeople) || 0;
-                    if (total === 0 && tData.activeMembers) total = tData.activeMembers.length;
                     
                     statusText = total > 0 ? '<span class="fw-bold fs-6">👤 ' + total + ' คน</span>' : "ไม่ว่าง";
                 }
