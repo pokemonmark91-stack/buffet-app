@@ -989,7 +989,7 @@
         }
     }
 
-    async function loadDashboard() {
+        async function loadDashboard() {
         try {
             const snapshot = await db.collection("tables").get();
             currentPackageMap = {};
@@ -1028,6 +1028,7 @@
                     if (total === 0) total = parseInt(tData.totalPeople) || 0;
                     if (total === 0 && tData.activeMembers) total = tData.activeMembers.length;
                     
+                    // แก้ไขจุดนี้: ใส่ Backtick (`) ครอบแท็ก <span> 
                     statusText = total > 0 ? <span class="fw-bold fs-6">👤 ${total} คน</span> : "ไม่ว่าง";
                 }
 
@@ -1037,7 +1038,7 @@
             console.error("Error loading dashboard:", err);
         }
     }
-
+    
     function selectTable(tNo) {
         document.getElementById('tNo').value = tNo;
         document.getElementById('manageTNo').value = "จัดการโต๊ะ: " + tNo;
