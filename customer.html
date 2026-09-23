@@ -107,7 +107,7 @@
                     <button type="button" class="btn-close d-none" id="closeTableModalBtn" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center">
-                    <p class="text-muted small mb-2">เลือกโต๊ะที่พนักงานเปิดให้คุณแล้ว</p>
+                    <p class="text-muted small mb-2">เลือกโต๊ะที่คุณนั่งอยู่</p>
                     
                     <select id="inputTableNo" class="form-select form-select-lg text-center fs-6 fw-bold mb-3 shadow-sm">
                         <option value="" disabled selected>กำลังโหลดโต๊ะ...</option>
@@ -196,17 +196,15 @@
 
         window.onload = async function() {
             const urlParams = new URLSearchParams(window.location.search);
-            // รองรับทั้ง ?table=1 และ ?tableNo=1
             let tNo = urlParams.get('table') || urlParams.get('tableNo');
             userUid = urlParams.get('uid');
 
-            // 📌 ถ้ามี uid ดึงข้อมูลโปรไฟล์ผู้ใช้จาก Firestore
             if (userUid) {
                 try {
                     const userDoc = await db.collection("members").doc(userUid).get();
                     if (userDoc.exists) {
                         currentUser = userDoc.data();
-                        currentUser.uid = userUid; // เก็บ uid ไว้ใช้ตอนส่ง Order
+                        currentUser.uid = userUid; 
                     }
                 } catch (e) {
                     console.error("Error fetching user data:", e);
@@ -217,6 +215,10 @@
                 openTableSelectModal();
             } else {
                 tableNo = tNo;
+                // ถ้ามี uid และโต๊ะ ให้บันทึกชื่อเข้าโต๊ะทันที
+                if (currentUser) {
+                    await joinTable(tableNo, currentUser);
+                }
                 activateSystem();
             }
         };
@@ -263,13 +265,49 @@
             }
         }
 
-        function saveTableNo() {
+        // 📌 ฟังก์ชันเข้าร่วมโต๊ะ หรือย้ายโต๊ะ (อัปเดต activeMembers ใน Firestore แบบ Real-time)
+        async function joinTable(newTableNo, profile) {
+            if (!newTableNo || !profile) return;
+            try {
+                // ถ้าเคยอยู่โต๊ะอื่นมาก่อน ให้ลบออกจากโต๊ะเดิมก่อน
+                if (tableNo && String(tableNo) !== String(newTableNo)) {
+                    const oldRef = db.collection("tables").doc(String(tableNo));
+                    const oldDoc = await oldRef.get();
+                    if (oldDoc.exists) {
+                        let members = oldDoc.data().activeMembers || [];
+                        members = members.filter(m => String(m.uid || m.phone) !== String(profile.uid || profile.phone));
+                        await oldRef.update({ activeMembers: members });
+                    }
+                }
+
+                // เพิ่มชื่อเข้าโต๊ะใหม่
+                const newRef = db.collection("tables").doc(String(newTableNo));
+                await newRef.set({
+                    activeMembers: firebase.firestore.FieldValue.arrayUnion({
+                        uid: profile.uid || "",
+                        displayName: profile.displayName || profile.name || "ลูกค้า",
+                        pictureUrl: profile.pictureUrl || profile.picture || ""
+                    })
+                }, { merge: true });
+
+            } catch (err) {
+                console.error("Error joining table:", err);
+            }
+        }
+
+        async function saveTableNo() {
             let selectVal = document.getElementById('inputTableNo').value;
             if (!selectVal) return alert("กรุณาเลือกหมายเลขโต๊ะจากรายการครับ");
             
+            let oldTable = tableNo;
             tableNo = selectVal;
             cart = {};
             document.getElementById('cartCount').innerText = '0';
+
+            // ถ้าผู้ใช้เปลี่ยนโต๊ะและมีโปรไฟล์ ให้ย้ายชื่อตามไปด้วย
+            if (currentUser) {
+                await joinTable(tableNo, currentUser);
+            }
 
             let modalEl = document.getElementById('selectTableModal');
             let modal = bootstrap.Modal.getInstance(modalEl);
@@ -285,7 +323,7 @@
             document.getElementById('categoryContainer').style.display = 'flex';
             document.getElementById('menuGrid').innerHTML = "<div class='text-center w-100 my-4 text-muted'>กำลังโหลดข้อมูลแพ็กเกจและเมนู...</div>";
 
-            // 📌 เรียกใช้ฟังก์ชันแสดงรายชื่อสมาชิกในโต๊ะแบบ Real-time
+            // 📌 เรียกใช้ฟังก์ชันฟังข้อมูลรายชื่อสมาชิกในโต๊ะแบบ Real-time
             listenTableMembers(tableNo);
 
             try {
@@ -320,9 +358,9 @@
             }
         }
 
-        // 📌 ฟังก์ชันใหม่สำหรับดึงข้อมูลสมาชิกในโต๊ะแบบ Real-time
+        // 📌 ฟังก์ชันดึงข้อมูลสมาชิกในโต๊ะแบบ Real-time
         function listenTableMembers(tNo) {
-            if (unsubscribeTable) unsubscribeTable(); // ยกเลิกการฟังอันเก่า (ถ้ามี)
+            if (unsubscribeTable) unsubscribeTable(); 
             
             const tableMembersBox = document.getElementById('tableMembersBox');
             const membersList = document.getElementById('membersList');
@@ -335,10 +373,10 @@
                         
                         if (members.length > 0) {
                             tableMembersBox.style.display = 'block';
-                            membersList.innerHTML = ''; // ล้างค่าเดิม
+                            membersList.innerHTML = ''; 
                             
                             members.forEach(m => {
-                                let imgUrl = m.pictureUrl || "https://placehold.co/40x40?text=U";
+                                let imgUrl = m.pictureUrl || m.picture || "https://placehold.co/40x40?text=U";
                                 let displayName = m.displayName || m.name || "ลูกค้า";
                                 
                                 membersList.innerHTML += `
@@ -548,7 +586,6 @@
             }
 
             try {
-                // 📌 เตรียมข้อมูลออร์เดอร์ที่จะส่งเข้า Firebase
                 let orderData = {
                     action: "สั่งอาหาร",
                     details: orderDetails.trim(),
@@ -557,7 +594,6 @@
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 };
 
-                // 📌 ถ้ามีข้อมูลผู้สั่ง ให้แนบลงไปด้วย
                 if (currentUser) {
                     orderData.orderedBy = {
                         uid: currentUser.uid,
@@ -568,7 +604,6 @@
 
                 await db.collection("tables").doc(String(tableNo)).collection("orders").add(orderData);
 
-                // ปิด Modal ยืนยัน
                 let modalEl = document.getElementById('confirmOrderModal');
                 let confirmModal = bootstrap.Modal.getInstance(modalEl);
                 if (confirmModal) confirmModal.hide();
@@ -586,10 +621,8 @@
             }
         }
 
-        // ตัวแปรสำหรับ Real-time listener ของบิล
         let unsubscribeBill = null;
 
-        // 📌 ฟังก์ชันโหลดบิล (เชื่อมโยงกับ completedItems ของฝั่งครัวอย่างแม่นยำ)
         function loadCustomerBill() {
             if (!tableNo) {
                 document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
@@ -603,7 +636,6 @@
                 unsubscribeBill();
             }
 
-            // Real-time ดึงข้อมูลออร์เดอร์
             unsubscribeBill = db.collection("tables").doc(String(tableNo)).collection("orders")
                 .orderBy("timestamp", "asc")
                 .onSnapshot(function(ordersSnap) {
@@ -623,7 +655,6 @@
 
                         let timeStr = order.timestamp ? order.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น." : "";
                         
-                        // 1. กำหนดหัวข้อ: "สั่งอาหาร [ชื่อคนสั่ง]"
                         let orderAction = order.action || "สั่งอาหาร";
                         let orderedByName = (order.orderedBy && order.orderedBy.displayName) ? order.orderedBy.displayName : "";
                         
@@ -632,7 +663,6 @@
                             headerTitle = `สั่งอาหาร ${orderedByName}`;
                         }
 
-                        // 2. เช็คสถานะภาพรวมบิล (ถ้า kitchenStatus เป็น "เสร็จ" ถือว่าเสร็จทั้งหมด)
                         let docStatus = order.kitchenStatus || "";
                         let isAllDone = (docStatus === "เสร็จ" || docStatus === "เสร็จแล้ว");
                         
@@ -643,10 +673,8 @@
                                 : "<span class='badge bg-warning text-dark ms-2' style='font-size:10px;'>กำลังทำ</span>";
                         }
 
-                        // ดึงข้อมูลรายการ index ที่ครัวกดเสร็จแล้วจาก completedItems
                         let completedItems = order.completedItems || [];
 
-                        // 3. แยกเช็คสถานะย่อยรายเมนูตาม Index ของแอร์เรย์
                         let detailsHtml = "";
                         if (order.details) {
                             let items = order.details.trim().split('\n');
@@ -656,7 +684,6 @@
                                 if (!trimmedItem) return "";
 
                                 if (orderAction === "สั่งอาหาร") {
-                                    // เช็คว่าเมนูนี้ Index ตรงกับที่ครัวกดเสร็จใน completedItems หรือยัง
                                     let isItemDone = isAllDone || completedItems.includes(idx);
 
                                     let itemBadge = isItemDone 
