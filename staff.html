@@ -489,31 +489,36 @@
                 name = m.displayName || m.name || m.phone || "สมาชิก";
                 let imgUrl = m.pictureUrl || m.picture || m.avatar || "";
                 if (imgUrl) {
-                    imgHtml = `<img src="${imgUrl}" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" class="me-2 border">`;
+                    imgHtml = '<img src="' + imgUrl + '" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" class="me-2 border">';
                 } else {
-                    imgHtml = `<span class="fs-4 me-2">👤</span>`;
+                    imgHtml = '<span class="fs-4 me-2">👤</span>';
                 }
                 memberId = m.uid || m.phone || m.id || idx;
             } else {
                 name = String(m);
-                imgHtml = `<span class="fs-4 me-2">👤</span>`;
+                imgHtml = '<span class="fs-4 me-2">👤</span>';
                 memberId = String(m);
             }
 
-            html += `<li class="list-group-item d-flex justify-content-between align-items-center py-2">
-                        <div class="d-flex align-items-center fw-bold text-dark">
-                            ${imgHtml}
-                            <div>
-                                <div>${name}</div>
-                                ${(m.phone && m.phone !== name) ? <small class="text-muted d-block" style="font-size:11px;">${m.phone}</small> : ''}
-                            </div>
-                        </div>
-                        <button class="btn btn-sm btn-outline-danger" onclick="removeMemberFromTable('${tNo}', '${memberId}', ${idx})">ลบออก</button>
-                     </li>`;
+            // แยกข้อความเบอร์โทรศัพท์ออกมาประมวลผลล่วงหน้าเพื่อป้องกัน Syntax Error
+            let phoneSub = (m && m.phone && m.phone !== name) 
+                ? '<small class="text-muted d-block" style="font-size:11px;">' + m.phone + '</small>' 
+                : '';
+
+            html += '<li class="list-group-item d-flex justify-content-between align-items-center py-2">' +
+                        '<div class="d-flex align-items-center fw-bold text-dark">' +
+                            imgHtml +
+                            '<div>' +
+                                '<div>' + name + '</div>' +
+                                phoneSub +
+                            '</div>' +
+                        '</div>' +
+                        '<button class="btn btn-sm btn-outline-danger" onclick="removeMemberFromTable(\'' + tNo + '\', \'' + memberId + '\', ' + idx + ')">ลบออก</button>' +
+                     '</li>';
         });
         list.innerHTML = html;
     }
-
+    
     async function removeMemberFromTable(tNo, memberId, index) {
         if(!confirm("⚠️ ยืนยันการเตะสมาชิกออกจากโต๊ะ " + tNo + "?")) return;
         
