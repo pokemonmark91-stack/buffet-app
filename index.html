@@ -131,10 +131,7 @@
         // ถ้ามีเลขโต๊ะจาก URL ให้แสดงผลปกติ
         document.getElementById("displayTableNo").innerText = tableNo;
     } else {
-        // ถ้าไม่มีเลขโต๊ะ (ไม่ได้สแกนคิวอาร์โค้ดโต๊ะมา) ให้เด้งกล่องถามเลขโต๊ะ
-        tableNo = prompt("กรุณาระบุหมายเลขโต๊ะของคุณ:");
-        document.getElementById("displayTableNo").innerText = tableNo || "?";
-    }
+      
 
     // 📌 ฟังก์ชันนำลูกค้าเข้าโต๊ะ (เช็คอินบันทึกชื่อลง Firestore ในโต๊ะนั้น)
     async function joinTable(tableId, profile) {
