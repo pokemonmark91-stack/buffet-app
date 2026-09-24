@@ -414,42 +414,53 @@
 
         // 📌 ฟังข้อมูลรายชื่อเพื่อนร่วมโต๊ะแบบ Real-time
         function listenTableMembers(tNo) {
-            if (unsubscribeTable) unsubscribeTable(); 
-            
-            const tableMembersBox = document.getElementById('tableMembersBox');
-            const membersList = document.getElementById('membersList');
-            
-            unsubscribeTable = db.collection("tables").doc(String(tNo))
-                .onSnapshot((doc) => {
-                    if (doc.exists) {
-                        const data = doc.data();
-                        const members = data.activeMembers || [];
+    if (unsubscribeTable) unsubscribeTable(); 
+    
+    const tableMembersBox = document.getElementById('tableMembersBox');
+    const membersList = document.getElementById('membersList');
+    
+    unsubscribeTable = db.collection("tables").doc(String(tNo))
+        .onSnapshot((doc) => {
+            if (doc.exists) {
+                const data = doc.data();
+                const members = data.activeMembers || [];
+                
+                if (members.length > 0) {
+                    tableMembersBox.style.display = 'block';
+                    membersList.innerHTML = ''; 
+                    
+                    members.forEach(m => {
+                        // 1. ดึงชื่อมาก่อน
+                        let displayName = (typeof m === 'object') ? (m.displayName || m.name || "ลูกค้า") : String(m);
                         
-                        if (members.length > 0) {
-                            tableMembersBox.style.display = 'block';
-                            membersList.innerHTML = ''; 
-                            
-                            members.forEach(m => {
-                                let imgUrl = (typeof m === 'object' && (m.pictureUrl || m.picture)) ? (m.pictureUrl || m.picture) : "https://placehold.co/40x40?text=U";
-                                let displayName = (typeof m === 'object') ? (m.displayName || m.name || "ลูกค้า") : String(m);
-                                
-                                membersList.innerHTML += `
-                                    <div class="text-center" style="min-width: 55px;">
-                                        <img src="${imgUrl}" style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid #06C755; object-fit: cover;">
-                                        <p style="margin: 3px 0 0 0; font-size: 11px; color: #2f3542; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55px;">
-                                            ${displayName}
-                                        </p>
-                                    </div>
-                                `;
-                            });
-                        } else {
-                            tableMembersBox.style.display = 'none';
+                        // 2. ดึงรูปภาพ ถ้าไม่มีให้เป็นค่าว่างไว้ก่อน
+                        let imgUrl = (typeof m === 'object' && (m.pictureUrl || m.picture || m.pictureURL || m.avatar)) ? (m.pictureUrl || m.picture || m.pictureURL || m.avatar) : "";
+                        
+                        // 3. ถ้าไม่มีรูปภาพ ให้สร้างรูปโปรไฟล์ตัวอักษรจากชื่อ (UI-Avatars)
+                        if (!imgUrl || imgUrl === "") {
+                            imgUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0D8ABC&color=fff&rounded=true`;
                         }
-                    }
-                }, (error) => {
-                    console.error("Error listening to table members:", error);
-                });
-        }
+                        
+                        // 4. แสดงผล HTML (แอบใส่ onerror เผื่อลิงก์รูปพังให้กลับมาใช้รูปตัวอักษรแทน)
+                        membersList.innerHTML += `
+                            <div class="text-center" style="min-width: 55px;">
+                                <img src="${imgUrl}" 
+                                     onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0D8ABC&color=fff&rounded=true'" 
+                                     style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid #06C755; object-fit: cover;">
+                                <p style="margin: 3px 0 0 0; font-size: 11px; color: #2f3542; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55px;">
+                                    ${displayName}
+                                </p>
+                            </div>
+                        `;
+                    });
+                } else {
+                    tableMembersBox.style.display = 'none';
+                }
+            }
+        }, (error) => {
+            console.error("Error listening to table members:", error);
+        });
+}
 
         async function loadMenu() {
             const menuGrid = document.getElementById('menuGrid');
