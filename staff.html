@@ -83,7 +83,7 @@
         <div class="d-flex gap-2 mb-3">
             <button class="btn btn-sm btn-outline-success flex-fill fw-bold" onclick="openTableMembersModal()">👥 สมาชิกในโต๊ะ</button>
             <button class="btn btn-sm btn-outline-secondary flex-fill fw-bold" onclick="openMoveTableModal()">🔄 ย้ายโต๊ะ</button>
-            <button class="btn btn-sm btn-outline-danger flex-fill fw-bold" onclick="openVoidTableModal()">❌ ยกเลิกโต๊ะ</button>
+            <button onclick="cancelTable('1')" class="btn btn-outline-danger">❌ ยกเลิกโต๊ะ</button>
         </div>
 
         <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #dfe4ea; border-radius: 8px; background: #f1f2f6;">
@@ -1814,35 +1814,53 @@ async function confirmPaymentAndAwardPoints() {
     }
 }
 
+// ฟังก์ชันสำหรับยกเลิกและเคลียร์ข้อมูลโต๊ะ
 async function cancelTable(tNo) {
     if (!confirm(`คุณต้องการยกเลิกและเคลียร์ข้อมูลโต๊ะ ${tNo} ใช่หรือไม่?`)) return;
     
     try {
         const tableRef = db.collection("tables").doc(String(tNo));
-        
-        // 1. ลบรายการออเดอร์ค้างทั้งหมดในโต๊ะ
-        const ordersSnap = await tableRef.collection("orders").get();
         const batch = db.batch();
-        ordersSnap.forEach(doc => batch.delete(doc.ref));
+
+        // 1. ค้นหาและลบออเดอร์ทั้งหมดที่ค้างอยู่ในโต๊ะนี้ (ถ้ามี)
+        const ordersSnap = await tableRef.collection("orders").get();
+        ordersSnap.forEach(doc => {
+            batch.delete(doc.ref);
+        });
         
-        // 2. ล้างข้อมูลโต๊ะให้กลับเป็นค่าเริ่มต้นทั้งหมด
+        // 2. ล้างข้อมูลหลักของโต๊ะให้กลับเป็นสถานะเริ่มต้น (ว่าง)
         batch.set(tableRef, {
+            tableNo: String(tNo),
             status: "ว่าง",
             activeMembers: [],
             adults: 0,
             children: 0,
             totalPeople: 0,
             package: "",
-            packagePrice: 0
+            packagePrice: 0,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
+        // 3. ยืนยันการเปลี่ยนแปลงข้อมูลลง Firebase
         await batch.commit();
-        alert("เคลียร์ข้อมูลโต๊ะเรียบร้อยแล้ว");
-        if (typeof loadDashboard === 'function') loadDashboard();
+
+        alert(`เคลียร์ข้อมูลโต๊ะ ${tNo} เรียบร้อยแล้ว`);
+        
+        // ปิดหน้าต่างจัดการโต๊ะ (ถ้ามี)
+        let modalEl = document.getElementById('manageTableModal');
+        if (modalEl) {
+            let modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+        }
+
+        // รีเฟรชหน้าจอหรือโหลดข้อมูลใหม่
+        if (typeof loadDashboard === 'function') {
+            loadDashboard();
+        }
 
     } catch (err) {
         console.error("Error resetting table:", err);
-        alert("เกิดข้อผิดพลาด: " + err.message);
+        alert("เกิดข้อผิดพลาดในการยกเลิกโต๊ะ: " + err.message);
     }
 }
     
