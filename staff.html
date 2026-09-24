@@ -392,6 +392,41 @@
         </div>
     </div>
 
+    <!-- Modal ชำระเงิน & แจกแต้มสะสม -->
+<div class="modal fade" id="checkoutModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow" style="border-radius: 15px;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-dark">💳 ชำระเงิน & แจกแต้ม (โต๊ะ <span id="checkoutTableNo">?</span>)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- สรุปยอดเงินและเกณฑ์แต้ม -->
+                <div class="p-3 bg-light rounded-3 mb-3 border">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-secondary">ยอดชำระรวม:</span>
+                        <span class="fw-bold text-danger fs-5" id="checkoutTotalBill">0 บาท</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">แต้มคำนวณเบื้องต้น (100 บ. = 1 แต้ม):</small>
+                        <span class="badge bg-success" id="checkoutSuggestedPoints">0 แต้ม</span>
+                    </div>
+                </div>
+
+                <!-- รายชื่อสมาชิกให้พนักงานปรับแต้ม -->
+                <h6 class="fw-bold mb-2 text-dark" style="font-size: 14px;">🎁 กำหนดแต้มสะสมให้สมาชิกแต่ละคน:</h6>
+                <div id="checkoutMembersList" style="max-height: 250px; overflow-y: auto;">
+                    <!-- รายชื่อและช่องกรอกแต้มจะโหลดตรงนี้ -->
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0 d-flex gap-2">
+                <button type="button" class="btn btn-light rounded-pill flex-fill fw-bold text-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="button" class="btn btn-success rounded-pill flex-fill fw-bold" id="btnConfirmCheckout" onclick="confirmPaymentAndAwardPoints()">ยืนยันชำระเงิน & แจกแต้ม 💳</button>
+            </div>
+        </div>
+    </div>
+</div>
+    
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
@@ -1349,10 +1384,10 @@ function selectTable(tNo) {
                         '</div>' +
 
                         '<div class="d-flex gap-2">' +
-                            '<button onclick="payBill(\'' + tNo + '\')" class="btn btn-success flex-grow-1 btn-sm fw-bold">✅ ชำระเต็มจำนวน</button>' +
-                            '<button onclick="openSplitBillModal(\'' + tNo + '\', ' + totalTableAmount + ')" class="btn btn-primary btn-sm fw-bold">💳 แยกชำระเงิน</button>' +
-                        '</div>' +
-                    '</div></div>';
+    '<button onclick="openCheckoutModal(\'' + tNo + '\')" class="btn btn-success flex-grow-1 btn-sm fw-bold">✅ ชำระเงิน & แจกแต้ม</button>' +
+    '<button onclick="openSplitBillModal(\'' + tNo + '\', ' + totalTableAmount + ')" class="btn btn-primary btn-sm fw-bold">💳 แยกชำระเงิน</button>' +
+'</div>' +
+'</div></div>';
             document.getElementById('resultArea').innerHTML = html;
         } catch (err) {
             document.getElementById('resultArea').innerHTML = "<div class='text-danger text-center'>เกิดข้อผิดพลาดในการเรียกดูบิล: " + err.message + "</div>";
@@ -1639,6 +1674,146 @@ function selectTable(tNo) {
             alert("❌ เกิดข้อผิดพลาด: " + err.message);
         }
     }
+
+    let currentCheckoutTable = null;
+
+// 1. ฟังก์ชันเปิดหน้าต่างชำระเงิน & คำนวณแต้ม
+async function openCheckoutModal(tNo) {
+    currentCheckoutTable = String(tNo);
+    
+    try {
+        const tableRef = db.collection("tables").doc(currentCheckoutTable);
+        const tableDoc = await tableRef.get();
+        if (!tableDoc.exists) return alert("ไม่พบข้อมูลโต๊ะนี้");
+
+        const tData = tableDoc.data() || {};
+        const members = tData.activeMembers || [];
+
+        // คำนวณยอดบิลรวมจากรายการอาหาร
+        let totalAmount = 0;
+        const ordersSnap = await tableRef.collection("orders").get();
+        ordersSnap.forEach(doc => {
+            totalAmount += (parseFloat(doc.data().amount) || 0);
+        });
+
+        // คิดแต้มรวมตามเกณฑ์ 100 บาท = 1 แต้ม
+        let totalPoints = Math.floor(totalAmount / 100);
+        
+        // แบ่งแต้มเฉลี่ยเบื้องต้นให้สมาชิกแต่ละคน (พนักงานแก้ไขภายหลังได้)
+        let defaultPointsPerPerson = members.length > 0 ? Math.floor(totalPoints / members.length) : totalPoints;
+
+        document.getElementById("checkoutTableNo").innerText = currentCheckoutTable;
+        document.getElementById("checkoutTotalBill").innerText = totalAmount.toLocaleString() + " บาท";
+        document.getElementById("checkoutSuggestedPoints").innerText = totalPoints + " แต้ม";
+
+        // แสดงรายการสมาชิกและช่องใส่แต้ม
+        let membersHtml = "";
+        if (members.length === 0) {
+            membersHtml = `<div class="text-muted text-center py-3">ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>`;
+        } else {
+            members.forEach(m => {
+                let uid = m.uid || "";
+                let name = m.displayName || m.name || "ลูกค้า";
+                let imgUrl = m.pictureUrl || m.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true`;
+
+                membersHtml += `
+                <div class="d-flex align-items-center justify-content-between p-2 mb-2 bg-light rounded border">
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="${imgUrl}" 
+                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true'"
+                             style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                        <div>
+                            <div class="fw-bold text-dark" style="font-size: 14px;">${name}</div>
+                            <small class="text-muted" style="font-size: 11px;">${m.phone || 'สมาชิก'}</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-1" style="width: 120px;">
+                        <input type="number" 
+                               class="form-control form-control-sm text-center fw-bold checkout-point-input" 
+                               data-uid="${uid}" 
+                               value="${defaultPointsPerPerson}" 
+                               min="0">
+                        <span class="small text-muted" style="font-size: 12px;">แต้ม</span>
+                    </div>
+                </div>`;
+            });
+        }
+
+        document.getElementById("checkoutMembersList").innerHTML = membersHtml;
+
+        let modalEl = document.getElementById('checkoutModal');
+        let modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+
+    } catch (err) {
+        console.error("Error opening checkout modal:", err);
+        alert("เกิดข้อผิดพลาดในการโหลดข้อมูลบิล: " + err.message);
+    }
+}
+
+// 2. ฟังก์ชันยืนยันชำระเงิน + บันทึกแต้มลง Firebase + เคลียร์โต๊ะ
+async function confirmPaymentAndAwardPoints() {
+    if (!currentCheckoutTable) return;
+    
+    const btn = document.getElementById("btnConfirmCheckout");
+    btn.disabled = true;
+    btn.innerText = "กำลังบันทึก...";
+
+    try {
+        const batch = db.batch();
+        const pointInputs = document.querySelectorAll('.checkout-point-input');
+
+        // 1. เพิ่มแต้มสะสมให้ลูกค้าแต่ละคนในคอลเลกชัน members
+        pointInputs.forEach(input => {
+            let uid = input.getAttribute('data-uid');
+            let awardedPoints = parseInt(input.value) || 0;
+
+            if (uid && awardedPoints > 0) {
+                const memberRef = db.collection("members").doc(uid);
+                // สะสมแต้มเพิ่มจากของเดิมในระบบ
+                batch.set(memberRef, {
+                    points: firebase.firestore.FieldValue.increment(awardedPoints)
+                }, { merge: true });
+            }
+        });
+
+        // 2. ลบออเดอร์ทั้งหมดในโต๊ะ
+        const tableRef = db.collection("tables").doc(currentCheckoutTable);
+        const ordersSnap = await tableRef.collection("orders").get();
+        ordersSnap.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        // 3. รีเซ็ตสถานะโต๊ะให้เป็น "ว่าง"
+        batch.update(tableRef, {
+            status: "ว่าง",
+            activeMembers: [],
+            adults: 0,
+            children: 0,
+            totalPeople: 0,
+            package: "",
+            packagePrice: 0
+        });
+
+        await batch.commit();
+
+        alert("✅ ชำระเงินและบันทึกแต้มสะสมเรียบร้อยแล้ว!");
+
+        let modalEl = document.getElementById('checkoutModal');
+        let modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+
+        if (typeof loadDashboard === 'function') loadDashboard();
+
+    } catch (err) {
+        console.error("Error confirming checkout:", err);
+        alert("เกิดข้อผิดพลาดในการชำระเงิน: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "ยืนยันชำระเงิน & แจกแต้ม 💳";
+    }
+}
+    
 </script>
 </body>
 </html>
