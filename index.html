@@ -77,6 +77,21 @@
     </div>
   </div>
 
+<!-- ป๊อปอัปเลือกโต๊ะ (จะแสดงเมื่อไม่ได้สแกน QR โต๊ะมา) -->
+<div id="tableSelectionOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px 20px; border-radius: 15px; width: 90%; max-width: 350px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+        <h5 style="margin-bottom: 5px; font-weight: bold; color: #333;">🍽️ กรุณาเลือกโต๊ะของคุณ</h5>
+        <p style="font-size: 13px; color: #777; margin-bottom: 20px;">เฉพาะโต๊ะที่พนักงานเปิดให้ใช้บริการแล้วเท่านั้น</p>
+        
+        <!-- รายการปุ่มโต๊ะจะถูกโหลดมาใส่ตรงนี้ -->
+        <div id="activeTablesList" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-height: 350px; overflow-y: auto; padding-bottom: 10px;">
+            <div class="spinner-border text-success" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </div>
+</div>
+  
   <!-- เปลี่ยนเป็น module เพื่อใช้ Firebase -->
   <script type="module">
     // นำเข้า Firebase SDK
