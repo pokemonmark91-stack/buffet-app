@@ -221,71 +221,104 @@
       }
     }
 
-    async function main() {
-      const stepLog = document.getElementById("loadingText");
-      
-      const liffTimeout = setTimeout(() => {
-        document.getElementById("loadingState").innerHTML = 
-          `<h4 style='color:#ff4757; margin-top:0;'>⚠️ หมดเวลาเชื่อมต่อ</h4>
-           <p style='font-size:13px; color:#57606f;'>โค้ดค้างอยู่ที่: <span style="color:red">${stepLog.innerText}</span><br>โปรดนำลิงก์ Web App ไปอัปเดตใน LINE Developers</p>`;
-      }, 7000);
+    // ฟังก์ชันสร้างหน้าต่างเลือกโต๊ะ
+function requireTableSelection() {
+    return new Promise(async (resolve) => {
+        const overlay = document.getElementById("tableSelectionOverlay");
+        const listDiv = document.getElementById("activeTablesList");
+        
+        // ซ่อนตัวโหลดเก่า แล้วแสดงป๊อปอัปใหม่
+        overlay.style.display = "flex";
 
-      try {
-        stepLog.innerText = "Step 1: กำลังเริ่มเชื่อมต่อ liff.init() ...";
+        try {
+            const querySnapshot = await getDocs(collection(db, "tables"));
+            let activeTables = [];
+            
+            querySnapshot.forEach((doc) => {
+                let data = doc.data();
+                if (data.status && data.status !== "ว่าง") {
+                    activeTables.push(doc.id);
+                }
+            });
+
+            if (activeTables.length === 0) {
+                listDiv.innerHTML = `<div style="color:red; font-size:14px; margin-bottom:10px;">❌ ยังไม่มีโต๊ะที่ถูกเปิด<br>โปรดแจ้งพนักงานเปิดโต๊ะก่อนครับ</div>
+                                     <button onclick="location.reload()" class="btn btn-sm btn-outline-secondary">โหลดหน้าเว็บใหม่</button>`;
+                return;
+            }
+
+            activeTables.sort((a, b) => parseInt(a) - parseInt(b));
+            let html = "";
+            activeTables.forEach(t => {
+                html += `<button onclick="document.getElementById('tableSelectionOverlay').style.display='none'; window.resolveSelectedTable('${t}')" 
+                                 class="btn btn-success shadow-sm" style="width: 70px; height: 70px; border-radius: 12px; font-weight: bold; font-size: 16px;">
+                            โต๊ะ<br><span style="font-size:20px;">${t}</span>
+                         </button>`;
+            });
+            listDiv.innerHTML = html;
+
+            window.resolveSelectedTable = function(selectedTable) {
+                resolve(selectedTable);
+            };
+
+        } catch (error) {
+            listDiv.innerHTML = `<p style='color:red;'>เกิดข้อผิดพลาด: ${error.message}</p>`;
+        }
+    });
+}
+
+// ฟังก์ชันหลักที่ทำงานตอนเปิดหน้าเว็บ
+async function main() {
+    const stepLog = document.getElementById("loadingText");
+    
+    try {
+        if(stepLog) stepLog.innerText = "กำลังเริ่มเชื่อมต่อ LIFF...";
         await liff.init({ liffId: LIFF_ID });
-        clearTimeout(liffTimeout);
 
-        stepLog.innerText = "Step 2: เชื่อมต่อสำเร็จ กำลังเช็คล็อกอิน...";
         if (!liff.isLoggedIn()) {
-          liff.login();
-          return;
+            liff.login();
+            return; 
         }
 
-        stepLog.innerText = "Step 3: กำลังดึงโปรไฟล์ LINE...";
+        if(stepLog) stepLog.innerText = "กำลังดึงข้อมูลส่วนตัว...";
         const profile = await liff.getProfile();
         lineUID = profile.userId;
-        userProfileData = profile;
 
-        const profilePic = profile.pictureUrl || DEFAULT_AVATAR;
-        document.getElementById("profileImage").src = profilePic;
-        document.getElementById("memberProfileImage").src = profilePic;
-        document.getElementById("displayName").innerText = profile.displayName;
-        document.getElementById("memberDisplayName").innerText = profile.displayName;
-        document.getElementById("name").value = profile.displayName;
-
-        stepLog.innerText = "Step 4: กำลังตรวจสอบฐานข้อมูล Firebase และเข้าสู่โต๊ะ...";
+        const urlParams = new URLSearchParams(window.location.search);
+        let tableNo = urlParams.get('table') || urlParams.get('tableNo');
         
-        // 📌 บันทึก/อัปเดตรูปลงใน Firestore คอลเลกชัน members เสมอ ป้องกันรูปหาย
+        // ถ้าไม่มีเลขโต๊ะ ให้เด้งป๊อปอัปขึ้นมาให้เลือก
+        if (!tableNo) {
+            tableNo = await requireTableSelection();
+        }
+
+        const displayTableObj = document.getElementById("displayTableNo");
+        if (displayTableObj) displayTableObj.innerText = tableNo;
+
+        if(stepLog) stepLog.innerText = `กำลังเข้าสู่โต๊ะ ${tableNo} ...`;
+        
         await setDoc(doc(db, "members", lineUID), {
             displayName: profile.displayName,
             pictureUrl: profile.pictureUrl || "",
             uid: lineUID
         }, { merge: true });
 
-        // บันทึก/อัปเดตสมาชิกเข้าโต๊ะทันที
         await joinTable(tableNo, profile);
-
-        // ตรวจสอบข้อมูลสมาชิกจาก Firestore
-        const docRef = doc(db, "members", lineUID);
-        const docSnap = await getDoc(docRef);
-
-        document.getElementById("loadingState").style.display = "none";
         
-        if (docSnap.exists()) {
-          const userData = docSnap.data();
-          document.getElementById("userPoints").innerText = userData.points || 0;
-          document.getElementById("alreadyMemberState").style.display = "block";
-          setTimeout(() => { window.goToCustomerPage(); }, 1500);
-        } else {
-          // ถ้ายังไม่ได้เป็นสมาชิก ให้แสดงฟอร์มสมัคร
-          document.getElementById("registerForm").style.display = "block";
+        // เมื่อเสร็จแล้วพาลูกค้าไปหน้าสั่งอาหาร
+        if (typeof window.goToCustomerPage === 'function') {
+            window.goToCustomerPage();
         }
 
-      } catch (err) {
-        clearTimeout(liffTimeout);
-        stepLog.innerHTML = `<span style='color:red;'>ข้อผิดพลาด: ${err.message || err}</span>`;
-      }
+    } catch (err) {
+        console.error(err);
+        if(stepLog) {
+            stepLog.innerHTML = `<span style="color:red; font-weight:bold;">เกิดข้อผิดพลาด: ${err.message}</span><br><button onclick="location.reload()">ลองใหม่</button>`;
+        } else {
+            alert("เกิดข้อผิดพลาด: " + err.message);
+        }
     }
+}
     
     window.addEventListener('DOMContentLoaded', main);
   </script>
