@@ -105,10 +105,21 @@
 
     const WEB_APP_URL = "https://pokemonmark91-stack.github.io/buffet-app/customer"; 
 
-    // ดึงหมายเลขโต๊ะจาก URL (ตัวอย่าง URL: index.html?table=1 หรือ index.html?tableNo=1)
+    // ดึงหมายเลขโต๊ะจาก URL
     const urlParams = new URLSearchParams(window.location.search);
-    const tableNo = urlParams.get('table') || urlParams.get('tableNo') || '1';
-    document.getElementById("displayTableNo").innerText = tableNo;
+    
+    // เปลี่ยนจาก const เป็น let และลบ || '1' ออก
+    let tableNo = urlParams.get('table') || urlParams.get('tableNo');
+    
+    // ตรวจสอบว่ามีเลขโต๊ะหรือไม่
+    if (tableNo) {
+        // ถ้ามีเลขโต๊ะจาก URL ให้แสดงผลปกติ
+        document.getElementById("displayTableNo").innerText = tableNo;
+    } else {
+        // ถ้าไม่มีเลขโต๊ะ (ไม่ได้สแกนคิวอาร์โค้ดโต๊ะมา) ให้เด้งกล่องถามเลขโต๊ะ
+        tableNo = prompt("กรุณาระบุหมายเลขโต๊ะของคุณ:");
+        document.getElementById("displayTableNo").innerText = tableNo || "?";
+    }
 
     // 📌 ฟังก์ชันนำลูกค้าเข้าโต๊ะ (เช็คอินบันทึกชื่อลง Firestore ในโต๊ะนั้น)
     async function joinTable(tableId, profile) {
