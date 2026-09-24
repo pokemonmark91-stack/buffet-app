@@ -32,6 +32,8 @@
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .already-member { background: #e8faf0; border: 1px solid #06C755; border-radius: 12px; padding: 20px; margin-top: 10px; }
     .points-badge { font-size: 28px; font-weight: 700; color: #06C755; margin: 10px 0; }
+    .btn-table { background: #06C755; color: white; border: none; padding: 10px; width: 70px; height: 70px; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 10px rgba(6, 199, 85, 0.2); transition: transform 0.1s; }
+    .btn-table:active { transform: scale(0.95); }
   </style>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
@@ -77,24 +79,22 @@
     </div>
   </div>
 
-<!-- ป๊อปอัปเลือกโต๊ะแบบใหม่ -->
-<div id="tableSelectionOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center;">
-    <div style="background: white; padding: 25px 20px; border-radius: 15px; width: 90%; max-width: 350px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-        <h5 style="margin-bottom: 5px; font-weight: bold; color: #333;">🍽️ กรุณาเลือกโต๊ะของคุณ</h5>
-        <p style="font-size: 13px; color: #777; margin-bottom: 20px;">เฉพาะโต๊ะที่พนักงานเปิดให้ใช้บริการแล้วเท่านั้น</p>
-        <div id="activeTablesList" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-height: 350px; overflow-y: auto;">
-            <div class="spinner-border text-success" role="status"></div>
-        </div>
-    </div>
-</div>
+  <!-- ป๊อปอัปเลือกโต๊ะแบบใหม่ -->
+  <div id="tableSelectionOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center;">
+      <div style="background: white; padding: 25px 20px; border-radius: 15px; width: 90%; max-width: 350px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+          <h5 style="margin-bottom: 5px; font-weight: bold; color: #333;">🍽️ กรุณาเลือกโต๊ะของคุณ</h5>
+          <p style="font-size: 13px; color: #777; margin-bottom: 20px;">เฉพาะโต๊ะที่พนักงานเปิดให้ใช้บริการแล้วเท่านั้น</p>
+          <div id="activeTablesList" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-height: 350px; overflow-y: auto;">
+              <div class="spinner"></div>
+          </div>
+      </div>
+  </div>
   
-  <!-- เปลี่ยนเป็น module เพื่อใช้ Firebase -->
+  <!-- JavaScript & Firebase -->
   <script type="module">
-    // นำเข้า Firebase SDK
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // กำหนดค่าคอนฟิกของ Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
       authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -105,31 +105,18 @@
       measurementId: "G-82JK3EL1HL"
     };
 
-    // เริ่มต้นระบบ Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
     const LIFF_ID = "2011490016-dCbAfdtG"; 
     let lineUID = "";
     let userProfileData = null;
+    let tableNo = "";
     const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 24 24' fill='none' stroke='%23ced6e0' stroke-width='1.5'><circle cx='12' cy='8' r='4'/><path d='M20 21a8 8 0 0 0-16 0'/></svg>";
 
     const WEB_APP_URL = "https://pokemonmark91-stack.github.io/buffet-app/customer"; 
 
-    // ดึงหมายเลขโต๊ะจาก URL
-    const urlParams = new URLSearchParams(window.location.search);
-    
-    // เปลี่ยนจาก const เป็น let และลบ || '1' ออก
-    let tableNo = urlParams.get('table') || urlParams.get('tableNo');
-    
-    // ตรวจสอบว่ามีเลขโต๊ะหรือไม่
-    if (tableNo) {
-        // ถ้ามีเลขโต๊ะจาก URL ให้แสดงผลปกติ
-        document.getElementById("displayTableNo").innerText = tableNo;
-    } else {
-      
-
-    // 📌 ฟังก์ชันนำลูกค้าเข้าโต๊ะ (เช็คอินบันทึกชื่อลง Firestore ในโต๊ะนั้น)
+    // 📌 ฟังก์ชันนำลูกค้าเข้าโต๊ะ
     async function joinTable(tableId, profile) {
       if (!tableId || !profile) return;
       const tableRef = doc(db, "tables", String(tableId));
@@ -146,7 +133,6 @@
           const data = tableSnap.data();
           let activeMembers = data.activeMembers || [];
           
-          // กรองเพื่อไม่ให้มี uid ซ้ำ แล้วอัปเดตข้อมูลล่าสุดเข้าไป
           activeMembers = activeMembers.filter(m => m.uid !== profile.userId);
           activeMembers.push(memberObj);
 
@@ -156,7 +142,6 @@
             updatedAt: serverTimestamp()
           });
         } else {
-          // หากยังไม่มี Document ของโต๊ะนี้ ให้สร้างขึ้นใหม่
           await setDoc(tableRef, {
             tableNo: String(tableId),
             status: "occupied",
@@ -169,7 +154,7 @@
       }
     }
 
-    // 📌 ฟังก์ชันพาไปหน้าสั่งอาหาร (ส่งค่า uid และ table ไปด้วย)
+    // 📌 ฟังก์ชันพาไปหน้าสั่งอาหาร
     window.goToCustomerPage = function() {
       window.location.replace(`${WEB_APP_URL}?page=customer&uid=${lineUID}&table=${tableNo}`);
     }
@@ -193,7 +178,6 @@
       btn.innerText = "กำลังบันทึกข้อมูล...";
 
       try {
-        // 1. บันทึกข้อมูลลง Firestore คอลเลกชัน "members"
         await setDoc(doc(db, "members", lineUID), {
           userId: lineUID,
           phone: phone,
@@ -205,121 +189,132 @@
           createdAt: serverTimestamp()
         });
         
-        // 2. นำผู้ใช้เข้าโต๊ะ
         if (userProfileData) {
           await joinTable(tableNo, userProfileData);
         }
 
-        // 3. เด้งเข้าหน้า customer ทันที
         window.goToCustomerPage();
         
       } catch (err) {
         console.error("Firebase Error:", err);
         alert("เกิดข้อผิดพลาดในการเชื่อมต่อ: " + err.message);
         btn.disabled = false;
-        btn.innerText = "สมัครสมาชิก";
+        btn.innerText = "สมัครสมาชิก & เข้าสู่โต๊ะ";
       }
     }
 
-    // ฟังก์ชันสร้างหน้าต่างเลือกโต๊ะ
-function requireTableSelection() {
-    return new Promise(async (resolve) => {
-        const overlay = document.getElementById("tableSelectionOverlay");
-        const listDiv = document.getElementById("activeTablesList");
-        
-        // ซ่อนตัวโหลดเก่า แล้วแสดงป๊อปอัปใหม่
-        overlay.style.display = "flex";
-
-        try {
-            const querySnapshot = await getDocs(collection(db, "tables"));
-            let activeTables = [];
+    // 📌 ฟังก์ชันป๊อปอัปดึงเฉพาะโต๊ะที่พนักงานเปิดแล้ว
+    function requireTableSelection() {
+        return new Promise(async (resolve) => {
+            const overlay = document.getElementById("tableSelectionOverlay");
+            const listDiv = document.getElementById("activeTablesList");
             
-            querySnapshot.forEach((doc) => {
-                let data = doc.data();
-                if (data.status && data.status !== "ว่าง") {
-                    activeTables.push(doc.id);
-                }
-            });
+            overlay.style.display = "flex";
 
-            if (activeTables.length === 0) {
-                listDiv.innerHTML = `<div style="color:red; font-size:14px; margin-bottom:10px;">❌ ยังไม่มีโต๊ะที่ถูกเปิด<br>โปรดแจ้งพนักงานเปิดโต๊ะก่อนครับ</div>
-                                     <button onclick="location.reload()" class="btn btn-sm btn-outline-secondary">โหลดหน้าเว็บใหม่</button>`;
-                return;
+            try {
+                const querySnapshot = await getDocs(collection(db, "tables"));
+                let activeTables = [];
+                
+                querySnapshot.forEach((docSnap) => {
+                    let data = docSnap.data();
+                    if (data.status && data.status !== "ว่าง") {
+                        activeTables.push(docSnap.id);
+                    }
+                });
+
+                if (activeTables.length === 0) {
+                    listDiv.innerHTML = `<div style="color:#ff4757; font-size:14px; margin-bottom:10px; font-weight:bold;">❌ ยังไม่มีโต๊ะที่ถูกเปิด<br><span style="font-weight:normal; color:#57606f;">โปรดแจ้งพนักงานให้เปิดโต๊ะก่อนครับ</span></div>
+                                         <button onclick="location.reload()" class="btn-submit" style="padding:8px 15px; font-size:14px;">ลองใหม่อีกครั้ง</button>`;
+                    return;
+                }
+
+                activeTables.sort((a, b) => parseInt(a) - parseInt(b));
+                let html = "";
+                activeTables.forEach(t => {
+                    html += `<button onclick="document.getElementById('tableSelectionOverlay').style.display='none'; window.resolveSelectedTable('${t}')" 
+                                     class="btn-table">
+                                โต๊ะ<br><span style="font-size:22px;">${t}</span>
+                             </button>`;
+                });
+                listDiv.innerHTML = html;
+
+                window.resolveSelectedTable = function(selectedTable) {
+                    resolve(selectedTable);
+                };
+
+            } catch (error) {
+                listDiv.innerHTML = `<p style='color:red; font-size:13px;'>เกิดข้อผิดพลาด: ${error.message}</p>`;
+            }
+        });
+    }
+
+    // 📌 ฟังก์ชันหลักตอนโหลดหน้า
+    async function main() {
+        const stepLog = document.getElementById("loadingText");
+        
+        try {
+            if(stepLog) stepLog.innerText = "กำลังเริ่มเชื่อมต่อ LIFF...";
+            await liff.init({ liffId: LIFF_ID });
+
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return; 
             }
 
-            activeTables.sort((a, b) => parseInt(a) - parseInt(b));
-            let html = "";
-            activeTables.forEach(t => {
-                html += `<button onclick="document.getElementById('tableSelectionOverlay').style.display='none'; window.resolveSelectedTable('${t}')" 
-                                 class="btn btn-success shadow-sm" style="width: 70px; height: 70px; border-radius: 12px; font-weight: bold; font-size: 16px;">
-                            โต๊ะ<br><span style="font-size:20px;">${t}</span>
-                         </button>`;
-            });
-            listDiv.innerHTML = html;
+            if(stepLog) stepLog.innerText = "กำลังดึงข้อมูลส่วนตัว...";
+            const profile = await liff.getProfile();
+            lineUID = profile.userId;
+            userProfileData = profile;
 
-            window.resolveSelectedTable = function(selectedTable) {
-                resolve(selectedTable);
-            };
+            // แสดงผลโปรไฟล์ LINE
+            const profilePic = profile.pictureUrl || DEFAULT_AVATAR;
+            document.getElementById("profileImage").src = profilePic;
+            document.getElementById("displayName").innerText = profile.displayName;
+            if(document.getElementById("memberProfileImage")) document.getElementById("memberProfileImage").src = profilePic;
+            if(document.getElementById("memberDisplayName")) document.getElementById("memberDisplayName").innerText = profile.displayName;
+            if(document.getElementById("name")) document.getElementById("name").value = profile.displayName;
 
-        } catch (error) {
-            listDiv.innerHTML = `<p style='color:red;'>เกิดข้อผิดพลาด: ${error.message}</p>`;
-        }
-    });
-}
+            // เช็คเลขโต๊ะจาก URL
+            const urlParams = new URLSearchParams(window.location.search);
+            tableNo = urlParams.get('table') || urlParams.get('tableNo');
+            
+            // ถ้าไม่มีเลขโต๊ะ ให้เด้งป๊อปอัปขึ้นมาให้เลือก
+            if (!tableNo) {
+                tableNo = await requireTableSelection();
+            }
 
-// ฟังก์ชันหลักที่ทำงานตอนเปิดหน้าเว็บ
-async function main() {
-    const stepLog = document.getElementById("loadingText");
-    
-    try {
-        if(stepLog) stepLog.innerText = "กำลังเริ่มเชื่อมต่อ LIFF...";
-        await liff.init({ liffId: LIFF_ID });
+            const displayTableObj = document.getElementById("displayTableNo");
+            if (displayTableObj) displayTableObj.innerText = tableNo;
 
-        if (!liff.isLoggedIn()) {
-            liff.login();
-            return; 
-        }
+            if(stepLog) stepLog.innerText = `กำลังเข้าสู่โต๊ะ ${tableNo} ...`;
+            
+            await joinTable(tableNo, profile);
 
-        if(stepLog) stepLog.innerText = "กำลังดึงข้อมูลส่วนตัว...";
-        const profile = await liff.getProfile();
-        lineUID = profile.userId;
+            // เช็คสมาชิกใน Firestore
+            const docRef = doc(db, "members", lineUID);
+            const docSnap = await getDoc(docRef);
 
-        const urlParams = new URLSearchParams(window.location.search);
-        let tableNo = urlParams.get('table') || urlParams.get('tableNo');
-        
-        // ถ้าไม่มีเลขโต๊ะ ให้เด้งป๊อปอัปขึ้นมาให้เลือก
-        if (!tableNo) {
-            tableNo = await requireTableSelection();
-        }
+            document.getElementById("loadingState").style.display = "none";
 
-        const displayTableObj = document.getElementById("displayTableNo");
-        if (displayTableObj) displayTableObj.innerText = tableNo;
+            if (docSnap.exists()) {
+              const userData = docSnap.data();
+              if(document.getElementById("userPoints")) document.getElementById("userPoints").innerText = userData.points || 0;
+              document.getElementById("alreadyMemberState").style.display = "block";
+              setTimeout(() => { window.goToCustomerPage(); }, 1500);
+            } else {
+              document.getElementById("registerForm").style.display = "block";
+            }
 
-        if(stepLog) stepLog.innerText = `กำลังเข้าสู่โต๊ะ ${tableNo} ...`;
-        
-        await setDoc(doc(db, "members", lineUID), {
-            displayName: profile.displayName,
-            pictureUrl: profile.pictureUrl || "",
-            uid: lineUID
-        }, { merge: true });
-
-        await joinTable(tableNo, profile);
-        
-        // เมื่อเสร็จแล้วพาลูกค้าไปหน้าสั่งอาหาร
-        if (typeof window.goToCustomerPage === 'function') {
-            window.goToCustomerPage();
-        }
-
-    } catch (err) {
-        console.error(err);
-        if(stepLog) {
-            stepLog.innerHTML = `<span style="color:red; font-weight:bold;">เกิดข้อผิดพลาด: ${err.message}</span><br><button onclick="location.reload()">ลองใหม่</button>`;
-        } else {
-            alert("เกิดข้อผิดพลาด: " + err.message);
+        } catch (err) {
+            console.error("Main Error:", err);
+            if(stepLog) {
+                stepLog.innerHTML = `<span style="color:#ff4757; font-weight:bold;">เกิดข้อผิดพลาด: ${err.message}</span><br><button onclick="location.reload()" style="margin-top:10px; padding:5px 10px;">ลองใหม่</button>`;
+            } else {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            }
         }
     }
-}
-    
+        
     window.addEventListener('DOMContentLoaded', main);
   </script>
 </body>
