@@ -236,6 +236,13 @@
 
         stepLog.innerText = "Step 4: กำลังตรวจสอบฐานข้อมูล Firebase และเข้าสู่โต๊ะ...";
         
+        // 📌 บันทึก/อัปเดตรูปลงใน Firestore คอลเลกชัน members เสมอ ป้องกันรูปหาย
+        await setDoc(doc(db, "members", lineUID), {
+            displayName: profile.displayName,
+            pictureUrl: profile.pictureUrl || "",
+            uid: lineUID
+        }, { merge: true });
+
         // บันทึก/อัปเดตสมาชิกเข้าโต๊ะทันที
         await joinTable(tableNo, profile);
 
@@ -260,7 +267,7 @@
         stepLog.innerHTML = `<span style='color:red;'>ข้อผิดพลาด: ${err.message || err}</span>`;
       }
     }
-
+    
     window.addEventListener('DOMContentLoaded', main);
   </script>
 </body>
