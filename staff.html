@@ -1813,6 +1813,38 @@ async function confirmPaymentAndAwardPoints() {
         btn.innerText = "ยืนยันชำระเงิน & แจกแต้ม 💳";
     }
 }
+
+async function cancelTable(tNo) {
+    if (!confirm(`คุณต้องการยกเลิกและเคลียร์ข้อมูลโต๊ะ ${tNo} ใช่หรือไม่?`)) return;
+    
+    try {
+        const tableRef = db.collection("tables").doc(String(tNo));
+        
+        // 1. ลบรายการออเดอร์ค้างทั้งหมดในโต๊ะ
+        const ordersSnap = await tableRef.collection("orders").get();
+        const batch = db.batch();
+        ordersSnap.forEach(doc => batch.delete(doc.ref));
+        
+        // 2. ล้างข้อมูลโต๊ะให้กลับเป็นค่าเริ่มต้นทั้งหมด
+        batch.set(tableRef, {
+            status: "ว่าง",
+            activeMembers: [],
+            adults: 0,
+            children: 0,
+            totalPeople: 0,
+            package: "",
+            packagePrice: 0
+        });
+
+        await batch.commit();
+        alert("เคลียร์ข้อมูลโต๊ะเรียบร้อยแล้ว");
+        if (typeof loadDashboard === 'function') loadDashboard();
+
+    } catch (err) {
+        console.error("Error resetting table:", err);
+        alert("เกิดข้อผิดพลาด: " + err.message);
+    }
+}
     
 </script>
 </body>
