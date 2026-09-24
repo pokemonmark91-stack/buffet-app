@@ -219,12 +219,33 @@
             let tNo = urlParams.get('table') || urlParams.get('tableNo');
             userUid = urlParams.get('uid');
 
+            // 1. ดึง URL รูปภาพและชื่อ กรณีมีการส่งมาทาง URL (เช่น ?pictureUrl=... หรือ ?img=...)
+            let urlPic = urlParams.get('pictureUrl') || urlParams.get('picture') || urlParams.get('img') || urlParams.get('photo') || "";
+            let urlName = urlParams.get('name') || urlParams.get('displayName') || "";
+
+            // 2. ดึงและอัปเดตข้อมูลผู้ใช้ใน Firestore
             if (userUid) {
                 try {
-                    const userDoc = await db.collection("members").doc(userUid).get();
+                    const userRef = db.collection("members").doc(userUid);
+                    const userDoc = await userRef.get();
+                    
                     if (userDoc.exists) {
-                        currentUser = userDoc.data();
-                        currentUser.uid = userUid; 
+                        currentUser = userDoc.data() || {};
+                        currentUser.uid = userUid;
+                        
+                        // ถ้ารูปใน DB เป็นค่าว่าง แต่มีรูปส่งมาจาก URL ให้บันทึกรูปใหม่ลง DB ทันที
+                        if ((!currentUser.pictureUrl || currentUser.pictureUrl.trim() === "") && urlPic) {
+                            currentUser.pictureUrl = urlPic;
+                            await userRef.set({ pictureUrl: urlPic }, { merge: true });
+                        }
+                    } else {
+                        // ถ้ายังไม่มีข้อมูลใน DB ให้สร้างขึ้นใหม่พร้อมรูปภาพทันที
+                        currentUser = {
+                            uid: userUid,
+                            displayName: urlName || "ลูกค้า",
+                            pictureUrl: urlPic || ""
+                        };
+                        await userRef.set(currentUser);
                     }
                 } catch (e) {
                     console.error("Error fetching user data:", e);
