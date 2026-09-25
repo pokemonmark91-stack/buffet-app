@@ -977,38 +977,6 @@
         }
     }
 
-    async function confirmMoveTable() {
-        var oldTable = document.getElementById('moveOldTable').value;
-        var newTable = document.getElementById('moveNewTable').value.trim();
-        if(!newTable) return alert("กรุณาระบุเลขโต๊ะใหม่");
-
-        try {
-            const oldTableDoc = await db.collection("tables").doc(oldTable).get();
-            if (!oldTableDoc.exists) return alert("ไม่พบข้อมูลโต๊ะเดิม");
-
-            const ordersSnapshot = await db.collection("tables").doc(oldTable).collection("orders").get();
-            
-            await db.collection("tables").doc(newTable).set(oldTableDoc.data());
-            await db.collection("tables").doc(newTable).update({ tableNo: newTable, status: "ไม่ว่าง" });
-
-            const batch = db.batch();
-            ordersSnapshot.forEach(doc => {
-                const newOrderRef = db.collection("tables").doc(newTable).collection("orders").doc(doc.id);
-                batch.set(newOrderRef, doc.data());
-                batch.delete(doc.ref);
-            });
-            await batch.commit();
-
-            await db.collection("tables").doc(oldTable).update({ status: "ว่าง", activeMembers: [] });
-
-            alert("✅ ย้ายโต๊ะสำเร็จ!");
-            moveTableModalObj.hide();
-            loadDashboard();
-            selectTable(newTable);
-        } catch (err) {
-            alert("เกิดข้อผิดพลาดในการย้ายโต๊ะ: " + err.message);
-        }
-    }
 
     async function confirmVoidTable() {
         var tNo = getActiveTable();
