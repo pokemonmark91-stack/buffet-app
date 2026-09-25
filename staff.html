@@ -514,11 +514,28 @@
         });
     }
 
+        // 1. ฟังก์ชันเปิดหน้าต่างย้ายโต๊ะ (แก้ปัญหาปุ่มย้ายโต๊ะกดแล้วไม่ตอบสนอง)
+    function openMoveTableModal() {
+        var tNo = getActiveTable();
+        if (!tNo) return alert("กรุณาคลิกเลือกโต๊ะที่ต้องการย้ายจากผังด้านบนก่อนครับ");
+
+        document.getElementById('moveOldTable').value = tNo;
+        document.getElementById('moveNewTable').value = "";
+        
+        if (moveTableModalObj) {
+            moveTableModalObj.show();
+        } else {
+            moveTableModalObj = new bootstrap.Modal(document.getElementById('moveTableModal'));
+            moveTableModalObj.show();
+        }
+    }
+
     // 2. ฟังก์ชันย้ายโต๊ะ (ย้ายทั้งออเดอร์ สมาชิก และจำนวนคน)
     async function confirmMoveTable() {
         var oldTable = document.getElementById('moveOldTable').value;
         var newTable = document.getElementById('moveNewTable').value.trim();
         if(!newTable) return alert("กรุณาระบุเลขโต๊ะใหม่");
+        if(oldTable === newTable) return alert("โต๊ะใหม่ต้องไม่ตรงกับโต๊ะเดิมครับ");
 
         try {
             const oldTableRef = db.collection("tables").doc(String(oldTable));
@@ -576,7 +593,7 @@
             });
 
             alert("✅ ย้ายโต๊ะจาก " + oldTable + " ไปโต๊ะ " + newTable + " สำเร็จ!");
-            moveTableModalObj.hide();
+            if (moveTableModalObj) moveTableModalObj.hide();
             loadDashboard();
             selectTable(newTable);
         } catch (err) {
