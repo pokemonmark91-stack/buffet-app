@@ -1706,114 +1706,154 @@ async function openCheckoutModal(tNo) {
         document.getElementById("checkoutTotalBill").innerText = totalAmount.toLocaleString() + " บาท";
         document.getElementById("checkoutSuggestedPoints").innerText = totalPoints + " แต้ม";
 
-        // แสดงรายการสมาชิกและช่องใส่แต้ม
-        let membersHtml = "";
-        if (members.length === 0) {
-            membersHtml = `<div class="text-muted text-center py-3">ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>`;
-        } else {
-            members.forEach(m => {
-                let uid = m.uid || "";
-                let name = m.displayName || m.name || "ลูกค้า";
-                let imgUrl = m.pictureUrl || m.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true`;
+        // ฟังก์ชันตรวจสอบไม่ให้กรอกแต้มรวมเกินจำนวนที่คำนวณได้
+window.validatePoints = function(currentInput, maxAllowedPoints) {
+    const inputs = document.querySelectorAll('.checkout-point-input');
+    let totalSum = 0;
 
-                membersHtml += `
-                <div class="d-flex align-items-center justify-content-between p-2 mb-2 bg-light rounded border">
-                    <div class="d-flex align-items-center gap-2">
-                        <img src="${imgUrl}" 
-                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true'"
-                             style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
-                        <div>
-                            <div class="fw-bold text-dark" style="font-size: 14px;">${name}</div>
-                            <small class="text-muted" style="font-size: 11px;">${m.phone || 'สมาชิก'}</small>
-                        </div>
-                    </div>
-                    <div class="d-flex align-items-center gap-1" style="width: 120px;">
-                        <input type="number" 
-                               class="form-control form-control-sm text-center fw-bold checkout-point-input" 
-                               data-uid="${uid}" 
-                               value="${defaultPointsPerPerson}" 
-                               min="0">
-                        <span class="small text-muted" style="font-size: 12px;">แต้ม</span>
-                    </div>
-                </div>`;
-            });
-        }
+    inputs.forEach(input => {
+        totalSum += parseInt(input.value) || 0;
+    });
 
-        document.getElementById("checkoutMembersList").innerHTML = membersHtml;
-
-        let modalEl = document.getElementById('checkoutModal');
-        let modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-        modal.show();
-
-    } catch (err) {
-        console.error("Error opening checkout modal:", err);
-        alert("เกิดข้อผิดพลาดในการโหลดข้อมูลบิล: " + err.message);
+    if (totalSum > maxAllowedPoints) {
+        alert(`⚠️ ไม่สามารถแจกแต้มเกิน ${maxAllowedPoints} แต้มได้ครับ (แต้มรวมปัจจุบัน: ${totalSum} แต้ม)`);
+        
+        // คำนวณส่วนเกินแล้วปรับลดค่าในช่องที่กำลังพิมพ์ลงมาไม่ให้เกิน
+        const diff = totalSum - maxAllowedPoints;
+        const correctValue = (parseInt(currentInput.value) || 0) - diff;
+        currentInput.value = correctValue > 0 ? correctValue : 0;
     }
+}
+
+// แสดงรายการสมาชิกและช่องใส่แต้ม
+let membersHtml = "";
+if (members.length === 0) {
+    membersHtml = `<div class="text-muted text-center py-3">ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>`;
+} else {
+    members.forEach(m => {
+        let uid = m.uid || "";
+        let name = m.displayName || m.name || "ลูกค้า";
+        let imgUrl = m.pictureUrl || m.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true`;
+
+        membersHtml += `
+        <div class="d-flex align-items-center justify-content-between p-2 mb-2 bg-light rounded border">
+            <div class="d-flex align-items-center gap-2">
+                <img src="${imgUrl}" 
+                     onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true'"
+                     style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                <div>
+                    <div class="fw-bold text-dark" style="font-size: 14px;">${name}</div>
+                    <small class="text-muted" style="font-size: 11px;">${m.phone || 'สมาชิก'}</small>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-1" style="width: 120px;">
+                <!-- เพิ่ม oninput เรียกฟังก์ชัน validatePoints โดยส่งแต้มที่คำนวณได้ไปเช็ค -->
+                <input type="number" 
+                       class="form-control form-control-sm text-center fw-bold checkout-point-input" 
+                       data-uid="${uid}" 
+                       value="${defaultPointsPerPerson}" 
+                       min="0"
+                       max="${points}"
+                       oninput="validatePoints(this, ${points})">
+                <span class="small text-muted" style="font-size: 12px;">แต้ม</span>
+            </div>
+        </div>`;
+    });
+}
+
+document.getElementById("checkoutMembersList").innerHTML = membersHtml;
+
+let modalEl = document.getElementById('checkoutModal');
+let modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+modal.show();
+
+} catch (err) {
+    console.error("Error opening checkout modal:", err);
+    alert("เกิดข้อผิดพลาดในการโหลดข้อมูลบิล: " + err.message);
 }
 
 // 2. ฟังก์ชันยืนยันชำระเงิน + บันทึกแต้มลง Firebase + เคลียร์โต๊ะ
 async function confirmPaymentAndAwardPoints() {
-    if (!currentCheckoutTable) return;
-    
-    const btn = document.getElementById("btnConfirmCheckout");
-    btn.disabled = true;
-    btn.innerText = "กำลังบันทึก...";
+    If (!currentCheckoutTable) return;
 
-    try {
-        const batch = db.batch();
-        const pointInputs = document.querySelectorAll('.checkout-point-input');
+    Const pointInputs = document.querySelectorAll('.checkout-point-input');
+
+    // ---------------------------------------------------------
+    // 🛡️ ตรวจสอบไม่ให้แจกแต้มรวมเกินจำนวนแต้มสูงสุดของบิล
+    // ---------------------------------------------------------
+    Let totalGivenPoints = 0;
+    Let maxAllowedPoints = 0;
+
+    PointInputs.forEach(input => {
+        TotalGivenPoints += parseInt(input.value) || 0;
+        // ดึงค่าแต้มสูงสุดจาก attribute 'max' ของช่องกรอก
+        Const attrMax = parseInt(input.getAttribute('max'));
+        If (!isNaN(attrMax)) maxAllowedPoints = attrMax;
+    });
+
+    If (maxAllowedPoints > 0 && totalGivenPoints > maxAllowedPoints) {
+        Alert(`❌ ไม่สามารถบันทึกได้!\n\nแต้มรวมที่คุณใส่ (${totalGivenPoints} แต้ม) เกินกว่าแต้มสูงสุดที่ได้รับจากบิลนี้ (${maxAllowedPoints} แต้ม)`);
+        Return; // หยุดทำงานทันที ไม่ล็อกปุ่ม และไม่บันทึกลง Firebase
+    }
+    // ---------------------------------------------------------
+
+    Const btn = document.getElementById("btnConfirmCheckout");
+    Btn.disabled = true;
+    Btn.innerText = "กำลังบันทึก...";
+
+    Try {
+        Const batch = db.batch();
 
         // 1. เพิ่มแต้มสะสมให้ลูกค้าแต่ละคนในคอลเลกชัน members
-        pointInputs.forEach(input => {
-            let uid = input.getAttribute('data-uid');
-            let awardedPoints = parseInt(input.value) || 0;
+        PointInputs.forEach(input => {
+            Let uid = input.getAttribute('data-uid');
+            Let awardedPoints = parseInt(input.value) || 0;
 
-            if (uid && awardedPoints > 0) {
-                const memberRef = db.collection("members").doc(uid);
+            If (uid && awardedPoints > 0) {
+                Const memberRef = db.collection("members").doc(uid);
                 // สะสมแต้มเพิ่มจากของเดิมในระบบ
-                batch.set(memberRef, {
-                    points: firebase.firestore.FieldValue.increment(awardedPoints)
+                Batch.set(memberRef, {
+                    Points: firebase.firestore.FieldValue.increment(awardedPoints)
                 }, { merge: true });
             }
         });
 
         // 2. ลบออเดอร์ทั้งหมดในโต๊ะ
-        const tableRef = db.collection("tables").doc(currentCheckoutTable);
-        const ordersSnap = await tableRef.collection("orders").get();
-        ordersSnap.forEach(doc => {
-            batch.delete(doc.ref);
+        Const tableRef = db.collection("tables").doc(currentCheckoutTable);
+        Const ordersSnap = await tableRef.collection("orders").get();
+        OrdersSnap.forEach(doc => {
+            Batch.delete(doc.ref);
         });
 
         // 3. รีเซ็ตสถานะโต๊ะให้เป็น "ว่าง"
-        batch.update(tableRef, {
-            status: "ว่าง",
-            activeMembers: [],
-            adults: 0,
-            children: 0,
-            totalPeople: 0,
-            package: "",
-            packagePrice: 0
+        Batch.update(tableRef, {
+            Status: "ว่าง",
+            ActiveMembers: [],
+            Adults: 0,
+            Children: 0,
+            TotalPeople: 0,
+            Package: "",
+            PackagePrice: 0
         });
 
-        await batch.commit();
+        Await batch.commit();
 
-        alert("✅ ชำระเงินและบันทึกแต้มสะสมเรียบร้อยแล้ว!");
+        Alert("✅ ชำระเงินและบันทึกแต้มสะสมเรียบร้อยแล้ว!");
 
-        let modalEl = document.getElementById('checkoutModal');
-        let modal = bootstrap.Modal.getInstance(modalEl);
-        if (modal) modal.hide();
+        Let modalEl = document.getElementById('checkoutModal');
+        Let modal = bootstrap.Modal.getInstance(modalEl);
+        If (modal) modal.hide();
 
-        if (typeof loadDashboard === 'function') loadDashboard();
+        If (typeof loadDashboard === 'function') loadDashboard();
 
     } catch (err) {
-        console.error("Error confirming checkout:", err);
-        alert("เกิดข้อผิดพลาดในการชำระเงิน: " + err.message);
+        Console.error("Error confirming checkout:", err);
+        Alert("เกิดข้อผิดพลาดในการชำระเงิน: " + err.message);
     } finally {
-        btn.disabled = false;
-        btn.innerText = "ยืนยันชำระเงิน & แจกแต้ม 💳";
+        Btn.disabled = false;
+        Btn.innerText = "ยืนยันชำระเงิน & แจกแต้ม 💳";
     }
 }
-
 // ฟังก์ชันสำหรับยกเลิกและเคลียร์ข้อมูลโต๊ะ
 async function cancelTable(tNo) {
     if (!confirm(`คุณต้องการยกเลิกและเคลียร์ข้อมูลโต๊ะ ${tNo} ใช่หรือไม่?`)) return;
@@ -1861,6 +1901,27 @@ async function cancelTable(tNo) {
     } catch (err) {
         console.error("Error resetting table:", err);
         alert("เกิดข้อผิดพลาดในการยกเลิกโต๊ะ: " + err.message);
+    }
+}
+
+// ฟังก์ชันตรวจสอบไม่ให้กรอกแต้มรวมเกินจำนวนที่คำนวณได้
+function validatePoints(currentInput, maxAllowedPoints) {
+    // ดึงช่องกรอกแต้มของทุกคนในหน้าต่างป๊อปอัป
+    const inputs = document.querySelectorAll('.member-point-input');
+    let totalSum = 0;
+
+    inputs.forEach(input => {
+        totalSum += parseInt(input.value) || 0;
+    });
+
+    // ถ้าผลรวมแต้มของทุกคนเกินแต้มที่กำหนด
+    if (totalSum > maxAllowedPoints) {
+        alert(`⚠️ ไม่สามารถแจกแต้มเกิน ${maxAllowedPoints} แต้มได้ครับ (แต้มรวมปัจจุบัน: ${totalSum} แต้ม)`);
+        
+        // คำนวณส่วนเกินแล้วปรับลดค่าในช่องที่กำลังพิมพ์ลงมาไม่ให้เกิน
+        const diff = totalSum - maxAllowedPoints;
+        const correctValue = (parseInt(currentInput.value) || 0) - diff;
+        currentInput.value = correctValue > 0 ? correctValue : 0;
     }
 }
     
