@@ -1774,86 +1774,87 @@ modal.show();
 
 // 2. ฟังก์ชันยืนยันชำระเงิน + บันทึกแต้มลง Firebase + เคลียร์โต๊ะ
 async function confirmPaymentAndAwardPoints() {
-    If (!currentCheckoutTable) return;
+    if (!currentCheckoutTable) return;
 
-    Const pointInputs = document.querySelectorAll('.checkout-point-input');
+    const pointInputs = document.querySelectorAll('.checkout-point-input');
 
     // ---------------------------------------------------------
     // 🛡️ ตรวจสอบไม่ให้แจกแต้มรวมเกินจำนวนแต้มสูงสุดของบิล
     // ---------------------------------------------------------
-    Let totalGivenPoints = 0;
-    Let maxAllowedPoints = 0;
+    let totalGivenPoints = 0;
+    let maxAllowedPoints = 0;
 
-    PointInputs.forEach(input => {
-        TotalGivenPoints += parseInt(input.value) || 0;
+    pointInputs.forEach(input => {
+        totalGivenPoints += parseInt(input.value) || 0;
         // ดึงค่าแต้มสูงสุดจาก attribute 'max' ของช่องกรอก
-        Const attrMax = parseInt(input.getAttribute('max'));
-        If (!isNaN(attrMax)) maxAllowedPoints = attrMax;
+        const attrMax = parseInt(input.getAttribute('max'));
+        if (!isNaN(attrMax)) maxAllowedPoints = attrMax;
     });
 
-    If (maxAllowedPoints > 0 && totalGivenPoints > maxAllowedPoints) {
-        Alert(`❌ ไม่สามารถบันทึกได้!\n\nแต้มรวมที่คุณใส่ (${totalGivenPoints} แต้ม) เกินกว่าแต้มสูงสุดที่ได้รับจากบิลนี้ (${maxAllowedPoints} แต้ม)`);
-        Return; // หยุดทำงานทันที ไม่ล็อกปุ่ม และไม่บันทึกลง Firebase
+    if (maxAllowedPoints > 0 && totalGivenPoints > maxAllowedPoints) {
+        alert(`❌ ไม่สามารถบันทึกได้!\n\nแต้มรวมที่คุณใส่ (${totalGivenPoints} แต้ม) เกินกว่าแต้มสูงสุดที่ได้รับจากบิลนี้ (${maxAllowedPoints} แต้ม)`);
+        return; // หยุดทำงานทันที ไม่ล็อกปุ่ม และไม่บันทึกลง Firebase
     }
     // ---------------------------------------------------------
 
-    Const btn = document.getElementById("btnConfirmCheckout");
-    Btn.disabled = true;
-    Btn.innerText = "กำลังบันทึก...";
+    const btn = document.getElementById("btnConfirmCheckout");
+    btn.disabled = true;
+    btn.innerText = "กำลังบันทึก...";
 
-    Try {
-        Const batch = db.batch();
+    try {
+        const batch = db.batch();
 
         // 1. เพิ่มแต้มสะสมให้ลูกค้าแต่ละคนในคอลเลกชัน members
-        PointInputs.forEach(input => {
-            Let uid = input.getAttribute('data-uid');
-            Let awardedPoints = parseInt(input.value) || 0;
+        pointInputs.forEach(input => {
+            let uid = input.getAttribute('data-uid');
+            let awardedPoints = parseInt(input.value) || 0;
 
-            If (uid && awardedPoints > 0) {
-                Const memberRef = db.collection("members").doc(uid);
+            if (uid && awardedPoints > 0) {
+                const memberRef = db.collection("members").doc(uid);
                 // สะสมแต้มเพิ่มจากของเดิมในระบบ
-                Batch.set(memberRef, {
-                    Points: firebase.firestore.FieldValue.increment(awardedPoints)
+                batch.set(memberRef, {
+                    points: firebase.firestore.FieldValue.increment(awardedPoints)
                 }, { merge: true });
             }
         });
 
         // 2. ลบออเดอร์ทั้งหมดในโต๊ะ
-        Const tableRef = db.collection("tables").doc(currentCheckoutTable);
-        Const ordersSnap = await tableRef.collection("orders").get();
-        OrdersSnap.forEach(doc => {
-            Batch.delete(doc.ref);
+        const tableRef = db.collection("tables").doc(currentCheckoutTable);
+        const ordersSnap = await tableRef.collection("orders").get();
+        ordersSnap.forEach(doc => {
+            batch.delete(doc.ref);
         });
 
         // 3. รีเซ็ตสถานะโต๊ะให้เป็น "ว่าง"
-        Batch.update(tableRef, {
-            Status: "ว่าง",
-            ActiveMembers: [],
-            Adults: 0,
-            Children: 0,
-            TotalPeople: 0,
-            Package: "",
-            PackagePrice: 0
+        batch.update(tableRef, {
+            status: "ว่าง",
+            activeMembers: [],
+            adults: 0,
+            children: 0,
+            totalPeople: 0,
+            package: "",
+            packagePrice: 0
         });
 
-        Await batch.commit();
+        await batch.commit();
 
-        Alert("✅ ชำระเงินและบันทึกแต้มสะสมเรียบร้อยแล้ว!");
+        alert("✅ ชำระเงินและบันทึกแต้มสะสมเรียบร้อยแล้ว!");
 
-        Let modalEl = document.getElementById('checkoutModal');
-        Let modal = bootstrap.Modal.getInstance(modalEl);
-        If (modal) modal.hide();
+        let modalEl = document.getElementById('checkoutModal');
+        let modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
 
-        If (typeof loadDashboard === 'function') loadDashboard();
+        if (typeof loadDashboard === 'function') loadDashboard();
 
     } catch (err) {
-        Console.error("Error confirming checkout:", err);
-        Alert("เกิดข้อผิดพลาดในการชำระเงิน: " + err.message);
+        console.error("Error confirming checkout:", err);
+        alert("เกิดข้อผิดพลาดในการชำระเงิน: " + err.message);
     } finally {
-        Btn.disabled = false;
-        Btn.innerText = "ยืนยันชำระเงิน & แจกแต้ม 💳";
+        btn.disabled = false;
+        btn.innerText = "ยืนยันชำระเงิน & แจกแต้ม 💳";
     }
 }
+    
 // ฟังก์ชันสำหรับยกเลิกและเคลียร์ข้อมูลโต๊ะ
 async function cancelTable(tNo) {
     if (!confirm(`คุณต้องการยกเลิกและเคลียร์ข้อมูลโต๊ะ ${tNo} ใช่หรือไม่?`)) return;
