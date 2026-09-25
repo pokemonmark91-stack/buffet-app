@@ -1786,14 +1786,13 @@ async function confirmPaymentAndAwardPoints() {
 
     pointInputs.forEach(input => {
         totalGivenPoints += parseInt(input.value) || 0;
-        // ดึงค่าแต้มสูงสุดจาก attribute 'max' ของช่องกรอก
         const attrMax = parseInt(input.getAttribute('max'));
         if (!isNaN(attrMax)) maxAllowedPoints = attrMax;
     });
 
     if (maxAllowedPoints > 0 && totalGivenPoints > maxAllowedPoints) {
         alert(`❌ ไม่สามารถบันทึกได้!\n\nแต้มรวมที่คุณใส่ (${totalGivenPoints} แต้ม) เกินกว่าแต้มสูงสุดที่ได้รับจากบิลนี้ (${maxAllowedPoints} แต้ม)`);
-        return; // หยุดทำงานทันที ไม่ล็อกปุ่ม และไม่บันทึกลง Firebase
+        return;
     }
     // ---------------------------------------------------------
 
@@ -1811,7 +1810,6 @@ async function confirmPaymentAndAwardPoints() {
 
             if (uid && awardedPoints > 0) {
                 const memberRef = db.collection("members").doc(uid);
-                // สะสมแต้มเพิ่มจากของเดิมในระบบ
                 batch.set(memberRef, {
                     points: firebase.firestore.FieldValue.increment(awardedPoints)
                 }, { merge: true });
