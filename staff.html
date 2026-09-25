@@ -583,13 +583,15 @@
             });
             await batch.commit();
 
-            // ล้างโต๊ะเดิมให้เป็นโต๊ะว่างแบบสะอาด 100%
-            await oldTableRef.update({ 
+            // ล้างโต๊ะเดิมให้เป็นโต๊ะว่างแบบสะอาด 100% (ใช้ .set เพื่อเคลียร์ฟิลด์ที่ตกค้างทั้งหมด)
+            await oldTableRef.set({ 
+                tableNo: String(oldTable),
                 status: "ว่าง", 
                 activeMembers: [],
                 adults: 0,
                 children: 0,
-                totalPeople: 0
+                totalPeople: 0,
+                packagePrice: 0
             });
 
             alert("✅ ย้ายโต๊ะจาก " + oldTable + " ไปโต๊ะ " + newTable + " สำเร็จ!");
