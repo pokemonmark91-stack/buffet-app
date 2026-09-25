@@ -1707,70 +1707,71 @@ async function openCheckoutModal(tNo) {
         document.getElementById("checkoutSuggestedPoints").innerText = totalPoints + " แต้ม";
 
         // ฟังก์ชันตรวจสอบไม่ให้กรอกแต้มรวมเกินจำนวนที่คำนวณได้
-window.validatePoints = function(currentInput, maxAllowedPoints) {
-    const inputs = document.querySelectorAll('.checkout-point-input');
-    let totalSum = 0;
+        window.validatePoints = function(currentInput, maxAllowedPoints) {
+            const inputs = document.querySelectorAll('.checkout-point-input');
+            let totalSum = 0;
 
-    inputs.forEach(input => {
-        totalSum += parseInt(input.value) || 0;
-    });
+            inputs.forEach(input => {
+                totalSum += parseInt(input.value) || 0;
+            });
 
-    if (totalSum > maxAllowedPoints) {
-        alert(`⚠️ ไม่สามารถแจกแต้มเกิน ${maxAllowedPoints} แต้มได้ครับ (แต้มรวมปัจจุบัน: ${totalSum} แต้ม)`);
-        
-        // คำนวณส่วนเกินแล้วปรับลดค่าในช่องที่กำลังพิมพ์ลงมาไม่ให้เกิน
-        const diff = totalSum - maxAllowedPoints;
-        const correctValue = (parseInt(currentInput.value) || 0) - diff;
-        currentInput.value = correctValue > 0 ? correctValue : 0;
+            if (totalSum > maxAllowedPoints) {
+                alert(`⚠️ ไม่สามารถแจกแต้มเกิน ${maxAllowedPoints} แต้มได้ครับ (แต้มรวมปัจจุบัน: ${totalSum} แต้ม)`);
+                
+                // คำนวณส่วนเกินแล้วปรับลดค่าในช่องที่กำลังพิมพ์ลงมาไม่ให้เกิน
+                const diff = totalSum - maxAllowedPoints;
+                const correctValue = (parseInt(currentInput.value) || 0) - diff;
+                currentInput.value = correctValue > 0 ? correctValue : 0;
+            }
+        }
+
+        // แสดงรายการสมาชิกและช่องใส่แต้ม
+        let membersHtml = "";
+        if (members.length === 0) {
+            membersHtml = `<div class="text-muted text-center py-3">ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>`;
+        } else {
+            members.forEach(m => {
+                let uid = m.uid || "";
+                let name = m.displayName || m.name || "ลูกค้า";
+                let imgUrl = m.pictureUrl || m.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true`;
+
+                membersHtml += `
+                <div class="d-flex align-items-center justify-content-between p-2 mb-2 bg-light rounded border">
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="${imgUrl}" 
+                             onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true'"
+                             style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                        <div>
+                            <div class="fw-bold text-dark" style="font-size: 14px;">${name}</div>
+                            <small class="text-muted" style="font-size: 11px;">${m.phone || 'สมาชิก'}</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-1" style="width: 120px;">
+                        <!-- เพิ่ม oninput เรียกฟังก์ชัน validatePoints โดยส่งแต้มที่คำนวณได้ไปเช็ค -->
+                        <input type="number" 
+                               class="form-control form-control-sm text-center fw-bold checkout-point-input" 
+                               data-uid="${uid}" 
+                               value="${defaultPointsPerPerson}" 
+                               min="0"
+                               max="${totalPoints}"
+                               oninput="validatePoints(this, ${totalPoints})">
+                        <span class="small text-muted" style="font-size: 12px;">แต้ม</span>
+                    </div>
+                </div>`;
+            });
+        }
+
+        document.getElementById("checkoutMembersList").innerHTML = membersHtml;
+
+        let modalEl = document.getElementById('checkoutModal');
+        let modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+
+    } catch (err) {
+        console.error("Error opening checkout modal:", err);
+        alert("เกิดข้อผิดพลาดในการโหลดข้อมูลบิล: " + err.message);
     }
-}
-
-// แสดงรายการสมาชิกและช่องใส่แต้ม
-let membersHtml = "";
-if (members.length === 0) {
-    membersHtml = `<div class="text-muted text-center py-3">ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>`;
-} else {
-    members.forEach(m => {
-        let uid = m.uid || "";
-        let name = m.displayName || m.name || "ลูกค้า";
-        let imgUrl = m.pictureUrl || m.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true`;
-
-        membersHtml += `
-        <div class="d-flex align-items-center justify-content-between p-2 mb-2 bg-light rounded border">
-            <div class="d-flex align-items-center gap-2">
-                <img src="${imgUrl}" 
-                     onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=06C755&color=fff&rounded=true'"
-                     style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
-                <div>
-                    <div class="fw-bold text-dark" style="font-size: 14px;">${name}</div>
-                    <small class="text-muted" style="font-size: 11px;">${m.phone || 'สมาชิก'}</small>
-                </div>
-            </div>
-            <div class="d-flex align-items-center gap-1" style="width: 120px;">
-                <!-- เพิ่ม oninput เรียกฟังก์ชัน validatePoints โดยส่งแต้มที่คำนวณได้ไปเช็ค -->
-                <input type="number" 
-                       class="form-control form-control-sm text-center fw-bold checkout-point-input" 
-                       data-uid="${uid}" 
-                       value="${defaultPointsPerPerson}" 
-                       min="0"
-                       max="${points}"
-                       oninput="validatePoints(this, ${points})">
-                <span class="small text-muted" style="font-size: 12px;">แต้ม</span>
-            </div>
-        </div>`;
-    });
-}
-
-document.getElementById("checkoutMembersList").innerHTML = membersHtml;
-
-let modalEl = document.getElementById('checkoutModal');
-let modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-modal.show();
-
-} catch (err) {
-    console.error("Error opening checkout modal:", err);
-    alert("เกิดข้อผิดพลาดในการโหลดข้อมูลบิล: " + err.message);
-}
+} // <--- ตรงนี้คือเครื่องหมาย } ที่ตกหล่นไปครับ! ทำให้เกิด Error ยาวลงมา
 
 // 2. ฟังก์ชันยืนยันชำระเงิน + บันทึกแต้มลง Firebase + เคลียร์โต๊ะ
 async function confirmPaymentAndAwardPoints() {
@@ -1918,23 +1919,6 @@ function validatePoints(currentInput, maxAllowedPoints) {
         alert(`⚠️ ไม่สามารถแจกแต้มเกิน ${maxAllowedPoints} แต้มได้ครับ (แต้มรวมปัจจุบัน: ${totalSum} แต้ม)`);
         
         // คำนวณส่วนเกินแล้วปรับลดค่าในช่องที่กำลังพิมพ์ลงมาไม่ให้เกิน
-        const diff = totalSum - maxAllowedPoints;
-        const correctValue = (parseInt(currentInput.value) || 0) - diff;
-        currentInput.value = correctValue > 0 ? correctValue : 0;
-    }
-}
-    // ฟังก์ชันตรวจสอบไม่ให้กรอกแต้มรวมเกินจำนวนที่คำนวณได้
-function validatePoints(currentInput, maxAllowedPoints) {
-    const inputs = document.querySelectorAll('.checkout-point-input');
-    let totalSum = 0;
-
-    inputs.forEach(input => {
-        totalSum += parseInt(input.value) || 0;
-    });
-
-    if (totalSum > maxAllowedPoints) {
-        alert(`⚠️ ไม่สามารถแจกแต้มเกิน ${maxAllowedPoints} แต้มได้ครับ (แต้มรวมปัจจุบัน: ${totalSum} แต้ม)`);
-        
         const diff = totalSum - maxAllowedPoints;
         const correctValue = (parseInt(currentInput.value) || 0) - diff;
         currentInput.value = correctValue > 0 ? correctValue : 0;
