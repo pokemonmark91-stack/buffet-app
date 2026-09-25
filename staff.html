@@ -1873,56 +1873,57 @@ async function confirmPaymentAndAwardPoints() {
     }
 }
     
-// ฟังก์ชันสำหรับยกเลิกและเคลียร์ข้อมูลโต๊ะ
-async function cancelTable(tNo) {
-    if (!confirm(`คุณต้องการยกเลิกและเคลียร์ข้อมูลโต๊ะ ${tNo} ใช่หรือไม่?`)) return;
-    
-    try {
-        const tableRef = db.collection("tables").doc(String(tNo));
-        const batch = db.batch();
-
-        // 1. ค้นหาและลบออเดอร์ทั้งหมดที่ค้างอยู่ในโต๊ะนี้ (ถ้ามี)
-        const ordersSnap = await tableRef.collection("orders").get();
-        ordersSnap.forEach(doc => {
-            batch.delete(doc.ref);
-        });
+// ฟังก์ชันยกเลิกและเคลียร์ข้อมูลโต๊ะที่เลือกปัจจุบัน
+    async function cancelTable() {
+        // 1. ดึงเลขโต๊ะจาก getActiveTable() หรือดึงจากข้อความ "จัดการโต๊ะ: X" โดยตรง
+        var tNo = typeof getActiveTable === 'function' ? getActiveTable() : null;
         
-        // 2. ล้างข้อมูลหลักของโต๊ะให้กลับเป็นสถานะเริ่มต้น (ว่าง)
-        batch.set(tableRef, {
-            tableNo: String(tNo),
-            status: "ว่าง",
-            activeMembers: [],
-            adults: 0,
-            children: 0,
-            totalPeople: 0,
-            package: "",
-            packagePrice: 0,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        // 3. ยืนยันการเปลี่ยนแปลงข้อมูลลง Firebase
-        await batch.commit();
-
-        alert(`เคลียร์ข้อมูลโต๊ะ ${tNo} เรียบร้อยแล้ว`);
-        
-        // ปิดหน้าต่างจัดการโต๊ะ (ถ้ามี)
-        let modalEl = document.getElementById('manageTableModal');
-        if (modalEl) {
-            let modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
+        // สำรอง: หาก getActiveTable() ไม่คืนค่า ให้ดึงจากข้อความบนหน้าจอ
+        if (!tNo) {
+            var manageCard = document.querySelector('.card-body h5, #selectedTableTitle, .card-title');
+            var manageText = manageCard ? manageCard.innerText : "";
+            var match = manageText.match(/\d+/);
+            if (match) tNo = match[0];
         }
 
-        // รีเฟรชหน้าจอหรือโหลดข้อมูลใหม่
-        if (typeof loadDashboard === 'function') {
-            loadDashboard();
-        }
+        if (!tNo) return alert("กรุณาเลือกโต๊ะที่ต้องการยกเลิกก่อนครับ");
 
-    } catch (err) {
-        console.error("Error resetting table:", err);
-        alert("เกิดข้อผิดพลาดในการยกเลิกโต๊ะ: " + err.message);
+        // 2. แสดงกล่องยืนยันโดยใช้เลขโต๊ะที่เลือกจริง (tNo)
+        if (!confirm("คุณต้องการยกเลิกและเคลียร์ข้อมูลโต๊ะ " + tNo + " ใช่หรือไม่?")) return;
+
+        try {
+            const tableRef = db.collection("tables").doc(String(tNo));
+            
+            // 3. ลบรายการอาหารทั้งหมดใน Subcollection 'orders' ของโต๊ะนี้
+            const ordersSnapshot = await tableRef.collection("orders").get();
+            const batch = db.batch();
+            ordersSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            // 4. เคลียร์สถานะโต๊ะให้เป็นโต๊ะว่างแบบสมบูรณ์
+            await tableRef.set({
+                tableNo: String(tNo),
+                status: "ว่าง",
+                activeMembers: [],
+                adults: 0,
+                children: 0,
+                totalPeople: 0,
+                packagePrice: 0
+            });
+
+            alert("✅ ยกเลิกและเคลียร์ข้อมูลโต๊ะ " + tNo + " เรียบร้อยแล้ว");
+            
+            // โหลดแดชบอร์ดใหม่และอัปเดตหน้าจอ
+            if (typeof loadDashboard === 'function') loadDashboard();
+            if (typeof selectTable === 'function') selectTable(tNo);
+
+        } catch (err) {
+            alert("เกิดข้อผิดพลาดในการยกเลิกโต๊ะ: " + err.message);
+        }
     }
-}
-
+    
 // ฟังก์ชันตรวจสอบไม่ให้กรอกแต้มรวมเกินจำนวนที่คำนวณได้
 function validatePoints(currentInput, maxAllowedPoints) {
     // ดึงช่องกรอกแต้มของทุกคนในหน้าต่างป๊อปอัป
