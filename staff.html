@@ -1923,7 +1923,27 @@ function validatePoints(currentInput, maxAllowedPoints) {
         currentInput.value = correctValue > 0 ? correctValue : 0;
     }
 }
-    
+    // ฟังก์ชันตรวจสอบไม่ให้กรอกแต้มรวมเกินจำนวนที่คำนวณได้
+function validatePoints(currentInput, maxAllowedPoints) {
+    const inputs = document.querySelectorAll('.checkout-point-input');
+    let totalSum = 0;
+
+    inputs.forEach(input => {
+        totalSum += parseInt(input.value) || 0;
+    });
+
+    if (totalSum > maxAllowedPoints) {
+        alert(`⚠️ ไม่สามารถแจกแต้มเกิน ${maxAllowedPoints} แต้มได้ครับ (แต้มรวมปัจจุบัน: ${totalSum} แต้ม)`);
+        
+        const diff = totalSum - maxAllowedPoints;
+        const correctValue = (parseInt(currentInput.value) || 0) - diff;
+        currentInput.value = correctValue > 0 ? correctValue : 0;
+    }
+}
+
+</script>
+</body>
+</html>
 </script>
 </body>
 </html>
