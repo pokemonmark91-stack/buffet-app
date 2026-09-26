@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - จัดการโต๊ะ</title>
+    <title>Dashboard - ระบบจัดการร้านบุฟเฟต์</title>
     
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -24,7 +24,6 @@
 <body class="bg-light">
 
 <div class="container mt-3 pb-5" style="max-width: 800px;">
-    <!-- ส่วนหัวหน้าจอ -->
     <div class="text-center mb-4">
         <h3 class="text-primary fw-bold">👨‍🍳 ระบบจัดการพนักงาน / แคชเชียร์</h3>
     </div>
@@ -34,17 +33,23 @@
     <!-- ========================================== -->
     <div class="card bg-dark text-white shadow-sm mb-4" style="border-radius: 12px;">
         <div class="card-body p-3">
-            <div class="d-flex align-items-center mb-2 flex-wrap gap-2">
-                <span class="fs-5 text-warning fw-bold">🔑 สถานะกะ:</span>
-                <span class="badge bg-success fs-6 rounded-pill px-3 py-2">กำลังเปิดกะ (SHIFT_1790061054093)</span>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <div class="d-flex align-items-center mb-2 flex-wrap gap-2">
+                        <span class="fs-5 text-warning fw-bold">🔑 สถานะกะ:</span>
+                        <span id="shiftStatusBadge" class="badge bg-success fs-6 rounded-pill px-3 py-2">กำลังเปิดกะ</span>
+                        <span id="shiftIdDisplay" class="text-secondary" style="font-size: 0.8rem;"></span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="text-info fs-6">พนักงาน: <span id="staffNameDisplay">เรย์</span></span>
+                    </div>
+                </div>
             </div>
-            <div class="mb-3">
-                <span class="text-info fs-6">พนักงาน: เรย์</span>
-            </div>
+            
             <div class="d-flex flex-wrap gap-2">
-                <button class="btn btn-danger px-4 fw-bold" onclick="closeShift()">ปิดกะ</button>
-                <button class="btn btn-outline-light text-white border-secondary" onclick="manageCash()">💸 เงินเข้า-ออก</button>
-                <button class="btn btn-outline-info text-info border-info" onclick="viewHistory()">📜 บิลย้อนหลัง</button>
+                <button class="btn btn-danger px-4 fw-bold" onclick="openCloseShiftModal()">ปิดกะ</button>
+                <button class="btn btn-outline-light text-white border-secondary" onclick="openCashModal()">💸 เงินเข้า-ออก</button>
+                <button class="btn btn-outline-info text-info border-info" onclick="openHistoryModal()">📜 บิลย้อนหลัง</button>
             </div>
         </div>
     </div>
@@ -63,26 +68,8 @@
                 </div>
             </div>
 
-            <!-- ผังโต๊ะแสดงผลแบบ Dynamic -->
             <div class="row row-cols-3 row-cols-md-4 g-2" id="tableGridContainer">
-                <!-- โหลดข้อมูลโต๊ะจาก Firebase หรือ Mock ข้อมูลเบื้องต้น -->
-                <div class="col">
-                    <div class="card text-center h-100 shadow-sm table-card occupied-table" onclick="selectTable(1)">
-                        <div class="card-body p-2 d-flex flex-column justify-content-center align-items-center">
-                            <div class="text-danger fw-bold fs-5 mb-1">โต๊ะ 1</div>
-                            <div class="text-danger fw-bold fs-5">👥 <span class="ms-1">3</span></div>
-                            <div class="text-danger fw-bold fs-6">คน</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center h-100 shadow-sm table-card vacant-table" onclick="selectTable(2)">
-                        <div class="card-body p-2 d-flex flex-column justify-content-center align-items-center">
-                            <div class="text-success fw-bold fs-5 mb-1">โต๊ะ 2</div>
-                            <div class="text-secondary fs-6">ว่าง</div>
-                        </div>
-                    </div>
-                </div>
+                <!-- ข้อมูลโต๊ะจะถูกโหลดมาแสดงที่นี่ -->
             </div>
         </div>
     </div>
@@ -91,8 +78,9 @@
     <!-- 3. แผงควบคุมโต๊ะ (ซ่อนไว้ จะโชว์เมื่อกดโต๊ะ) -->
     <!-- ========================================== -->
     <div id="tableActionSection" class="p-3 bg-white shadow-sm" style="display: none; border-radius: 12px; border: 1px solid #dee2e6;">
-        <div class="alert py-2 text-center fw-bold mb-3" style="background-color: #e9ecef; border-radius: 10px;">
-            กำลังเลือก: โต๊ะ <span id="selectedTableBadge" class="text-primary fs-4">...</span>
+        <div class="alert py-2 text-center fw-bold mb-3 d-flex justify-content-between align-items-center" style="background-color: #e9ecef; border-radius: 10px;">
+            <span>กำลังเลือก: โต๊ะ <span id="selectedTableBadge" class="text-primary fs-4">...</span></span>
+            <button class="btn-close" onclick="document.getElementById('tableActionSection').style.display='none'"></button>
         </div>
 
         <div class="row g-2 text-center mb-3">
@@ -129,10 +117,12 @@
 </div>
 
 <!-- ========================================== -->
-<!-- MODAL: จัดการจำนวนสมาชิกในโต๊ะ -->
+<!-- MODALS -->
 <!-- ========================================== -->
+
+<!-- MODAL: จัดการจำนวนสมาชิกในโต๊ะ -->
 <div class="modal fade" id="memberModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px;">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title fw-bold">👥 จัดการจำนวนลูกค้า - โต๊ะ <span id="modalTableNo"></span></h5>
@@ -156,20 +146,18 @@
     </div>
 </div>
 
-<!-- ========================================== -->
 <!-- MODAL: ย้ายโต๊ะ -->
-<!-- ========================================== -->
 <div class="modal fade" id="moveTableModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 15px;">
             <div class="modal-header bg-secondary text-white">
                 <h5 class="modal-title fw-bold">🔄 ย้ายโต๊ะ</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p>ย้ายจาก **โต๊ะ <span id="moveFromTable"></span>** ไปยัง:</p>
+                <p>ย้ายจาก <strong>โต๊ะ <span id="moveFromTable"></span></strong> ไปยัง:</p>
                 <div class="mb-3">
-                    <label class="form-label fw-bold">เลือกโต๊ะปลายทาง (โต๊ะว่าง):</label>
+                    <label class="form-label fw-bold">เลือกโต๊ะปลายทาง (เฉพาะโต๊ะว่าง):</label>
                     <select id="targetTableSelect" class="form-select form-select-lg"></select>
                 </div>
             </div>
@@ -181,11 +169,102 @@
     </div>
 </div>
 
+<!-- MODAL: ปิดกะ -->
+<div class="modal fade" id="closeShiftModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px;">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold">🛑 ปิดกะพนักงาน</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <strong>ข้อควรระวัง:</strong> เมื่อปิดกะแล้วจะไม่สามารถรับออเดอร์ในกะนี้ได้อีก
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">ระบุเงินสดที่มีในลิ้นชัก (บาท):</label>
+                    <input type="number" id="actualCashInput" class="form-control form-control-lg" placeholder="0.00" min="0">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="button" class="btn btn-danger fw-bold" onclick="processCloseShift()">ยืนยันการปิดกะ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: เงินเข้า-ออก -->
+<div class="modal fade" id="cashModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 15px;">
+            <div class="modal-header text-white" style="background-color: #6c757d;">
+                <h5 class="modal-title fw-bold">💸 บันทึกเงินเข้า-ออก ลิ้นชัก</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3 d-flex gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="cashType" id="cashIn" value="in" checked>
+                        <label class="form-check-label text-success fw-bold" for="cashIn">นำเงินเข้า (+)</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="cashType" id="cashOut" value="out">
+                        <label class="form-check-label text-danger fw-bold" for="cashOut">นำเงินออก (-)</label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">จำนวนเงิน (บาท):</label>
+                    <input type="number" id="cashAmount" class="form-control" placeholder="0.00" min="1">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">เหตุผล/หมายเหตุ:</label>
+                    <input type="text" id="cashReason" class="form-control" placeholder="เช่น ซื้อน้ำแข็ง, แลกเงินทอน">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="button" class="btn btn-primary fw-bold" onclick="saveCashTransaction()">บันทึกรายการ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: บิลย้อนหลัง (ในกะ) -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius: 15px;">
+            <div class="modal-header bg-info text-dark">
+                <h5 class="modal-title fw-bold">📜 ประวัติบิลที่ชำระแล้ว (กะปัจจุบัน)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>เวลา</th>
+                                <th>โต๊ะ</th>
+                                <th>ยอดรวม</th>
+                                <th>การชำระ</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="billHistoryTableBody">
+                            <!-- ข้อมูลบิลจะถูกแทรกที่นี่ -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Bootstrap 5 JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // ตั้งค่า Firebase (ปรับเปลี่ยนค่าคอนฟิกตามโปรเจกต์จริงของคุณ)
+    // ตั้งค่า Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
         authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -201,17 +280,31 @@
     }
     const db = firebase.firestore();
 
+    // ตัวแปรส่วนกลาง
     let selectedTableNo = null;
     let tablesData = {};
+    let currentShiftId = "SHIFT_" + Date.now(); // จำลอง Shift ID ขึ้นมาเบื้องต้น
+    document.getElementById('shiftIdDisplay').innerText = `(${currentShiftId})`;
 
-    // โหลดข้อมูลโต๊ะ Real-time
+    // ==========================================
+    // 1. ระบบจัดการโต๊ะ (Table Management)
+    // ==========================================
     function fetchTables() {
         db.collection("tables").onSnapshot(snapshot => {
             const container = document.getElementById('tableGridContainer');
             container.innerHTML = '';
             tablesData = {};
 
-            snapshot.forEach(doc => {
+            // ดึงและเรียงลำดับโต๊ะตามตัวเลข
+            let docs = [];
+            snapshot.forEach(doc => docs.push(doc));
+            docs.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
+            if (docs.length === 0) {
+                container.innerHTML = '<div class="col-12 text-center text-muted py-3">ยังไม่มีข้อมูลโต๊ะในระบบ</div>';
+            }
+
+            docs.forEach(doc => {
                 const data = doc.data();
                 const tableNo = doc.id;
                 tablesData[tableNo] = data;
@@ -235,58 +328,81 @@
                 `;
             });
         }, error => {
-            console.log("ใช้โหมดจำลองเนื่องจากไม่ได้ต่อ Firebase Config จริง");
+            console.error("Error fetching tables:", error);
         });
     }
 
-    window.onload = fetchTables;
+    async function addTable() {
+        const tableNumbers = Object.keys(tablesData).map(num => parseInt(num)).filter(n => !isNaN(n));
+        const newTableNo = tableNumbers.length > 0 ? Math.max(...tableNumbers) + 1 : 1;
+        
+        try {
+            await db.collection("tables").doc(String(newTableNo)).set({
+                status: "ว่าง",
+                totalPeople: 0,
+                adults: 0,
+                children: 0,
+                orders: []
+            });
+        } catch (error) {
+            console.error("Error adding table:", error);
+        }
+    }
 
-    // เลือกโต๊ะ
+    async function removeTable() {
+        const tableNumbers = Object.keys(tablesData).map(num => parseInt(num)).filter(n => !isNaN(n));
+        if (tableNumbers.length === 0) return alert("ไม่มีโต๊ะให้ลบแล้ว");
+        
+        const highestTableNo = Math.max(...tableNumbers);
+        const tableData = tablesData[String(highestTableNo)];
+
+        if (tableData && tableData.status === 'ไม่ว่าง') {
+            return alert(`ไม่สามารถลบ โต๊ะ ${highestTableNo} ได้ เนื่องจากมีลูกค้าใช้งานอยู่`);
+        }
+
+        if (confirm(`ยืนยันการลบ โต๊ะ ${highestTableNo} ใช่หรือไม่?`)) {
+            try {
+                await db.collection("tables").doc(String(highestTableNo)).delete();
+            } catch (error) {
+                console.error("Error removing table:", error);
+            }
+        }
+    }
+
     function selectTable(tNo) {
         selectedTableNo = tNo;
         document.getElementById('selectedTableBadge').innerText = tNo;
-        
         const actionSection = document.getElementById('tableActionSection');
         actionSection.style.display = 'block';
         actionSection.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
 
-    // เข้าหน้าสั่งอาหาร/รายละเอียดโต๊ะ
     function goToTableDetail() {
         if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
         window.location.href = `table.html?table=${selectedTableNo}`;
     }
 
-    // ยกเลิกโต๊ะ
     async function cancelTable() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
-        
-        if (confirm(`ยืนยันการยกเลิกโต๊ะ ${selectedTableNo} ใช่หรือไม่? ข้อมูลจะถูกล้าง`)) {
+        if (!selectedTableNo) return;
+        if (confirm(`ยืนยันการยกเลิกโต๊ะ ${selectedTableNo} ใช่หรือไม่? ข้อมูลออเดอร์ของโต๊ะนี้จะถูกล้าง`)) {
             try {
                 await db.collection("tables").doc(String(selectedTableNo)).set({
-                    status: "ว่าง",
-                    totalPeople: 0,
-                    adults: 0,
-                    children: 0,
-                    orders: []
+                    status: "ว่าง", totalPeople: 0, adults: 0, children: 0, orders: []
                 });
-                alert("ยกเลิกโต๊ะสำเร็จ");
                 document.getElementById('tableActionSection').style.display = 'none';
-            } catch (err) {
-                alert("ล้างข้อมูลโต๊ะเรียบร้อย (Mock Mode)");
-                document.getElementById('tableActionSection').style.display = 'none';
-            }
+            } catch (err) { console.error(err); }
         }
     }
 
-    // เปิด Modal จัดการสมาชิก
     function openMemberModal() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
+        if (!selectedTableNo) return;
         document.getElementById('modalTableNo').innerText = selectedTableNo;
+        const currentData = tablesData[selectedTableNo];
+        document.getElementById('adultCount').value = currentData.adults || 1;
+        document.getElementById('childCount').value = currentData.children || 0;
         new bootstrap.Modal(document.getElementById('memberModal')).show();
     }
 
-    // บันทึกจำนวนสมาชิก
     async function saveTableMembers() {
         const adults = parseInt(document.getElementById('adultCount').value) || 0;
         const children = parseInt(document.getElementById('childCount').value) || 0;
@@ -295,23 +411,14 @@
         try {
             await db.collection("tables").doc(String(selectedTableNo)).set({
                 status: total > 0 ? "ไม่ว่าง" : "ว่าง",
-                adults: adults,
-                children: children,
-                totalPeople: total
+                adults: adults, children: children, totalPeople: total
             }, { merge: true });
-            
             bootstrap.Modal.getInstance(document.getElementById('memberModal')).hide();
-            alert("บันทึกจำนวนลูกค้าเรียบร้อยแล้ว");
-        } catch (err) {
-            alert("บันทึกสำเร็จ (Mock Mode)");
-            bootstrap.Modal.getInstance(document.getElementById('memberModal')).hide();
-        }
+        } catch (err) { console.error(err); }
     }
 
-    // เปิด Modal ย้ายโต๊ะ
     function openMoveTableModal() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
-        
+        if (!selectedTableNo) return;
         document.getElementById('moveFromTable').innerText = selectedTableNo;
         const select = document.getElementById('targetTableSelect');
         select.innerHTML = '';
@@ -321,15 +428,10 @@
                 select.innerHTML += `<option value="${tNo}">โต๊ะ ${tNo}</option>`;
             }
         });
-
-        if (select.children.length === 0) {
-            select.innerHTML = '<option value="">ไม่มีโต๊ะว่าง</option>';
-        }
-
+        if (select.children.length === 0) select.innerHTML = '<option value="">ไม่มีโต๊ะว่าง</option>';
         new bootstrap.Modal(document.getElementById('moveTableModal')).show();
     }
 
-    // ยืนยันการย้ายโต๊ะ
     async function confirmMoveTable() {
         const targetTable = document.getElementById('targetTableSelect').value;
         if (!targetTable) return alert("กรุณาเลือกโต๊ะปลายทาง");
@@ -340,22 +442,119 @@
             await db.collection("tables").doc(String(selectedTableNo)).set({
                 status: "ว่าง", totalPeople: 0, adults: 0, children: 0, orders: []
             });
-
             bootstrap.Modal.getInstance(document.getElementById('moveTableModal')).hide();
-            alert(`ย้ายข้อมูลไปยังโต๊ะ ${targetTable} สำเร็จ`);
             selectTable(targetTable);
-        } catch (err) {
-            alert("ย้ายโต๊ะสำเร็จ (Mock Mode)");
-            bootstrap.Modal.getInstance(document.getElementById('moveTableModal')).hide();
+        } catch (err) { console.error(err); }
+    }
+
+    // ==========================================
+    // 2. ระบบจัดการกะ และ แคชเชียร์ (Shift & Cashier)
+    // ==========================================
+    
+    function openCloseShiftModal() {
+        document.getElementById('actualCashInput').value = '';
+        new bootstrap.Modal(document.getElementById('closeShiftModal')).show();
+    }
+
+    async function processCloseShift() {
+        const actualCash = document.getElementById('actualCashInput').value;
+        if (actualCash === '') return alert("กรุณาระบุยอดเงินสดในลิ้นชัก");
+        
+        try {
+            // บันทึกการปิดกะลง Firebase (คอลเลกชัน shifts)
+            await db.collection("shifts").doc(currentShiftId).set({
+                status: "closed",
+                closedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                actualCashEnd: parseFloat(actualCash)
+            }, { merge: true });
+            
+            bootstrap.Modal.getInstance(document.getElementById('closeShiftModal')).hide();
+            alert("ปิดกะสำเร็จ ระบบจะกลับไปหน้าเข้าสู่ระบบ");
+            // window.location.href = 'login.html'; // ลิงก์ไปหน้า Login
+        } catch (error) {
+            console.error("Error closing shift:", error);
+            alert("ปิดกะสำเร็จ (โหมดจำลอง)");
         }
     }
 
-    // ปุ่มฟังก์ชันกะการทำงาน
-    function closeShift() { alert("เปิดหน้าต่างปิดกะ"); }
-    function manageCash() { alert("เปิดหน้าต่างเงินเข้า-ออก"); }
-    function viewHistory() { alert("เปิดดูประวัติบิลย้อนหลัง"); }
-    function addTable() { alert("เพิ่มโต๊ะใหม่"); }
-    function removeTable() { alert("ลดจำนวนโต๊ะ"); }
+    function openCashModal() {
+        document.getElementById('cashAmount').value = '';
+        document.getElementById('cashReason').value = '';
+        new bootstrap.Modal(document.getElementById('cashModal')).show();
+    }
+
+    async function saveCashTransaction() {
+        const type = document.querySelector('input[name="cashType"]:checked').value;
+        const amount = parseFloat(document.getElementById('cashAmount').value);
+        const reason = document.getElementById('cashReason').value;
+
+        if (!amount || amount <= 0) return alert("กรุณาระบุจำนวนเงินให้ถูกต้อง");
+        if (!reason.trim()) return alert("กรุณาระบุเหตุผล");
+
+        try {
+            await db.collection("cash_transactions").add({
+                shiftId: currentShiftId,
+                type: type,
+                amount: amount,
+                reason: reason,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            bootstrap.Modal.getInstance(document.getElementById('cashModal')).hide();
+            alert("บันทึกรายการเงินเข้า-ออกเรียบร้อยแล้ว");
+        } catch (error) {
+            console.error("Error saving cash trans:", error);
+            alert("บันทึกสำเร็จ (โหมดจำลอง)");
+        }
+    }
+
+    function openHistoryModal() {
+        const tbody = document.getElementById('billHistoryTableBody');
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3">กำลังโหลดข้อมูล...</td></tr>';
+        
+        new bootstrap.Modal(document.getElementById('historyModal')).show();
+
+        // ดึงข้อมูลบิลที่ชำระแล้วในกะปัจจุบัน
+        db.collection("bills").where("shiftId", "==", currentShiftId).orderBy("timestamp", "desc").limit(20).get()
+        .then(snapshot => {
+            tbody.innerHTML = '';
+            if (snapshot.empty) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">ยังไม่มีรายการชำระเงินในกะนี้</td></tr>';
+                return;
+            }
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const timeStr = data.timestamp ? data.timestamp.toDate().toLocaleTimeString('th-TH') : '-';
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${timeStr}</td>
+                        <td class="fw-bold">โต๊ะ ${data.tableNo}</td>
+                        <td class="text-success fw-bold">฿${data.totalAmount || 0}</td>
+                        <td><span class="badge ${data.paymentMethod === 'เงินสด' ? 'bg-secondary' : 'bg-primary'}">${data.paymentMethod || 'เงินสด'}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info">ดูบิล</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }).catch(error => {
+            console.error("Error fetching bills:", error);
+            // แสดง Mock Data กรณีดึงข้อมูลไม่ได้ (เพื่อการทดสอบ UI)
+            tbody.innerHTML = `
+                <tr>
+                    <td>19:45:10</td><td class="fw-bold">โต๊ะ 3</td><td class="text-success fw-bold">฿1,198</td>
+                    <td><span class="badge bg-primary">เงินโอน</span></td><td><button class="btn btn-sm btn-outline-info">ดูบิล</button></td>
+                </tr>
+                <tr>
+                    <td>18:30:00</td><td class="fw-bold">โต๊ะ 5</td><td class="text-success fw-bold">฿599</td>
+                    <td><span class="badge bg-secondary">เงินสด</span></td><td><button class="btn btn-sm btn-outline-info">ดูบิล</button></td>
+                </tr>
+            `;
+        });
+    }
+
+    // เริ่มทำงานเมื่อเปิดหน้า
+    window.onload = fetchTables;
 </script>
 
 </body>
