@@ -8,67 +8,81 @@
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- Firebase Scripts -->
+    <!-- Firebase Scripts (ใส่ของโปรเจกต์คุณ) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
+    <style>
+        /* ตกแต่งปุ่มและกล่องให้สวยงาม */
+        .table-card { transition: transform 0.2s; cursor: pointer; }
+        .table-card:hover { transform: scale(1.05); }
+        .action-btn { border-width: 2px; border-radius: 12px; background-color: #fff; transition: all 0.2s; }
+        .action-btn:hover { background-color: #f8f9fa; transform: translateY(-3px); }
+    </style>
 </head>
 <body class="bg-light">
 
-<div class="container mt-3 pb-5">
+<div class="container mt-3 pb-5" style="max-width: 800px;">
     <!-- ส่วนหัวหน้าจอ -->
-    <h3 class="text-center text-primary fw-bold mb-4">👨‍🍳 ระบบจัดการพนักงาน / แคชเชียร์</h3>
+    <div class="text-center mb-4">
+        <h3 class="text-primary fw-bold">👨‍🍳 ระบบจัดการพนักงาน / แคชเชียร์</h3>
+    </div>
 
-    <!-- 1. กล่องแสดงสถานะกะ -->
+    <!-- ========================================== -->
+    <!-- 1. กล่องสถานะกะ (Shift Status) -->
+    <!-- ========================================== -->
     <div class="card bg-dark text-white shadow-sm mb-4" style="border-radius: 12px;">
         <div class="card-body p-3">
             <div class="d-flex align-items-center mb-2 flex-wrap gap-2">
-                <span class="fs-5">🔑 สถานะกะ:</span>
+                <span class="fs-5 text-warning fw-bold">🔑 สถานะกะ:</span>
                 <span class="badge bg-success fs-6 rounded-pill px-3 py-2">กำลังเปิดกะ (SHIFT_1790061054093)</span>
             </div>
             <div class="mb-3">
                 <span class="text-info fs-6">พนักงาน: เรย์</span>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <button class="btn btn-danger px-4" onclick="alert('ฟังก์ชันปิดกะ')">ปิดกะ</button>
-                <button class="btn btn-outline-light text-white border-secondary">💸 เงินเข้า-ออก</button>
-                <button class="btn btn-outline-info text-info border-info">📜 บิลย้อนหลัง</button>
+                <button class="btn btn-danger px-4 fw-bold" onclick="closeShift()">ปิดกะ</button>
+                <button class="btn btn-outline-light text-white border-secondary" onclick="manageCash()">💸 เงินเข้า-ออก</button>
+                <button class="btn btn-outline-info text-info border-info" onclick="viewHistory()">📜 บิลย้อนหลัง</button>
             </div>
         </div>
     </div>
 
-    <!-- 2. กล่องสถานะและผังโต๊ะ -->
-    <div class="card shadow-sm" style="border-radius: 12px;">
+    <!-- ========================================== -->
+    <!-- 2. กล่องสถานะและผังโต๊ะ (Table Grid) -->
+    <!-- ========================================== -->
+    <div class="card shadow-sm mb-4" style="border-radius: 12px;">
         <div class="card-body p-3">
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <h4 class="mb-0 fw-bold"><span class="text-danger">📌</span> สถานะโต๊ะ</h4>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-outline-danger px-3 bg-white" style="border-radius: 8px;">- โต๊ะ</button>
-                    <button class="btn btn-outline-primary px-3 bg-white" style="border-radius: 8px;">+ โต๊ะ</button>
+                    <button class="btn btn-outline-danger px-3 bg-white" style="border-radius: 8px;" onclick="removeTable()">- โต๊ะ</button>
+                    <button class="btn btn-outline-primary px-3 bg-white" style="border-radius: 8px;" onclick="addTable()">+ โต๊ะ</button>
                     <button class="btn btn-secondary px-3" style="border-radius: 8px;" onclick="location.reload()">🔄 รีเฟรช</button>
                 </div>
             </div>
 
             <!-- ผังโต๊ะ -->
-            <div class="row row-cols-3 row-cols-md-4 row-cols-lg-5 g-2" id="tableGridContainer">
+            <div class="row row-cols-3 row-cols-md-4 g-2" id="tableGridContainer">
                 
-                <!-- ตัวอย่างโต๊ะ 1 -->
+                <!-- โต๊ะ 1 (มีลูกค้า) -->
                 <div class="col">
-                    <div class="card text-center h-100 shadow-sm" 
-                         style="background-color: #ffe6e6; border: 1px solid #ffb3b3; border-radius: 10px; cursor: pointer;" 
-                         onclick="openTable(1)">
+                    <div class="card text-center h-100 shadow-sm table-card" 
+                         style="background-color: #ffe6e6; border: 1px solid #ffb3b3; border-radius: 10px;" 
+                         onclick="selectTable(1)">
                         <div class="card-body p-2 d-flex flex-column justify-content-center align-items-center">
                             <div class="text-danger fw-bold fs-5 mb-1">โต๊ะ 1</div>
-                            <div class="text-danger fw-bold fs-5">👤 <span class="ms-1">3</span></div>
+                            <div class="text-danger fw-bold fs-5">👥 <span class="ms-1">3</span></div>
                             <div class="text-danger fw-bold fs-6">คน</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ตัวอย่างโต๊ะ 2 -->
+                <!-- โต๊ะ 2 (ว่าง) -->
                 <div class="col">
-                    <div class="card text-center h-100 shadow-sm" 
-                         style="background-color: #e6f9e6; border: 1px solid #b3ffb3; border-radius: 10px; cursor: pointer;" 
-                         onclick="openTable(2)">
+                    <div class="card text-center h-100 shadow-sm table-card" 
+                         style="background-color: #e6f9e6; border: 1px solid #b3ffb3; border-radius: 10px;" 
+                         onclick="selectTable(2)">
                         <div class="card-body p-2 d-flex flex-column justify-content-center align-items-center">
                             <div class="text-success fw-bold fs-5 mb-1">โต๊ะ 2</div>
                             <div class="text-secondary fs-6">ว่าง</div>
@@ -76,47 +90,48 @@
                     </div>
                 </div>
 
+                <!-- หมายเหตุ: เวลาใช้จริง ให้ใช้ JavaScript วนลูป (Loop) สร้างกล่องโต๊ะดึงจาก Firebase ตรงนี้ -->
+
             </div>
         </div>
     </div>
 
-    <!-- 3. ส่วนแผงควบคุมโต๊ะ (ถูกซ่อนไว้ จะแสดงเมื่อกดเลือกโต๊ะ) -->
-    <div id="tableActionSection" class="mt-4" style="display: none;">
-        <div class="alert alert-secondary py-2 text-center fw-bold mb-3 shadow-sm" style="border-radius: 10px;">
-            กำลังเลือก: โต๊ะ <span id="selectedTableBadge" class="text-primary fs-5">...</span>
+    <!-- ========================================== -->
+    <!-- 3. แผงควบคุมโต๊ะ (ซ่อนไว้ จะโชว์เมื่อกดโต๊ะ) -->
+    <!-- ========================================== -->
+    <div id="tableActionSection" class="p-3 bg-white shadow-sm" style="display: none; border-radius: 12px; border: 1px solid #dee2e6;">
+        <div class="alert py-2 text-center fw-bold mb-3" style="background-color: #e9ecef; border-radius: 10px;">
+            กำลังเลือก: โต๊ะ <span id="selectedTableBadge" class="text-primary fs-4">...</span>
         </div>
 
-        <!-- ปุ่มจัดการด่วน 3 ปุ่ม -->
+        <!-- 3 ปุ่มจัดการด่วน (ใช้งานฟังก์ชันเดิม) -->
         <div class="row g-2 text-center mb-3">
             <div class="col-4">
-                <button class="btn btn-outline-success w-100 py-3 shadow-sm d-flex flex-column align-items-center justify-content-center h-100" 
-                        style="border-width: 2px; border-radius: 12px; background-color: #fff;" 
+                <button class="btn btn-outline-success w-100 py-3 shadow-sm d-flex flex-column align-items-center justify-content-center h-100 action-btn" 
                         onclick="openMemberModal()">
-                    <div class="fs-2 mb-1">👥</div>
-                    <div class="fw-bold fs-6 text-success" style="font-size: 0.9rem !important;">สมาชิกในโต๊ะ</div>
+                    <div class="fs-1 mb-1">👥</div>
+                    <div class="fw-bold text-success" style="font-size: 0.85rem;">สมาชิกในโต๊ะ</div>
                 </button>
             </div>
             <div class="col-4">
-                <button class="btn btn-outline-secondary w-100 py-3 shadow-sm d-flex flex-column align-items-center justify-content-center h-100" 
-                        style="border-width: 2px; border-radius: 12px; background-color: #fff;" 
+                <button class="btn btn-outline-secondary w-100 py-3 shadow-sm d-flex flex-column align-items-center justify-content-center h-100 action-btn" 
                         onclick="openMoveTableModal()">
-                    <div class="fs-2 mb-1">🔄</div>
-                    <div class="fw-bold fs-6 text-secondary" style="font-size: 0.9rem !important;">ย้ายโต๊ะ</div>
+                    <div class="fs-1 mb-1">🔄</div>
+                    <div class="fw-bold text-secondary" style="font-size: 0.85rem;">ย้ายโต๊ะ</div>
                 </button>
             </div>
             <div class="col-4">
-                <button class="btn btn-outline-danger w-100 py-3 shadow-sm d-flex flex-column align-items-center justify-content-center h-100" 
-                        style="border-width: 2px; border-radius: 12px; background-color: #fff;" 
+                <button class="btn btn-outline-danger w-100 py-3 shadow-sm d-flex flex-column align-items-center justify-content-center h-100 action-btn" 
                         onclick="cancelTable()">
-                    <div class="fs-2 mb-1">❌</div>
-                    <div class="fw-bold fs-6 text-danger" style="font-size: 0.9rem !important;">ยกเลิกโต๊ะ</div>
+                    <div class="fs-1 mb-1">❌</div>
+                    <div class="fw-bold text-danger" style="font-size: 0.85rem;">ยกเลิกโต๊ะ</div>
                 </button>
             </div>
         </div>
 
-        <!-- ปุ่มหลัก: เข้าโต๊ะ -->
-        <button class="btn btn-primary w-100 py-3 fs-4 fw-bold shadow" 
-                style="border-radius: 12px;" 
+        <!-- ปุ่มหลัก: เข้าโต๊ะ (เพื่อไปหน้า table.html) -->
+        <button class="btn btn-primary w-100 py-3 fs-4 fw-bold shadow text-white" 
+                style="border-radius: 12px; background-color: #0d6efd; border: none;" 
                 onclick="goToTableDetail()">
             🚪 เข้าโต๊ะ ➡️
         </button>
@@ -124,32 +139,28 @@
 
 </div>
 
-<!-- Bootstrap 5 JS Bundle -->
+<!-- Bootstrap 5 JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // ==========================================
-    // 1. นำโค้ด Initialize Firebase ของคุณมาวางตรงนี้ (ถ้ามี)
-    // ==========================================
-    /*
-    const firebaseConfig = { ... };
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    */
-
-    // ==========================================
-    // 2. ระบบเลือกโต๊ะและเปลี่ยนหน้า
-    // ==========================================
+    // ตัวแปรเก็บเลขโต๊ะที่ถูกเลือก
     let selectedTableNo = null;
 
-    function openTable(tNo) {
+    // ==========================================
+    // ฟังก์ชันเลือกโต๊ะ และ เปลี่ยนหน้า
+    // ==========================================
+    function selectTable(tNo) {
         selectedTableNo = tNo;
+        
+        // อัปเดตตัวเลขโต๊ะที่แสดงในแผงควบคุม
         document.getElementById('selectedTableBadge').innerText = tNo;
 
-        // แสดงแผงควบคุมและเลื่อนหน้าจอลงมา
+        // โชว์แผงควบคุม 4 ปุ่ม
         const actionSection = document.getElementById('tableActionSection');
         actionSection.style.display = 'block';
-        actionSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        // เลื่อนหน้าจอลงมาหาปุ่มอัตโนมัติ
+        actionSection.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
 
     function goToTableDetail() {
@@ -157,29 +168,78 @@
             alert("กรุณาเลือกโต๊ะก่อนครับ");
             return;
         }
+        // 👉 เปลี่ยนไปยังหน้า table.html (โยนเลขโต๊ะไปด้วย)
         window.location.href = "table.html?table=" + selectedTableNo;
     }
 
     // ==========================================
-    // 3. ฟังก์ชันการทำงานของ 3 ปุ่มจัดการด่วน
+    // ฟังก์ชันสำหรับใส่โค้ดเดิมของคุณ (Firebase / Modal)
     // ==========================================
+    
     function openMemberModal() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
-        alert("ระบบจัดการสมาชิก โต๊ะ " + selectedTableNo);
+        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
+        // 👉 นำโค้ดเปิดหน้าต่าง Modal สมาชิกเดิมของคุณ มาใส่ตรงนี้
+        console.log("เปิดระบบสมาชิกของโต๊ะ:", selectedTableNo);
+        // new bootstrap.Modal(document.getElementById('memberModal')).show();
     }
 
     function openMoveTableModal() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
-        alert("ระบบย้ายโต๊ะ จากโต๊ะ " + selectedTableNo);
+        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
+        // 👉 นำโค้ดเปิดหน้าต่าง Modal ย้ายโต๊ะเดิมของคุณ มาใส่ตรงนี้
+        console.log("เตรียมย้ายข้อมูลจากโต๊ะ:", selectedTableNo);
+        // document.getElementById('moveOldTable').value = selectedTableNo;
+        // new bootstrap.Modal(document.getElementById('moveTableModal')).show();
     }
 
     async function cancelTable() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
+        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
+        
         if (confirm("ยืนยันการยกเลิกโต๊ะ " + selectedTableNo + " ใช่หรือไม่? ข้อมูลของโต๊ะนี้จะถูกล้าง")) {
-            alert("ยกเลิกโต๊ะ " + selectedTableNo + " สำเร็จ");
+            // 👉 นำโค้ด Firebase ที่ใช้เคลียร์สถานะโต๊ะเดิมของคุณ มาใส่ตรงนี้
+            /* ตัวอย่างโค้ดเดิมของคุณ:
+            await db.collection("tables").doc(String(selectedTableNo)).update({
+                status: "ว่าง",
+                activeMembers: [],
+                totalPeople: 0
+            });
+            alert("ยกเลิกโต๊ะสำเร็จ");
+            location.reload(); 
+            */
+            console.log("ยกเลิกโต๊ะ:", selectedTableNo, "เรียบร้อย");
         }
     }
+
+    // ==========================================
+    // ฟังก์ชันย่อยอื่นๆ ด้านบน
+    // ==========================================
+    function closeShift() {
+        // โค้ดปิดกะ
+        console.log("ปิดกะ");
+    }
+    
+    function manageCash() {
+        // โค้ดเงินเข้า-ออก
+        console.log("เงินเข้า-ออก");
+    }
+
+    function viewHistory() {
+        // โค้ดบิลย้อนหลัง
+        console.log("บิลย้อนหลัง");
+    }
+
+    function addTable() {
+        // โค้ดเพิ่มจำนวนโต๊ะ
+        console.log("+ โต๊ะ");
+    }
+
+    function removeTable() {
+        // โค้ดลดจำนวนโต๊ะ
+        console.log("- โต๊ะ");
+    }
+
 </script>
+
+<!-- 🚨 อย่าลืม! ก๊อปปี้โค้ด HTML ของ Modal เดิม (Modal สมาชิก, Modal ย้ายโต๊ะ) มาวางตรงนี้ก่อนปิด </body> ด้วยนะครับ -->
 
 </body>
 </html>
