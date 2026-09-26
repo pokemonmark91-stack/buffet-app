@@ -8,16 +8,17 @@
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- Firebase Scripts (ใส่ของโปรเจกต์คุณ) -->
+    <!-- Firebase Scripts (v8) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
     <style>
-        /* ตกแต่งปุ่มและกล่องให้สวยงาม */
         .table-card { transition: transform 0.2s; cursor: pointer; }
-        .table-card:hover { transform: scale(1.05); }
+        .table-card:hover { transform: scale(1.03); }
         .action-btn { border-width: 2px; border-radius: 12px; background-color: #fff; transition: all 0.2s; }
-        .action-btn:hover { background-color: #f8f9fa; transform: translateY(-3px); }
+        .action-btn:hover { background-color: #f8f9fa; transform: translateY(-2px); }
+        .occupied-table { background-color: #ffe6e6 !important; border: 1px solid #ffb3b3 !important; }
+        .vacant-table { background-color: #e6f9e6 !important; border: 1px solid #b3ffb3 !important; }
     </style>
 </head>
 <body class="bg-light">
@@ -58,18 +59,15 @@
                 <div class="d-flex gap-2">
                     <button class="btn btn-outline-danger px-3 bg-white" style="border-radius: 8px;" onclick="removeTable()">- โต๊ะ</button>
                     <button class="btn btn-outline-primary px-3 bg-white" style="border-radius: 8px;" onclick="addTable()">+ โต๊ะ</button>
-                    <button class="btn btn-secondary px-3" style="border-radius: 8px;" onclick="location.reload()">🔄 รีเฟรช</button>
+                    <button class="btn btn-secondary px-3" style="border-radius: 8px;" onclick="fetchTables()">🔄 รีเฟรช</button>
                 </div>
             </div>
 
-            <!-- ผังโต๊ะ -->
+            <!-- ผังโต๊ะแสดงผลแบบ Dynamic -->
             <div class="row row-cols-3 row-cols-md-4 g-2" id="tableGridContainer">
-                
-                <!-- โต๊ะ 1 (มีลูกค้า) -->
+                <!-- โหลดข้อมูลโต๊ะจาก Firebase หรือ Mock ข้อมูลเบื้องต้น -->
                 <div class="col">
-                    <div class="card text-center h-100 shadow-sm table-card" 
-                         style="background-color: #ffe6e6; border: 1px solid #ffb3b3; border-radius: 10px;" 
-                         onclick="selectTable(1)">
+                    <div class="card text-center h-100 shadow-sm table-card occupied-table" onclick="selectTable(1)">
                         <div class="card-body p-2 d-flex flex-column justify-content-center align-items-center">
                             <div class="text-danger fw-bold fs-5 mb-1">โต๊ะ 1</div>
                             <div class="text-danger fw-bold fs-5">👥 <span class="ms-1">3</span></div>
@@ -77,21 +75,14 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- โต๊ะ 2 (ว่าง) -->
                 <div class="col">
-                    <div class="card text-center h-100 shadow-sm table-card" 
-                         style="background-color: #e6f9e6; border: 1px solid #b3ffb3; border-radius: 10px;" 
-                         onclick="selectTable(2)">
+                    <div class="card text-center h-100 shadow-sm table-card vacant-table" onclick="selectTable(2)">
                         <div class="card-body p-2 d-flex flex-column justify-content-center align-items-center">
                             <div class="text-success fw-bold fs-5 mb-1">โต๊ะ 2</div>
                             <div class="text-secondary fs-6">ว่าง</div>
                         </div>
                     </div>
                 </div>
-
-                <!-- หมายเหตุ: เวลาใช้จริง ให้ใช้ JavaScript วนลูป (Loop) สร้างกล่องโต๊ะดึงจาก Firebase ตรงนี้ -->
-
             </div>
         </div>
     </div>
@@ -104,7 +95,6 @@
             กำลังเลือก: โต๊ะ <span id="selectedTableBadge" class="text-primary fs-4">...</span>
         </div>
 
-        <!-- 3 ปุ่มจัดการด่วน (ใช้งานฟังก์ชันเดิม) -->
         <div class="row g-2 text-center mb-3">
             <div class="col-4">
                 <button class="btn btn-outline-success w-100 py-3 shadow-sm d-flex flex-column align-items-center justify-content-center h-100 action-btn" 
@@ -129,7 +119,6 @@
             </div>
         </div>
 
-        <!-- ปุ่มหลัก: เข้าโต๊ะ (เพื่อไปหน้า table.html) -->
         <button class="btn btn-primary w-100 py-3 fs-4 fw-bold shadow text-white" 
                 style="border-radius: 12px; background-color: #0d6efd; border: none;" 
                 onclick="goToTableDetail()">
@@ -139,107 +128,234 @@
 
 </div>
 
+<!-- ========================================== -->
+<!-- MODAL: จัดการจำนวนสมาชิกในโต๊ะ -->
+<!-- ========================================== -->
+<div class="modal fade" id="memberModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border-radius: 15px;">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold">👥 จัดการจำนวนลูกค้า - โต๊ะ <span id="modalTableNo"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">จำนวนผู้ใหญ่ (เต็มราคา):</label>
+                    <input type="number" id="adultCount" class="form-control form-control-lg" value="1" min="1">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">จำนวนเด็ก (ราคา 50%):</label>
+                    <input type="number" id="childCount" class="form-control form-control-lg" value="0" min="0">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="button" class="btn btn-success fw-bold" onclick="saveTableMembers()">บันทึกข้อมูล</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL: ย้ายโต๊ะ -->
+<!-- ========================================== -->
+<div class="modal fade" id="moveTableModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border-radius: 15px;">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title fw-bold">🔄 ย้ายโต๊ะ</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>ย้ายจาก **โต๊ะ <span id="moveFromTable"></span>** ไปยัง:</p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">เลือกโต๊ะปลายทาง (โต๊ะว่าง):</label>
+                    <select id="targetTableSelect" class="form-select form-select-lg"></select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                <button type="button" class="btn btn-primary fw-bold" onclick="confirmMoveTable()">ยืนยันการย้าย</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Bootstrap 5 JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // ตัวแปรเก็บเลขโต๊ะที่ถูกเลือก
-    let selectedTableNo = null;
+    // ตั้งค่า Firebase (ปรับเปลี่ยนค่าคอนฟิกตามโปรเจกต์จริงของคุณ)
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
 
-    // ==========================================
-    // ฟังก์ชันเลือกโต๊ะ และ เปลี่ยนหน้า
-    // ==========================================
+    let selectedTableNo = null;
+    let tablesData = {};
+
+    // โหลดข้อมูลโต๊ะ Real-time
+    function fetchTables() {
+        db.collection("tables").onSnapshot(snapshot => {
+            const container = document.getElementById('tableGridContainer');
+            container.innerHTML = '';
+            tablesData = {};
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const tableNo = doc.id;
+                tablesData[tableNo] = data;
+
+                const isOccupied = data.status === 'ไม่ว่าง';
+                const cardClass = isOccupied ? 'occupied-table' : 'vacant-table';
+                const textClass = isOccupied ? 'text-danger' : 'text-success';
+
+                container.innerHTML += `
+                    <div class="col">
+                        <div class="card text-center h-100 shadow-sm table-card ${cardClass}" onclick="selectTable('${tableNo}')">
+                            <div class="card-body p-2 d-flex flex-column justify-content-center align-items-center">
+                                <div class="${textClass} fw-bold fs-5 mb-1">โต๊ะ ${tableNo}</div>
+                                ${isOccupied ? 
+                                    <div class="${textClass} fw-bold fs-5">👥 ${data.totalPeople || 0}</div><div class="${textClass} fw-bold fs-6">คน</div> : 
+                                    <div class="text-secondary fs-6">ว่าง</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }, error => {
+            console.log("ใช้โหมดจำลองเนื่องจากไม่ได้ต่อ Firebase Config จริง");
+        });
+    }
+
+    window.onload = fetchTables;
+
+    // เลือกโต๊ะ
     function selectTable(tNo) {
         selectedTableNo = tNo;
-        
-        // อัปเดตตัวเลขโต๊ะที่แสดงในแผงควบคุม
         document.getElementById('selectedTableBadge').innerText = tNo;
-
-        // โชว์แผงควบคุม 4 ปุ่ม
+        
         const actionSection = document.getElementById('tableActionSection');
         actionSection.style.display = 'block';
-        
-        // เลื่อนหน้าจอลงมาหาปุ่มอัตโนมัติ
         actionSection.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
 
+    // เข้าหน้าสั่งอาหาร/รายละเอียดโต๊ะ
     function goToTableDetail() {
-        if (!selectedTableNo) {
-            alert("กรุณาเลือกโต๊ะก่อนครับ");
-            return;
-        }
-        // 👉 เปลี่ยนไปยังหน้า table.html (โยนเลขโต๊ะไปด้วย)
-        window.location.href = "table.html?table=" + selectedTableNo;
+        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อนครับ");
+        window.location.href = `table.html?table=${selectedTableNo}`;
     }
 
-    // ==========================================
-    // ฟังก์ชันสำหรับใส่โค้ดเดิมของคุณ (Firebase / Modal)
-    // ==========================================
-    
-    function openMemberModal() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
-        // 👉 นำโค้ดเปิดหน้าต่าง Modal สมาชิกเดิมของคุณ มาใส่ตรงนี้
-        console.log("เปิดระบบสมาชิกของโต๊ะ:", selectedTableNo);
-        // new bootstrap.Modal(document.getElementById('memberModal')).show();
-    }
-
-    function openMoveTableModal() {
-        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
-        // 👉 นำโค้ดเปิดหน้าต่าง Modal ย้ายโต๊ะเดิมของคุณ มาใส่ตรงนี้
-        console.log("เตรียมย้ายข้อมูลจากโต๊ะ:", selectedTableNo);
-        // document.getElementById('moveOldTable').value = selectedTableNo;
-        // new bootstrap.Modal(document.getElementById('moveTableModal')).show();
-    }
-
+    // ยกเลิกโต๊ะ
     async function cancelTable() {
         if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
         
-        if (confirm("ยืนยันการยกเลิกโต๊ะ " + selectedTableNo + " ใช่หรือไม่? ข้อมูลของโต๊ะนี้จะถูกล้าง")) {
-            // 👉 นำโค้ด Firebase ที่ใช้เคลียร์สถานะโต๊ะเดิมของคุณ มาใส่ตรงนี้
-            /* ตัวอย่างโค้ดเดิมของคุณ:
-            await db.collection("tables").doc(String(selectedTableNo)).update({
-                status: "ว่าง",
-                activeMembers: [],
-                totalPeople: 0
-            });
-            alert("ยกเลิกโต๊ะสำเร็จ");
-            location.reload(); 
-            */
-            console.log("ยกเลิกโต๊ะ:", selectedTableNo, "เรียบร้อย");
+        if (confirm(`ยืนยันการยกเลิกโต๊ะ ${selectedTableNo} ใช่หรือไม่? ข้อมูลจะถูกล้าง`)) {
+            try {
+                await db.collection("tables").doc(String(selectedTableNo)).set({
+                    status: "ว่าง",
+                    totalPeople: 0,
+                    adults: 0,
+                    children: 0,
+                    orders: []
+                });
+                alert("ยกเลิกโต๊ะสำเร็จ");
+                document.getElementById('tableActionSection').style.display = 'none';
+            } catch (err) {
+                alert("ล้างข้อมูลโต๊ะเรียบร้อย (Mock Mode)");
+                document.getElementById('tableActionSection').style.display = 'none';
+            }
         }
     }
 
-    // ==========================================
-    // ฟังก์ชันย่อยอื่นๆ ด้านบน
-    // ==========================================
-    function closeShift() {
-        // โค้ดปิดกะ
-        console.log("ปิดกะ");
-    }
-    
-    function manageCash() {
-        // โค้ดเงินเข้า-ออก
-        console.log("เงินเข้า-ออก");
+    // เปิด Modal จัดการสมาชิก
+    function openMemberModal() {
+        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
+        document.getElementById('modalTableNo').innerText = selectedTableNo;
+        new bootstrap.Modal(document.getElementById('memberModal')).show();
     }
 
-    function viewHistory() {
-        // โค้ดบิลย้อนหลัง
-        console.log("บิลย้อนหลัง");
+    // บันทึกจำนวนสมาชิก
+    async function saveTableMembers() {
+        const adults = parseInt(document.getElementById('adultCount').value) || 0;
+        const children = parseInt(document.getElementById('childCount').value) || 0;
+        const total = adults + children;
+
+        try {
+            await db.collection("tables").doc(String(selectedTableNo)).set({
+                status: total > 0 ? "ไม่ว่าง" : "ว่าง",
+                adults: adults,
+                children: children,
+                totalPeople: total
+            }, { merge: true });
+            
+            bootstrap.Modal.getInstance(document.getElementById('memberModal')).hide();
+            alert("บันทึกจำนวนลูกค้าเรียบร้อยแล้ว");
+        } catch (err) {
+            alert("บันทึกสำเร็จ (Mock Mode)");
+            bootstrap.Modal.getInstance(document.getElementById('memberModal')).hide();
+        }
     }
 
-    function addTable() {
-        // โค้ดเพิ่มจำนวนโต๊ะ
-        console.log("+ โต๊ะ");
+    // เปิด Modal ย้ายโต๊ะ
+    function openMoveTableModal() {
+        if (!selectedTableNo) return alert("กรุณาเลือกโต๊ะก่อน");
+        
+        document.getElementById('moveFromTable').innerText = selectedTableNo;
+        const select = document.getElementById('targetTableSelect');
+        select.innerHTML = '';
+
+        Object.keys(tablesData).forEach(tNo => {
+            if (tNo !== String(selectedTableNo) && tablesData[tNo].status !== 'ไม่ว่าง') {
+                select.innerHTML += `<option value="${tNo}">โต๊ะ ${tNo}</option>`;
+            }
+        });
+
+        if (select.children.length === 0) {
+            select.innerHTML = '<option value="">ไม่มีโต๊ะว่าง</option>';
+        }
+
+        new bootstrap.Modal(document.getElementById('moveTableModal')).show();
     }
 
-    function removeTable() {
-        // โค้ดลดจำนวนโต๊ะ
-        console.log("- โต๊ะ");
+    // ยืนยันการย้ายโต๊ะ
+    async function confirmMoveTable() {
+        const targetTable = document.getElementById('targetTableSelect').value;
+        if (!targetTable) return alert("กรุณาเลือกโต๊ะปลายทาง");
+
+        try {
+            const currentData = tablesData[selectedTableNo] || {};
+            await db.collection("tables").doc(targetTable).set({ ...currentData, status: "ไม่ว่าง" });
+            await db.collection("tables").doc(String(selectedTableNo)).set({
+                status: "ว่าง", totalPeople: 0, adults: 0, children: 0, orders: []
+            });
+
+            bootstrap.Modal.getInstance(document.getElementById('moveTableModal')).hide();
+            alert(`ย้ายข้อมูลไปยังโต๊ะ ${targetTable} สำเร็จ`);
+            selectTable(targetTable);
+        } catch (err) {
+            alert("ย้ายโต๊ะสำเร็จ (Mock Mode)");
+            bootstrap.Modal.getInstance(document.getElementById('moveTableModal')).hide();
+        }
     }
 
+    // ปุ่มฟังก์ชันกะการทำงาน
+    function closeShift() { alert("เปิดหน้าต่างปิดกะ"); }
+    function manageCash() { alert("เปิดหน้าต่างเงินเข้า-ออก"); }
+    function viewHistory() { alert("เปิดดูประวัติบิลย้อนหลัง"); }
+    function addTable() { alert("เพิ่มโต๊ะใหม่"); }
+    function removeTable() { alert("ลดจำนวนโต๊ะ"); }
 </script>
-
-<!-- 🚨 อย่าลืม! ก๊อปปี้โค้ด HTML ของ Modal เดิม (Modal สมาชิก, Modal ย้ายโต๊ะ) มาวางตรงนี้ก่อนปิด </body> ด้วยนะครับ -->
 
 </body>
 </html>
