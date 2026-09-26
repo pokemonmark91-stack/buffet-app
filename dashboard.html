@@ -3,126 +3,203 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>จัดการกะ & ผังโต๊ะ - ระบบบุฟเฟต์</title>
+    <title>หน้าแรก - ระบบบุฟเฟต์</title>
+    <!-- นำเข้า Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .table-card { cursor: pointer; transition: 0.2s; }
-        .table-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .bg-free { background-color: #e8f5e9 !important; border-color: #c8e6c9 !important; }
-        .bg-active { background-color: #ffebee !important; border-color: #ffcdd2 !important; }
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* --- สไตล์สำหรับการ์ดกะการทำงาน --- */
+        .shift-card {
+            background-color: #2b2f36;
+            border-radius: 12px;
+        }
+        .shift-btn-dark {
+            background-color: transparent;
+            border: 1px solid #fff;
+            color: #fff;
+        }
+        .shift-btn-dark:hover {
+            background-color: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+        .text-cyan { color: #4db8ff; }
+
+        /* --- สไตล์สำหรับผังโต๊ะ --- */
+        .table-card {
+            border-radius: 8px;
+            cursor: pointer;
+            height: 90px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.2s;
+            border: 1px solid transparent;
+        }
+        .table-card:hover { transform: scale(1.03); }
+        
+        .bg-free { background-color: #e9f7ef; border-color: #c3e6cb; }
+        .text-free-title { color: #1e7e34; font-weight: bold; }
+        .text-free-status { color: #28a745; font-size: 0.9rem; }
+
+        .bg-busy { background-color: #fdeaea; border-color: #f5c6cb; }
+        .text-busy-title { color: #dc3545; font-weight: bold; }
+        .text-busy-status { color: #dc3545; font-weight: bold; }
+        .icon-blue { color: #007bff; }
+
+        /* --- สไตล์ปุ่มจัดการโต๊ะใน Modal --- */
+        .action-btn {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px 5px;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-width: 1.5px;
+            border-style: solid;
+            width: 100%;
+            font-size: 0.9rem;
+        }
+        .btn-member { border-color: #198754; color: #198754; }
+        .btn-member:hover { background-color: #e9f7ef; }
+        
+        .btn-move { border-color: #6c757d; color: #6c757d; }
+        .btn-move:hover { background-color: #f8f9fa; }
+        
+        .btn-cancel { border-color: #dc3545; color: #dc3545; }
+        .btn-cancel:hover { background-color: #fdeaea; }
+
+        /* ปุ่มเข้าโต๊ะ */
+        .btn-enter-table {
+            background-color: #0d6efd;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            transition: 0.2s;
+        }
+        .btn-enter-table:hover {
+            background-color: #0b5ed7;
+            transform: translateY(-2px);
+        }
     </style>
 </head>
-<body class="container py-3">
+<body class="p-3">
 
-    <!-- Menu Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 rounded shadow-sm px-3">
-        <a class="navbar-brand fw-bold text-warning" href="index.html">👨‍🍳 Buffet POS</a>
-        <div class="navbar-nav d-flex flex-row gap-3 ms-auto align-items-center">
-            <a class="nav-link active fw-bold" href="index.html">📌 ผังโต๊ะ & จัดการกะ</a>
-            <!-- ปุ่มไปหน้า 2 (สั่งอาหาร) -->
-            <a class="btn btn-warning btn-sm fw-bold text-dark px-3" href="order.html">🍲 ไปหน้าสั่งอาหาร</a>
-            <a class="nav-link text-white" href="checkout.html">🧾 คิดเงิน</a>
-            <a class="nav-link text-white" href="members.html">🎁 สมาชิก</a>
-        </div>
-    </nav>
+    <div class="container-fluid" style="max-width: 600px; margin: 0 auto;">
 
-    <!-- [ส่วนที่มาจากหน้า 4] สถานะและการจัดการกะ -->
-    <div class="card p-3 shadow-sm mb-4 bg-dark text-white rounded-3">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="fw-bold m-0 text-warning">🔑 สถานะกะการทำงานปัจจุบัน</h5>
-            <span id="shiftStatusText" class="badge bg-secondary">กำลังตรวจสอบ...</span>
-        </div>
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <!-- ส่วนที่ 1: สถานะกะการทำงาน -->
+        <div class="shift-card p-3 mb-4 shadow-sm text-white">
+            <div class="d-flex align-items-center mb-2">
+                <span class="fs-4 me-2">🔑</span>
+                <span class="fs-5 me-2 fw-bold">สถานะกะ:</span>
+                <span class="badge bg-success rounded-pill px-3 py-2">กำลังเปิดกะ (SHIFT_1790061054093)</span>
+            </div>
+            <div class="mb-3 fs-5">พนักงาน: <span class="text-cyan">เรย์</span></div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button class="btn btn-danger px-4">ปิดกะ</button>
+                <button class="btn shift-btn-dark px-3">💸 เงินเข้า-ออก</button>
+                <button class="btn shift-btn-dark px-3">📜 บิลย้อนหลัง</button>
+            </div>
             <div>
-                <span class="small text-info me-2" id="shiftStaffText">พนักงาน: -</span>
-                <span class="small text-light" id="shiftTimeText">เวลาเปิด: -</span>
-            </div>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-warning fw-bold" id="btnShiftAction" onclick="handleShiftAction()">เปิดกะ</button>
-                <button class="btn btn-sm btn-outline-light" onclick="openCashFlowModal()">💸 เงินเข้า-ออก</button>
-                <button class="btn btn-sm btn-outline-info" onclick="openBillHistoryModal()">📜 บิลย้อนหลัง</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- [ส่วนที่มาจากหน้า 1] สถานะผังโต๊ะ -->
-    <div class="card p-3 shadow-sm mb-4 bg-white">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold m-0 text-primary">📌 ผังสถานะโต๊ะ</h5>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-danger" onclick="changeTableCount(-1)">- โต๊ะ</button>
-                <button class="btn btn-sm btn-outline-primary" onclick="changeTableCount(1)">+ โต๊ะ</button>
-                <button class="btn btn-sm btn-secondary" onclick="loadDashboard()">🔄 รีเฟรช</button>
+                <button class="btn btn-success px-4">🎁 สมาชิก/สะสมแต้ม</button>
             </div>
         </div>
 
-        <!-- แสดงการ์ดโต๊ะ (สร้างผ่าน JS) -->
-        <div id="tableGrid" class="row g-2 mb-3">
-            <!-- ตัวอย่างการ์ดโต๊ะว่าง -->
-            <div class="col-6 col-md-3">
-                <div class="card p-2 text-center table-card bg-free">
-                    <h6 class="fw-bold m-0">โต๊ะ 1</h6>
-                    <small class="text-success">ว่าง</small>
+        <!-- ส่วนที่ 2: สถานะโต๊ะ -->
+        <div class="card p-3 shadow-sm border-0 rounded-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex align-items-center">
+                    <span class="fs-3 me-2">📌</span>
+                    <h4 class="fw-bold m-0 text-dark">สถานะโต๊ะ</h4>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-danger px-3">- โต๊ะ</button>
+                    <button class="btn btn-outline-primary px-3">+ โต๊ะ</button>
+                    <button class="btn btn-secondary px-3">🔄 รีเฟรช</button>
                 </div>
             </div>
-            <!-- ตัวอย่างการ์ดโต๊ะที่มีลูกค้า + ปุ่มทางลัดไปหน้าสั่งอาหาร -->
-            <div class="col-6 col-md-3">
-                <div class="card p-2 text-center table-card bg-active">
-                    <h6 class="fw-bold m-0">โต๊ะ 2</h6>
-                    <small class="text-danger">3 คน (บุฟเฟต์ 299)</small>
-                    <a href="order.html?table=2" class="btn btn-sm btn-outline-danger mt-2 fw-bold">🍲 สั่งอาหาร</a>
+
+            <!-- ผังโต๊ะ -->
+            <div class="row g-3">
+                <!-- โต๊ะ 1 (มีลูกค้า) -->
+                <div class="col-4 col-sm-3">
+                    <div class="table-card bg-busy shadow-sm" data-bs-toggle="modal" data-bs-target="#tableActionModal">
+                        <div class="text-busy-title fs-5">โต๊ะ 1</div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="icon-blue fs-5">👤</span>
+                            <span class="text-busy-status fs-5">1</span>
+                        </div>
+                        <div class="text-busy-title fs-6">คน</div>
+                    </div>
+                </div>
+
+                <!-- โต๊ะ 2-10 (ว่าง) -->
+                <script>
+                    for(let i=2; i<=10; i++) {
+                        document.write(`
+                        <div class="col-4 col-sm-3">
+                            <div class="table-card bg-free shadow-sm">
+                                <div class="text-free-title fs-5">โต๊ะ ${i}</div>
+                                <div class="text-free-status">ว่าง</div>
+                            </div>
+                        </div>
+                        `);
+                    }
+                </script>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal สำหรับปุ่มจัดการโต๊ะ -->
+    <div class="modal fade" id="tableActionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-primary border-2">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-primary">จัดการโต๊ะ 1</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    
+                    <!-- ปุ่ม 3 ปุ่มเดิม -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <button class="btn action-btn btn-member">
+                                <span class="fs-3 icon-blue">👥</span>
+                                <span>สมาชิกใน<br>โต๊ะ</span>
+                            </button>
+                        </div>
+                        <div class="col-4">
+                            <button class="btn action-btn btn-move">
+                                <span class="fs-3">🔄</span>
+                                <span>ย้าย<br>โต๊ะ</span>
+                            </button>
+                        </div>
+                        <div class="col-4">
+                            <button class="btn action-btn btn-cancel">
+                                <span class="fs-3">❌</span>
+                                <span>ยกเลิก<br>โต๊ะ</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ปุ่มเข้าโต๊ะที่เพิ่มใหม่ -->
+                    <a href="order.html?table=1" class="btn btn-enter-table w-100 py-3 fw-bold fs-5 shadow-sm text-decoration-none d-flex justify-content-center align-items-center gap-2">
+                        <span>🍽️</span> เข้าโต๊ะ (สั่งอาหาร / เช็คบิล) <span>➔</span>
+                    </a>
+
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- [ส่วนที่มาจากหน้า 1] ฟอร์มเปิดโต๊ะใหม่ -->
-    <div class="card p-3 shadow-sm mb-4 bg-white">
-        <h5 class="fw-bold mb-3 text-success">🛎️ เปิดโต๊ะใหม่</h5>
-        <div class="row g-2">
-            <div class="col-12 col-md-3">
-                <label class="form-label small fw-bold">เลขโต๊ะ:</label>
-                <input type="text" id="tNo" class="form-control form-control-sm" placeholder="เช่น 1, 2">
-            </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label small fw-bold">ผู้ใหญ่ (เต็มราคา):</label>
-                <input type="number" id="pplAdult" class="form-control form-control-sm" value="1" min="0">
-            </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label small fw-bold">เด็ก (ครึ่งราคา 50%):</label>
-                <input type="number" id="pplChild" class="form-control form-control-sm" value="0" min="0">
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label small fw-bold">เลือกแพ็กเกจ:</label>
-                <select id="pkg" class="form-select form-select-sm"></select>
-            </div>
-            <div class="col-12 mt-3 d-flex gap-2">
-                <button class="btn btn-success btn-sm w-50 fw-bold" onclick="openNewTable()">✅ เปิดโต๊ะ</button>
-                <!-- ปุ่มเปิดโต๊ะแล้วเด้งไปหน้าสั่งอาหารทันที -->
-                <button class="btn btn-warning btn-sm w-50 fw-bold" onclick="openTableAndOrder()">✅ เปิดโต๊ะ & ไปสั่งอาหาร ➔</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Scripts -->
+    <!-- นำเข้า Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-
-    <script>
-        // ฟังก์ชันตัวอย่างการเปิดโต๊ะแล้วส่งข้ามไปหน้า order.html (หน้า 2)
-        function openTableAndOrder() {
-            const tableNo = document.getElementById('tNo').value;
-            if (!tableNo) {
-                alert('กรุณาระบุเลขโต๊ะ');
-                return;
-            }
-            // Logic บันทึกเปิดโต๊ะใน Firebase...
-            
-            // เมื่อเปิดสำเร็จ ส่งไปหน้า order.html พร้อมระบุเลขโต๊ะผ่าน URL
-            window.location.href = `order.html?table=${tableNo}`;
-        }
-    </script>
 </body>
 </html>
