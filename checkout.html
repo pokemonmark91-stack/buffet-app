@@ -45,34 +45,16 @@
             padding: 20px;
         }
 
-        /* หัวข้อยอดรวมโต๊ะ */
-        .bill-title {
-            color: #dc3545;
-            font-weight: 700;
-            font-size: 1.35rem;
-        }
+        .bill-title { color: #dc3545; font-weight: 700; font-size: 1.35rem; }
 
-        /* รายการอาหาร/บริการในบิล */
         .bill-item {
             border-bottom: 1px dashed #e0e0e0;
             padding-bottom: 12px;
             margin-bottom: 12px;
         }
-        .bill-item:last-child {
-            border-bottom: none;
-        }
-
-        .price-text {
-            color: #dc3545;
-            font-weight: 600;
-        }
-
-        /* ปุ่มจัดการรายการ (แก้ไข / ลบ) */
-        .btn-action-icon {
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-        }
+        .bill-item:last-child { border-bottom: none; }
+        .price-text { color: #dc3545; font-weight: 600; }
+        .btn-action-icon { padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; }
 
         /* การ์ดส่วนลด & ชำระเงิน */
         .payment-card {
@@ -81,8 +63,6 @@
             border-radius: 10px;
             padding: 15px;
         }
-
-        /* กล่องแสดงยอดสุทธิที่ต้องชำระ */
         .net-total-box {
             background-color: #e0edff;
             border-radius: 8px;
@@ -91,7 +71,6 @@
             font-weight: 600;
         }
 
-        /* ปุ่มชำระเงิน */
         .btn-pay-green {
             background-color: #198754;
             color: white;
@@ -114,8 +93,26 @@
         }
         .btn-split-blue:hover { background-color: #0b5ed7; color: white; }
 
-        .form-control, .form-select {
-            border-radius: 8px;
+        .form-control, .form-select { border-radius: 8px; }
+
+        /* สไตล์สำหรับ Modal ชำระเงิน */
+        .member-card {
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #ffffff;
+        }
+        .member-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .input-points {
+            width: 60px !important;
+            text-align: center;
+            border-radius: 6px;
         }
     </style>
 </head>
@@ -138,21 +135,17 @@
         <!-- 2. การ์ดรายละเอียดบิล -->
         <div class="main-card mb-4">
             
-            <!-- หัวข้อยอดรวมโต๊ะ -->
             <div class="d-flex align-items-center gap-2 bill-title mb-3">
                 <i class="bi bi-receipt"></i>
                 <span id="billTableTitle">ยอดรวมโต๊ะ 1: <span id="displayGrandTotal">428</span> บาท</span>
             </div>
 
-            <!-- รายการบิลที่ 1 -->
+            <!-- รายการบิลที่ 1 (ลบปุ่มดินสอออก เหลือปุ่มถังขยะ) -->
             <div class="bill-item">
                 <div class="d-flex justify-content-between align-items-start mb-1">
+                    <div><span class="fw-bold">สั่งอาหาร</span> - เอสใหญ่ (x1) <span class="price-text">(30 บ.)</span></div>
                     <div>
-                        <span class="fw-bold">สั่งอาหาร</span> - เอสใหญ่ (x1) <span class="price-text">(30 บ.)</span>
-                    </div>
-                    <div class="d-flex gap-1">
-                        <button class="btn btn-outline-primary btn-action-icon" onclick="alert('แก้ไขรายการ')"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ยกเลิกรายการ')"><i class="bi bi-trash-fill"></i></button>
+                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ลบรายการสำเร็จ')"><i class="bi bi-trash-fill"></i></button>
                     </div>
                 </div>
                 <span class="badge bg-success">เสร็จ</span>
@@ -161,12 +154,9 @@
             <!-- รายการบิลที่ 2 -->
             <div class="bill-item">
                 <div class="d-flex justify-content-between align-items-start mb-1">
+                    <div><span class="fw-bold">สั่งอาหาร</span> - สันคอสไลด์ x 5, สามชั้นสไลด์ x 5 <span class="price-text">(0 บ.)</span></div>
                     <div>
-                        <span class="fw-bold">สั่งอาหาร</span> - สันคอสไลด์ x 5, สามชั้นสไลด์ x 5 <span class="price-text">(0 บ.)</span>
-                    </div>
-                    <div class="d-flex gap-1">
-                        <button class="btn btn-outline-primary btn-action-icon" onclick="alert('แก้ไขรายการ')"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ยกเลิกรายการ')"><i class="bi bi-trash-fill"></i></button>
+                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ลบรายการสำเร็จ')"><i class="bi bi-trash-fill"></i></button>
                     </div>
                 </div>
                 <span class="badge bg-success">เสร็จ</span>
@@ -175,12 +165,9 @@
             <!-- รายการบิลที่ 3 -->
             <div class="bill-item">
                 <div class="d-flex justify-content-between align-items-start mb-1">
+                    <div><span class="fw-bold">เพิ่มลูกค้า</span> - เพิ่มลูกค้า (ผู้ใหญ่ 1 ท่าน, เด็ก 1 ท่าน) <span class="price-text">(239 บ.)</span></div>
                     <div>
-                        <span class="fw-bold">เพิ่มลูกค้า</span> - เพิ่มลูกค้า (ผู้ใหญ่ 1 ท่าน, เด็ก 1 ท่าน) <span class="price-text">(239 บ.)</span>
-                    </div>
-                    <div class="d-flex gap-1">
-                        <button class="btn btn-outline-primary btn-action-icon" onclick="alert('แก้ไขรายการ')"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ยกเลิกรายการ')"><i class="bi bi-trash-fill"></i></button>
+                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ลบรายการสำเร็จ')"><i class="bi bi-trash-fill"></i></button>
                     </div>
                 </div>
                 <span class="badge bg-success">เสร็จ</span>
@@ -189,25 +176,18 @@
             <!-- รายการบิลที่ 4 -->
             <div class="bill-item mb-4">
                 <div class="d-flex justify-content-between align-items-start mb-1">
+                    <div><span class="fw-bold">เปิดโต๊ะ</span> - เปิดโต๊ะ (ผู้ใหญ่ 1 ท่าน, เด็ก 0 ท่าน - แพ็กเกจ 159 บ.) <span class="price-text">(159 บ.)</span></div>
                     <div>
-                        <span class="fw-bold">เปิดโต๊ะ</span> - เปิดโต๊ะ (ผู้ใหญ่ 1 ท่าน, เด็ก 0 ท่าน - แพ็กเกจ 159 บ.) <span class="price-text">(159 บ.)</span>
-                    </div>
-                    <div class="d-flex gap-1">
-                        <button class="btn btn-outline-primary btn-action-icon" onclick="alert('แก้ไขรายการ')"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ยกเลิกรายการ')"><i class="bi bi-trash-fill"></i></button>
+                        <button class="btn btn-outline-secondary btn-action-icon" onclick="alert('ลบรายการสำเร็จ')"><i class="bi bi-trash-fill"></i></button>
                     </div>
                 </div>
                 <span class="badge bg-success">เสร็จ</span>
             </div>
 
-
             <!-- 3. ส่วนการ์ด ส่วนลด & ชำระเงิน -->
             <div class="payment-card">
-                <div class="fw-bold mb-3 d-flex align-items-center gap-2">
-                    💳 ส่วนลด & ชำระเงิน
-                </div>
+                <div class="fw-bold mb-3 d-flex align-items-center gap-2">💳 ส่วนลด & ชำระเงิน</div>
 
-                <!-- ส่วนลด -->
                 <div class="row g-2 mb-3">
                     <div class="col-6">
                         <label class="form-label small text-secondary mb-1 fw-bold">ส่วนลด:</label>
@@ -222,13 +202,11 @@
                     </div>
                 </div>
 
-                <!-- ยอดสุทธิที่ต้องชำระ -->
                 <div class="net-total-box d-flex justify-content-between align-items-center mb-3">
                     <span>ยอดสุทธิที่ต้องชำระ:</span>
                     <span class="fs-4 fw-bold text-danger"><span id="netTotalText">428</span> บาท</span>
                 </div>
 
-                <!-- วิธีชำระเงิน -->
                 <div class="mb-3">
                     <select class="form-select">
                         <option selected>เงินโอน / QR Code</option>
@@ -237,10 +215,10 @@
                     </select>
                 </div>
 
-                <!-- ปุ่มแอ็กชันชำระเงิน -->
+                <!-- ปุ่มแอ็กชัน -->
                 <div class="row g-2">
                     <div class="col-7">
-                        <button class="btn btn-pay-green w-100 h-100 d-flex align-items-center justify-content-center gap-1" onclick="alert('ชำระเงินเรียบร้อยแล้ว!')">
+                        <button class="btn btn-pay-green w-100 h-100 d-flex align-items-center justify-content-center gap-1" data-bs-toggle="modal" data-bs-target="#paymentModal">
                             <i class="bi bi-check-lg fs-5"></i>
                             <span>ชำระเงิน & แจกแต้ม</span>
                         </button>
@@ -252,31 +230,97 @@
                     </div>
                 </div>
 
-            </div> <!-- จบ payment-card -->
+            </div> 
+        </div> 
+    </div>
 
-        </div> <!-- จบ main-card -->
+    <!-- Pop-up (Modal): ชำระเงิน & แจกแต้ม -->
+    <div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg" style="background-color: #fdfdfd;">
+                
+                <div class="modal-header border-bottom-0 pb-0 pt-3 px-4">
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                        💳 ชำระเงิน & แจกแต้ม (โต๊ะ <span id="modalTableNoText">1</span>)
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
 
+                <div class="modal-body px-4 pb-4">
+                    
+                    <div class="border rounded-3 p-3 mb-4 bg-white shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-secondary fw-bold">ยอดชำระรวม:</span>
+                            <span class="fs-5 fw-bold text-danger"><span id="modalTotalAmount">428</span> บาท</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-secondary small">แต้มคำนวณเบื้องต้น (100 บ. = 1 แต้ม):</span>
+                            <span class="badge bg-success rounded-pill px-3 py-1 fs-6"><span id="modalCalculatedPoints">4</span> แต้ม</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-2 fw-bold text-dark d-flex align-items-center gap-2">
+                        🎁 กำหนดแต้มสะสมให้สมาชิกแต่ละคน:
+                    </div>
+
+                    <div class="member-card d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <img src="https://ui-avatars.com/api/?name=Man+Puttipong&background=0D8ABC&color=fff&rounded=true" class="member-avatar" alt="User">
+                            <div class="lh-sm">
+                                <div class="fw-bold text-dark mb-1">Man_Puttipong</div>
+                                <div class="small text-secondary">0989646491</div>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="number" class="form-control input-points" value="2" min="0">
+                            <span class="text-secondary small fw-bold">แต้ม</span>
+                        </div>
+                    </div>
+
+                    <div class="member-card d-flex align-items-center justify-content-between mb-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <img src="https://ui-avatars.com/api/?name=Man&background=E57373&color=fff&rounded=true" class="member-avatar" alt="User">
+                            <div class="lh-sm">
+                                <div class="fw-bold text-dark mb-1">Man</div>
+                                <div class="small text-secondary">0615293666</div>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="number" class="form-control input-points" value="2" min="0">
+                            <span class="text-secondary small fw-bold">แต้ม</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between gap-3">
+                        <button type="button" class="btn btn-light rounded-pill px-4 fw-bold border text-secondary" data-bs-dismiss="modal">
+                            ยกเลิก
+                        </button>
+                        <button type="button" class="btn btn-success rounded-pill px-4 fw-bold flex-grow-1" onclick="alert('บันทึกการชำระเงินและแจกแต้มเรียบร้อยแล้ว!')">
+                            ยืนยันชำระเงิน & แจกแต้ม 💳
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- JavaScript คำนวณยอดเงินและอ่านเลขโต๊ะ -->
     <script>
-        const rawTotal = 428; // ยอดรวมตั้งต้นจากรายการ
+        const rawTotal = 428; 
 
         window.onload = function() {
-            // อ่านค่าพารามิเตอร์ URL (เช่น ?table=1)
             const urlParams = new URLSearchParams(window.location.search);
             const tableNo = urlParams.get('table') || '1';
 
-            // อัปเดตชื่อโต๊ะที่หัวข้อ
             document.getElementById('billTableTitle').innerHTML = `ยอดรวมโต๊ะ ${tableNo}: <span id="displayGrandTotal">${rawTotal}</span> บาท`;
+            document.getElementById('modalTableNoText').innerText = tableNo;
             
             calculateNetTotal();
         };
 
-        // ฟังก์ชันคำนวณยอดสุทธิตามส่วนลด
         function calculateNetTotal() {
             const discountValue = parseFloat(document.getElementById('discountInput').value) || 0;
             const discountType = document.getElementById('discountType').value;
@@ -288,9 +332,13 @@
                 netTotal = rawTotal - (rawTotal * (discountValue / 100));
             }
 
-            if (netTotal < 0) netTotal = 0; // ป้องกันติดลบ
+            if (netTotal < 0) netTotal = 0; 
 
             document.getElementById('netTotalText').innerText = Math.round(netTotal).toLocaleString();
+            document.getElementById('modalTotalAmount').innerText = Math.round(netTotal).toLocaleString();
+
+            const earnedPoints = Math.floor(netTotal / 100);
+            document.getElementById('modalCalculatedPoints').innerText = earnedPoints;
         }
     </script>
 </body>
