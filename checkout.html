@@ -308,38 +308,142 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <script>
-        const rawTotal = 428; 
+    <!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-        window.onload = function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const tableNo = urlParams.get('table') || '1';
+<script>
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-            document.getElementById('billTableTitle').innerHTML = `ยอดรวมโต๊ะ ${tableNo}: <span id="displayGrandTotal">${rawTotal}</span> บาท`;
-            document.getElementById('modalTableNoText').innerText = tableNo;
+    let tableId = '1';
+    let rawTotal = 0;
+
+    window.onload = function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        tableId = urlParams.get('table') || '1';
+
+        document.getElementById('modalTableNoText').innerText = tableId;
+        loadBillItemsRealtime();
+        bindCheckoutEvents();
+    };
+
+    // ดึงออเดอร์ของโต๊ะมาวาดรายการบิลแบบ Real-time
+    function loadBillItemsRealtime() {
+        db.collection("tables").doc(tableId).collection("orders").onSnapshot(snapshot => {
+            rawTotal = 0;
+            const mainCard = document.querySelector('.main-card');
             
-            calculateNetTotal();
-        };
+            // เคลียร์รายการเก่าใน DOM
+            const existingItems = mainCard.querySelectorAll('.bill-item');
+            existingItems.forEach(item => item.remove());
 
-        function calculateNetTotal() {
-            const discountValue = parseFloat(document.getElementById('discountInput').value) || 0;
-            const discountType = document.getElementById('discountType').value;
-            let netTotal = rawTotal;
+            const titleDiv = mainCard.querySelector('.bill-title');
 
-            if (discountType === 'baht') {
-                netTotal = rawTotal - discountValue;
-            } else if (discountType === 'percent') {
-                netTotal = rawTotal - (rawTotal * (discountValue / 100));
+            if (snapshot.empty) {
+                titleDiv.innerHTML = `<i class="bi bi-receipt"></i><span id="billTableTitle">ยอดรวมโต๊ะ ${tableId}: 0 บาท</span>`;
+                calculateNetTotal();
+                return;
             }
 
-            if (netTotal < 0) netTotal = 0; 
+            snapshot.forEach(doc => {
+                const item = doc.data();
+                const docId = doc.id;
+                const price = item.price || 0;
+                rawTotal += price;
 
-            document.getElementById('netTotalText').innerText = Math.round(netTotal).toLocaleString();
-            document.getElementById('modalTotalAmount').innerText = Math.round(netTotal).toLocaleString();
+                const billItemHtml = `
+                    <div class="bill-item" data-id="${docId}">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <div><span class="fw-bold">${item.name || 'รายการอาหาร'}</span> <span class="price-text">(${price} บ.)</span></div>
+                            <div>
+                                <button class="btn btn-outline-secondary btn-action-icon" onclick="deleteOrderItem('${docId}')">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <span class="badge ${item.status === 'pending' ? 'bg-warning text-dark' : 'bg-success'}">${item.status === 'pending' ? 'กำลังทำ' : 'เสร็จ'}</span>
+                    </div>`;
 
-            const earnedPoints = Math.floor(netTotal / 100);
-            document.getElementById('modalCalculatedPoints').innerText = earnedPoints;
+                titleDiv.insertAdjacentHTML('afterend', billItemHtml);
+            });
+
+            document.getElementById('billTableTitle').innerHTML = `ยอดรวมโต๊ะ ${tableId}: <span id="displayGrandTotal">${rawTotal}</span> บาท`;
+            calculateNetTotal();
+        });
+    }
+
+    // ลบรายการออเดอร์ออกจากบิล
+    function deleteOrderItem(orderDocId) {
+        if (confirm('คุณต้องการลบรายการนี้ใช่หรือไม่?')) {
+            db.collection("tables").doc(tableId).collection("orders").doc(orderDocId).delete().then(() => {
+                alert('ลบรายการสำเร็จ');
+            });
         }
-    </script>
+    }
+
+    // คำนวณยอดสุทธิและแต้ม
+    function calculateNetTotal() {
+        const discountValue = parseFloat(document.getElementById('discountInput').value) || 0;
+        const discountType = document.getElementById('discountType').value;
+        let netTotal = rawTotal;
+
+        if (discountType === 'baht') {
+            netTotal = rawTotal - discountValue;
+        } else if (discountType === 'percent') {
+            netTotal = rawTotal - (rawTotal * (discountValue / 100));
+        }
+
+        if (netTotal < 0) netTotal = 0;
+
+        const finalPrice = Math.round(netTotal);
+        document.getElementById('netTotalText').innerText = finalPrice.toLocaleString();
+        document.getElementById('modalTotalAmount').innerText = finalPrice.toLocaleString();
+
+        const earnedPoints = Math.floor(finalPrice / 100);
+        document.getElementById('modalCalculatedPoints').innerText = earnedPoints;
+    }
+
+    function bindCheckoutEvents() {
+        // ปุ่มยืนยันชำระเงิน & แจกแต้ม ใน Pop-up Modal
+        const confirmPayBtn = document.querySelector('#paymentModal .btn-success');
+        confirmPayBtn.onclick = function() {
+            const netAmount = parseFloat(document.getElementById('modalTotalAmount').innerText.replace(/,/g, '')) || 0;
+
+            // 1. ลงประวัติชำระเงิน
+            db.collection("checkouts").add({
+                tableId: tableId,
+                totalAmount: rawTotal,
+                netAmount: netAmount,
+                paymentMethod: document.querySelector('.payment-card select').value,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                // 2. ปรับสถานะโต๊ะกลับเป็น free (ว่าง)
+                return db.collection("tables").doc(tableId).update({
+                    status: 'free',
+                    people: 0,
+                    package: firebase.firestore.FieldValue.delete()
+                });
+            }).then(() => {
+                alert('บันทึกการชำระเงินและปิดโต๊ะเรียบร้อยแล้ว!');
+                window.location.href = 'index.html';
+            });
+        };
+
+        // ปุ่มแยกชำระเงิน
+        const splitPayBtn = document.querySelector('.btn-split-blue');
+        splitPayBtn.onclick = function() {
+            alert(`กำลังเปิดหน้าแยกชำระเงินสำหรับ โต๊ะ ${tableId}`);
+        };
+    }
+</script>
 </body>
 </html>
