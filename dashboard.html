@@ -296,19 +296,29 @@
 
     // --- 2. ระบบผังโต๊ะ (Table Grid) ---
     function listenToTables() {
-        // ใช้ numeric ID สำหรับการเรียงลำดับโต๊ะให้ถูกต้อง (1, 2, 3...)
-        db.collection("tables").orderBy("id", "asc").onSnapshot(snapshot => {
+        // เอา .orderBy("id", "asc") ออก เพื่อให้ดึงเอกสารมาได้ทั้งหมดแม้ไม่มีฟิลด์ id
+        db.collection("tables").onSnapshot(snapshot => {
             const container = document.getElementById('tableContainer');
             container.innerHTML = '';
+            
+            // 1. ดึงข้อมูลทั้งหมดมาเก็บใน Array ก่อน
+            let tablesArray = [];
             snapshot.forEach(doc => {
-                const table = doc.data();
-                const tableId = doc.id;
-                let cardHtml = '';
+                tablesArray.push({ tableId: doc.id, ...doc.data() });
+            });
 
-                if (table.status === 'busy') {
+            // 2. เรียงลำดับเลขโต๊ะด้วย JavaScript (แปลงเป็นตัวเลขเพื่อป้องกันโต๊ะ 10 มาก่อนโต๊ะ 2)
+            tablesArray.sort((a, b) => parseInt(a.tableId) - parseInt(b.tableId));
+
+            // 3. นำมาแสดงผล
+            tablesArray.forEach(table => {
+                let cardHtml = '';
+                
+                // เช็กสถานะ (รองรับข้อมูลเดิมของคุณ เผื่อใช้คำว่า 'busy', 'ไม่ว่าง' หรือมีคนนั่งอยู่)
+                if (table.status === 'busy' || table.status === 'ไม่ว่าง' || table.people > 0) {
                     cardHtml = `
-                        <div class="table-card table-busy shadow-sm" onclick="openTableModal('${tableId}')">
-                            <div class="fw-bold fs-5">โต๊ะ ${table.id || tableId}</div>
+                        <div class="table-card table-busy shadow-sm" onclick="openTableModal('${table.tableId}')">
+                            <div class="fw-bold fs-5">โต๊ะ ${table.id || table.tableId}</div>
                             <div class="d-flex align-items-center gap-1 mt-1">
                                 <i class="bi bi-person-fill icon fs-5"></i>
                                 <span class="fw-bold fs-5">${table.people || 0}</span>
@@ -317,8 +327,8 @@
                         </div>`;
                 } else {
                     cardHtml = `
-                        <div class="table-card table-free shadow-sm" onclick="openNewTable('${tableId}')">
-                            <div class="fw-bold fs-5">โต๊ะ ${table.id || tableId}</div>
+                        <div class="table-card table-free shadow-sm" onclick="openNewTable('${table.tableId}')">
+                            <div class="fw-bold fs-5">โต๊ะ ${table.id || table.tableId}</div>
                             <div class="mt-1 fs-6 text-success"><i class="bi bi-check-circle"></i> ว่าง</div>
                         </div>`;
                 }
