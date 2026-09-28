@@ -236,24 +236,158 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- JavaScript ดึงเลขโต๊ะจาก URL -->
-    <script>
-        window.onload = function() {
-            // อ่านค่าพารามิเตอร์ URL (เช่น ?table=1)
-            const urlParams = new URLSearchParams(window.location.search);
-            const tableNo = urlParams.get('table');
+    <!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-            if (tableNo) {
-                // ใส่ค่าเลขโต๊ะลงในช่องกรอก
-                document.getElementById('tableNoInput').value = tableNo;
-                // อัปเดตชื่อโต๊ะที่หัวข้อ
-                document.getElementById('displayTableName').innerText = `โต๊ะ ${tableNo}`;
-            } else {
-                // ถ้าเปิดเข้ามาตรงๆ โดยไม่ได้กดมาจากหน้าแรก
-                document.getElementById('tableNoInput').value = "ไม่พบระบุโต๊ะ";
-                document.getElementById('displayTableName').innerText = "ไม่ได้ระบุโต๊ะ";
+<script>
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let tableId = null;
+
+    window.onload = function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        tableId = urlParams.get('table');
+
+        if (tableId) {
+            document.getElementById('tableNoInput').value = tableId;
+            document.getElementById('displayTableName').innerText = `โต๊ะ ${tableId}`;
+            checkTableStatus();
+        } else {
+            document.getElementById('tableNoInput').value = "ไม่ระบุ";
+            document.getElementById('displayTableName').innerText = "ไม่ได้ระบุโต๊ะ";
+        }
+
+        bindOrderPageEvents();
+    };
+
+    function checkTableStatus() {
+        db.collection("tables").doc(tableId).get().then(doc => {
+            if (doc.exists) {
+                const data = doc.data();
+                // สลับการแสดงผลหน้าต่าง เปิดโต๊ะ / สั่งอาหาร ตามสถานะโต๊ะ
+                const cards = document.querySelectorAll('.container > .modern-card, .container > div.p-3');
+                if (data.status === 'free') {
+                    if(cards[0]) cards[0].style.display = 'block'; // โชว์การ์ดเปิดโต๊ะ
+                } else {
+                    if(cards[0]) cards[0].style.display = 'none';  // ซ่อนการ์ดเปิดโต๊ะ
+                }
             }
+        });
+    }
+
+    function bindOrderPageEvents() {
+        const cards = document.querySelectorAll('.modern-card');
+
+        // 1. ปุ่ม "เปิดโต๊ะ"
+        const openTableBtn = cards[0].querySelector('button');
+        openTableBtn.onclick = function() {
+            const adults = parseInt(cards[0].querySelectorAll('input[type="number"]')[0].value) || 0;
+            const kids = parseInt(cards[0].querySelectorAll('input[type="number"]')[1].value) || 0;
+            const pkgSelect = cards[0].querySelector('select');
+            const pkgText = pkgSelect.options[pkgSelect.selectedIndex].text;
+            
+            let pkgPrice = 199; // ราคา default
+            if(pkgText.includes('99')) pkgPrice = 99;
+            if(pkgText.includes('299')) pkgPrice = 299;
+
+            const totalPeople = adults + kids;
+            const totalOpeningPrice = (adults * pkgPrice) + (kids * pkgPrice * 0.5);
+
+            // อัปเดตสถานะโต๊ะเป็น busy
+            db.collection("tables").doc(tableId).set({
+                id: parseInt(tableId),
+                status: 'busy',
+                people: totalPeople,
+                package: pkgText,
+                openedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            // บันทึกรายการลง subcollection orders
+            db.collection("tables").doc(tableId).collection("orders").add({
+                type: 'opening',
+                name: `เปิดโต๊ะ (${pkgText} - ผู้ใหญ่ ${adults}, เด็ก ${kids})`,
+                price: totalOpeningPrice,
+                status: 'completed',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                alert('เปิดโต๊ะเรียบร้อยแล้ว!');
+                location.reload();
+            });
         };
-    </script>
+
+        // 2. ปุ่ม "บันทึก เพิ่ม คน"
+        const addPeopleBtn = document.querySelectorAll('.modern-card')[1].querySelector('button');
+        addPeopleBtn.onclick = function() {
+            const adults = parseInt(document.querySelectorAll('.modern-card')[1].querySelectorAll('input[type="number"]')[0].value) || 0;
+            const kids = parseInt(document.querySelectorAll('.modern-card')[1].querySelectorAll('input[type="number"]')[1].value) || 0;
+
+            if (adults === 0 && kids === 0) return alert('กรุณาระบุจำนวนคนที่ต้องการเพิ่ม');
+
+            db.collection("tables").doc(tableId).get().then(doc => {
+                const currentPeople = doc.data().people || 0;
+                db.collection("tables").doc(tableId).update({
+                    people: currentPeople + adults + kids
+                });
+
+                db.collection("tables").doc(tableId).collection("orders").add({
+                    type: 'add_people',
+                    name: `เพิ่มลูกค้า (ผู้ใหญ่ ${adults} ท่าน, เด็ก ${kids} ท่าน)`,
+                    price: (adults * 199) + (kids * 199 * 0.5), // คำนวณราคาเฉลี่ย
+                    status: 'completed',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(() => alert('บันทึกเพิ่มคนสำเร็จ'));
+            });
+        };
+
+        // 3. ปุ่ม "🔥 ส่งรายการเตา/ซุป เข้าครัว"
+        const stoveBtn = document.querySelectorAll('.modern-card')[2].querySelector('button');
+        stoveBtn.onclick = function() {
+            const select = document.querySelectorAll('.modern-card')[2].querySelector('select');
+            const stoveName = select.options[select.selectedIndex].text;
+
+            if (select.selectedIndex === 0) return alert('กรุณาเลือกประเภทเตา');
+
+            db.collection("tables").doc(tableId).collection("orders").add({
+                type: 'stove',
+                name: `เตา/ซุป: ${stoveName}`,
+                price: 0,
+                status: 'pending',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => alert('ส่งรายการเตา/ซุป เข้าครัวสำเร็จ!'));
+        };
+
+        // 4. ปุ่ม "🛎️ ส่งรายการเข้าครัว" (สั่งอาหาร)
+        const foodBtn = document.querySelectorAll('.modern-card')[3].querySelector('button');
+        foodBtn.onclick = function() {
+            const select = document.querySelectorAll('.modern-card')[3].querySelector('select');
+            const categoryName = select.options[select.selectedIndex].text;
+
+            db.collection("tables").doc(tableId).collection("orders").add({
+                type: 'food',
+                name: `สั่งอาหาร (${categoryName})`,
+                price: 0,
+                status: 'pending',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => alert('ส่งรายการอาหารเข้าครัวสำเร็จ!'));
+        };
+
+        // 5. ปุ่ม "สรุปยอดบิล / ชำระเงิน"
+        const checkoutBtn = document.querySelector('.btn-yellow-main');
+        checkoutBtn.onclick = function() {
+            if (!tableId) return;
+            window.location.href = `checkout.html?table=${tableId}`;
+        };
+    }
+</script>
 </body>
 </html>
