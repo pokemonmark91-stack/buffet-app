@@ -264,17 +264,62 @@
         });
     }
 
-    function closeShift() {
-        if (!currentShiftId) return alert('ยังไม่มีกะที่เปิดอยู่');
-        const cashAmount = prompt('กรอกจำนวนเงินสดจริงในลิ้นชัก (บาท):');
-        if (cashAmount !== null) {
-            db.collection("shifts").doc(currentShiftId).update({
-                status: 'closed',
-                closedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                endingCash: parseFloat(cashAmount) || 0
-            }).then(() => alert('ปิดกะการทำงานเรียบร้อยแล้ว'));
+    // --- ฟังก์ชันปิดกะ (ใช้ SweetAlert2 แบบเดิม) ---
+async function closeShift() {
+    if (!currentShiftId) {
+        Swal.fire('แจ้งเตือน', 'ยังไม่ได้เปิดกะทำงาน', 'warning');
+        return;
+    }
+
+    const { value: actualCash } = await Swal.fire({
+        html: `
+            <div style="background-color: #e53935; color: white; padding: 15px; margin: -2em -2em 20px -2em; text-align: left; font-size: 1.25rem; font-weight: bold; border-radius: 5px 5px 0 0; display: flex; justify-content: space-between;">
+                <span>🔴 ปิดกะการทำงาน</span>
+                <span style="cursor: pointer;" onclick="Swal.close()">✕</span>
+            </div>
+            <div style="background-color: #fff8e1; color: #856404; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; text-align: left; border: 1px solid #ffeeba;">
+                กรุณานับเงินสดจริงทั้งหมดที่มีอยู่ในลิ้นชัก ณ ตอนนี้ แล้วระบุลงในช่องด้านล่าง
+            </div>
+            <div style="text-align: left;">
+                <label style="font-weight: bold; margin-bottom: 5px; display: block;">เงินสดในลิ้นชักที่นับได้จริง (บาท):</label>
+                <input id="swal-input-cash" type="number" class="swal2-input" style="width: 100%; margin:0; max-width: 100%;" placeholder="0.00" step="0.01">
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'ยืนยันปิดกะ',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#e53935',
+        cancelButtonColor: '#6c757d',
+        showCloseButton: false,
+        focusConfirm: false,
+        preConfirm: () => {
+            const cash = document.getElementById('swal-input-cash').value;
+            if (!cash) {
+                Swal.showValidationMessage('กรุณากรอกจำนวนเงินสดในลิ้นชัก');
+                return false;
+            }
+            return parseFloat(cash);
+        }
+    });
+
+    if (actualCash !== undefined) {
+        try {
+            // บันทึกการปิดกะลง Firebase
+            await db.collection("shifts").doc(currentShiftId).update({
+                endTime: firebase.firestore.FieldValue.serverTimestamp(),
+                actualCash: actualCash,
+                status: 'closed'
+            });
+
+            Swal.fire('สำเร็จ!', 'ปิดกะการทำงานเรียบร้อยแล้ว', 'success').then(() => {
+                location.reload(); // รีโหลดหน้าเพื่อกลับไปหน้าเปิดกะ
+            });
+        } catch (error) {
+            console.error("Error:", error);
+            Swal.fire('ข้อผิดพลาด', 'ไม่สามารถปิดกะได้: ' + error.message, 'error');
         }
     }
+}
 
     function manageCashFlow() {
         if (!currentShiftId) return alert('กรุณาเปิดกะก่อนทำรายการเงินเข้า-ออก');
@@ -453,6 +498,78 @@
             }
         }
     }
+// --- ฟังก์ชันเงินเข้า-ออก (ใช้ SweetAlert2 แบบเดิม) ---
+async function addCashFlow() {
+    if (!currentShiftId) {
+        Swal.fire('แจ้งเตือน', 'กรุณาเปิดกะก่อนบันทึกรายการ', 'warning');
+        return;
+    }
+
+    const { value: formValues } = await Swal.fire({
+        html: `
+            <div style="background-color: #00bcd4; color: white; padding: 15px; margin: -2em -2em 20px -2em; text-align: left; font-size: 1.25rem; font-weight: bold; border-radius: 5px 5px 0 0; display: flex; justify-content: space-between;">
+                <span>💸 บันทึกเงินเข้า - เงินออก</span>
+                <span style="cursor: pointer;" onclick="Swal.close()">✕</span>
+            </div>
+            <div style="text-align: left;">
+                <label style="font-weight: bold; margin-bottom: 5px; display: block;">ประเภทรายการ:</label>
+                <select id="swal-type" class="swal2-select" style="width: 100%; margin: 0 0 15px 0; max-width: 100%; display: flex;">
+                    <option value="out">เงินออก (จ่ายค่าน้ำแข็ง / ของสดเติมด่วน)</option>
+                    <option value="in">เงินเข้า</option>
+                </select>
+
+                <label style="font-weight: bold; margin-bottom: 5px; display: block;">จำนวนเงิน (บาท):</label>
+                <input id="swal-amount" type="number" class="swal2-input" style="width: 100%; margin: 0 0 15px 0; max-width: 100%;" placeholder="0.00">
+
+                <label style="font-weight: bold; margin-bottom: 5px; display: block;">หมายเหตุ / เหตุผล:</label>
+                <input id="swal-note" type="text" class="swal2-input" style="width: 100%; margin: 0; max-width: 100%;" placeholder="เช่น ซื้อน้ำแข็งเพิ่ม">
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'บันทึก',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#00bcd4',
+        cancelButtonColor: '#6c757d',
+        showCloseButton: false,
+        focusConfirm: false,
+        preConfirm: () => {
+            const type = document.getElementById('swal-type').value;
+            const amount = parseFloat(document.getElementById('swal-amount').value);
+            const note = document.getElementById('swal-note').value;
+            
+            if (!amount || isNaN(amount)) {
+                Swal.showValidationMessage('กรุณากรอกจำนวนเงินให้ถูกต้อง');
+                return false;
+            }
+            return { type, amount, note };
+        }
+    });
+
+    if (formValues) {
+        try {
+            // บันทึกรายการลง Firebase
+            await db.collection("cash_flows").add({
+                shiftId: currentShiftId,
+                type: formValues.type,
+                amount: formValues.amount,
+                note: formValues.note,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                staffName: "เรย์" // เปลี่ยนตามตัวแปรเก็บชื่อพนักงานของคุณถ้ามี
+            });
+
+            Swal.fire({
+                icon: 'success',
+                title: 'บันทึกสำเร็จ',
+                showConfirmButton: false,
+                timer: 1500
+            });
+        } catch (error) {
+            console.error("Error:", error);
+            Swal.fire('ข้อผิดพลาด', 'บันทึกไม่สำเร็จ: ' + error.message, 'error');
+        }
+    }
+}
+    
 </script>
 </body>
 </html>
