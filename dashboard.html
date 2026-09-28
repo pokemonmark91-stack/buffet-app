@@ -139,10 +139,10 @@
             </div>
             
             <div class="d-flex flex-wrap gap-2">
-                <button class="btn btn-danger px-4 rounded-3" onclick="alert('ระบบกำลังปิดกะ...')">
+                <button class="btn btn-danger px-4 rounded-3" onclick="closeShift()">
                     <i class="bi bi-power"></i> ปิดกะ
                 </button>
-                <button class="btn btn-shift-action px-3" onclick="alert('เปิดหน้าจัดการเงินสดในลิ้นชัก')">
+                <button class="btn btn-shift-action px-3" onclick="manageCashFlow()">
                     <i class="bi bi-cash-coin text-success"></i> เงินเข้า-ออก
                 </button>
                 <button class="btn btn-shift-action px-3" onclick="alert('เปิดหน้าประวัติบิล')">
@@ -159,8 +159,8 @@
                     <h4 class="fw-bold m-0 text-dark">สถานะโต๊ะ</h4>
                 </div>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-danger" onclick="alert('ลดจำนวนโต๊ะ')"><i class="bi bi-dash"></i> โต๊ะ</button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="alert('เพิ่มจำนวนโต๊ะ')"><i class="bi bi-plus"></i> โต๊ะ</button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeLastTable()"><i class="bi bi-dash"></i> โต๊ะ</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="addNewTable()"><i class="bi bi-plus"></i> โต๊ะ</button>
                     <button class="btn btn-sm btn-light border" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> รีเฟรช</button>
                 </div>
             </div>
@@ -192,13 +192,13 @@
                             </button>
                         </div>
                         <div class="col-4">
-                            <button class="action-btn" onclick="alert('ย้ายโต๊ะไปยังโต๊ะอื่น')">
+                            <button class="action-btn" onclick="moveTablePrompt()">
                                 <i class="bi bi-arrow-left-right text-secondary"></i>
                                 <span class="small lh-1">ย้าย<br>โต๊ะ</span>
                             </button>
                         </div>
                         <div class="col-4">
-                            <button class="action-btn" onclick="alert('ยกเลิกโต๊ะนี้')">
+                            <button class="action-btn" onclick="cancelTablePrompt()">
                                 <i class="bi bi-x-circle-fill text-danger"></i>
                                 <span class="small lh-1">ยกเลิก<br>โต๊ะ</span>
                             </button>
@@ -218,12 +218,12 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <!-- Firebase SDK (เวอร์ชัน Compat 10) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <script>
-    // Config Firebase (นำค่าของคุณมาใส่ตรงนี้)
+    // Config Firebase 
     const firebaseConfig = {
         apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
         authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -233,6 +233,7 @@
         appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
         measurementId: "G-82JK3EL1HL"
     };
+    
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
@@ -243,7 +244,6 @@
     window.onload = function() {
         initShiftStatus();
         listenToTables();
-        bindShiftButtons();
     };
 
     // --- 1. ระบบจัดการกะ (Shift) ---
@@ -264,48 +264,39 @@
         });
     }
 
-    function bindShiftButtons() {
-        // ปุ่มปิดกะ
-        const shiftBtns = document.querySelectorAll('.shift-card button');
-        shiftBtns[0].onclick = function() {
-            if (!currentShiftId) return alert('ยังไม่มีกะที่เปิดอยู่');
-            const cashAmount = prompt('กรอกจำนวนเงินสดจริงในลิ้นชัก (บาท):');
-            if (cashAmount !== null) {
-                db.collection("shifts").doc(currentShiftId).update({
-                    status: 'closed',
-                    closedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    endingCash: parseFloat(cashAmount) || 0
-                }).then(() => alert('ปิดกะการทำงานเรียบร้อยแล้ว'));
-            }
-        };
+    function closeShift() {
+        if (!currentShiftId) return alert('ยังไม่มีกะที่เปิดอยู่');
+        const cashAmount = prompt('กรอกจำนวนเงินสดจริงในลิ้นชัก (บาท):');
+        if (cashAmount !== null) {
+            db.collection("shifts").doc(currentShiftId).update({
+                status: 'closed',
+                closedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                endingCash: parseFloat(cashAmount) || 0
+            }).then(() => alert('ปิดกะการทำงานเรียบร้อยแล้ว'));
+        }
+    }
 
-        // ปุ่มเงินเข้า-ออก
-        shiftBtns[1].onclick = function() {
-            if (!currentShiftId) return alert('กรุณาเปิดกะก่อนทำรายการเงินเข้า-ออก');
-            const type = prompt('พิมพ์ "in" สำหรับเงินเข้า / "out" สำหรับเงินออก:');
-            if (type === 'in' || type === 'out') {
-                const amount = prompt('กรอกจำนวนเงิน:');
-                const note = prompt('ระบุเหตุผล/หมายเหตุ:');
-                if (amount) {
-                    db.collection("cash_flows").add({
-                        shiftId: currentShiftId,
-                        type: type,
-                        amount: parseFloat(amount),
-                        note: note || '',
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    }).then(() => alert('บันทึกรายการเงินเข้า-ออกเรียบร้อย'));
-                }
+    function manageCashFlow() {
+        if (!currentShiftId) return alert('กรุณาเปิดกะก่อนทำรายการเงินเข้า-ออก');
+        const type = prompt('พิมพ์ "in" สำหรับเงินเข้า / "out" สำหรับเงินออก:');
+        if (type === 'in' || type === 'out') {
+            const amount = prompt('กรอกจำนวนเงิน:');
+            const note = prompt('ระบุเหตุผล/หมายเหตุ:');
+            if (amount) {
+                db.collection("cash_flows").add({
+                    shiftId: currentShiftId,
+                    type: type,
+                    amount: parseFloat(amount),
+                    note: note || '',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(() => alert('บันทึกรายการเงินเข้า-ออกเรียบร้อย'));
             }
-        };
-
-        // ปุ่มบิลย้อนหลัง
-        shiftBtns[2].onclick = function() {
-            alert('กำลังเปิดหน้าประวัติบิลสำหรับกะปัจจุบัน');
-        };
+        }
     }
 
     // --- 2. ระบบผังโต๊ะ (Table Grid) ---
     function listenToTables() {
+        // ใช้ numeric ID สำหรับการเรียงลำดับโต๊ะให้ถูกต้อง (1, 2, 3...)
         db.collection("tables").orderBy("id", "asc").onSnapshot(snapshot => {
             const container = document.getElementById('tableContainer');
             container.innerHTML = '';
@@ -336,18 +327,18 @@
         });
     }
 
-    // ปุ่มเพิ่ม-ลด โต๊ะ
-    document.querySelectorAll('.dashboard-card .btn-outline-danger')[0].onclick = function() {
-        db.collection("tables").get().then(snap => {
+    // ฟังก์ชันเพิ่มลดโต๊ะ
+    function removeLastTable() {
+        db.collection("tables").orderBy("id", "asc").get().then(snap => {
             if (snap.empty) return;
             const lastDoc = snap.docs[snap.docs.length - 1];
             if (confirm(`คุณต้องการลบ โต๊ะ ${lastDoc.id} ใช่หรือไม่?`)) {
                 db.collection("tables").doc(lastDoc.id).delete();
             }
         });
-    };
+    }
 
-    document.querySelectorAll('.dashboard-card .btn-outline-primary')[0].onclick = function() {
+    function addNewTable() {
         db.collection("tables").get().then(snap => {
             const nextNum = snap.size + 1;
             db.collection("tables").doc(String(nextNum)).set({
@@ -356,63 +347,100 @@
                 people: 0
             });
         });
-    };
+    }
 
+    // เปิดหน้า order.html แบบเปิดโต๊ะใหม่
     function openNewTable(tableId) {
         window.location.href = `order.html?table=${tableId}&action=new`;
     }
 
+    // เปิด Modal จัดการโต๊ะที่กำลังใช้งาน
     function openTableModal(tableId) {
         selectedTableId = tableId;
         document.getElementById('modalTableTitle').innerText = `จัดการโต๊ะ ${tableId}`;
-        
-        // ผูกปุ่มภายใน Modal จัดการโต๊ะ
-        const modalBtns = document.querySelectorAll('#tableActionModal .action-btn');
-        
-        // สมาชิกในโต๊ะ
-        modalBtns[0].onclick = function() {
-            alert(`สมาชิกในโต๊ะ ${selectedTableId}`);
-        };
-        // ย้ายโต๊ะ
-        modalBtns[1].onclick = function() {
-            const targetTable = prompt(`ย้ายโต๊ะ ${selectedTableId} ไปยังโต๊ะเลขที่:`);
-            if (targetTable) {
-                db.collection("tables").doc(targetTable).get().then(targetDoc => {
-                    if (targetDoc.exists && targetDoc.data().status === 'busy') {
-                        return alert('โต๊ะปลายทางไม่ว่าง!');
-                    }
-                    // ทำการย้ายข้อมูลสถานะ
-                    db.collection("tables").doc(selectedTableId).get().then(currentDoc => {
-                        const data = currentDoc.data();
-                        db.collection("tables").doc(targetTable).set({ ...data, id: parseInt(targetTable) });
-                        db.collection("tables").doc(selectedTableId).update({ status: 'free', people: 0 });
-                        modal.hide();
-                        alert(`ย้ายโต๊ะ ${selectedTableId} ไปโต๊ะ ${targetTable} สำเร็จ`);
-                    });
-                });
+        modal.show();
+    }
+
+    // ฟังก์ชันไปหน้า Order (สั่งอาหาร)
+    function goToOrderPage() {
+        if (selectedTableId) {
+            window.location.href = `order.html?table=${selectedTableId}`;
+        }
+    }
+
+    // --- ฟังก์ชันเสริม: ย้ายโต๊ะ แบบสมบูรณ์ (โอนรายการอาหารด้วย) ---
+    async function moveTablePrompt() {
+        const targetTable = prompt(`ย้ายโต๊ะ ${selectedTableId} ไปยังโต๊ะเลขที่:`);
+        if (!targetTable || targetTable === selectedTableId) return;
+
+        try {
+            const oldTableRef = db.collection("tables").doc(selectedTableId);
+            const newTableRef = db.collection("tables").doc(targetTable);
+
+            const targetDoc = await newTableRef.get();
+            if (targetDoc.exists && targetDoc.data().status === 'busy') {
+                return alert('โต๊ะปลายทางมีลูกค้านั่งอยู่แล้ว ไม่สามารถย้ายได้!');
             }
-        };
-        // ยกเลิกโต๊ะ
-        modalBtns[2].onclick = function() {
-            const reason = prompt('ระบุเหตุผลการยกเลิกโต๊ะ:');
-            if (reason) {
-                db.collection("tables").doc(selectedTableId).update({ status: 'free', people: 0 });
-                db.collection("void_logs").add({
+
+            const currentDoc = await oldTableRef.get();
+            if (!currentDoc.exists) return;
+            const tableData = currentDoc.data();
+
+            const batch = db.batch();
+
+            // 1. คัดลอกข้อมูลไปยังโต๊ะใหม่
+            batch.set(newTableRef, { ...tableData, id: parseInt(targetTable) });
+            // 2. เคลียร์โต๊ะเก่าให้ว่าง
+            batch.update(oldTableRef, { status: 'free', people: 0 });
+
+            // 3. ย้ายรายการอาหาร (Orders Sub-collection)
+            const ordersSnap = await oldTableRef.collection("orders").get();
+            ordersSnap.forEach(doc => {
+                batch.set(newTableRef.collection("orders").doc(doc.id), doc.data());
+                batch.delete(doc.ref); // ลบออกจากโต๊ะเก่า
+            });
+
+            await batch.commit();
+            modal.hide();
+            alert(`ย้ายโต๊ะจาก ${selectedTableId} ไป ${targetTable} สำเร็จเรียบร้อย`);
+        } catch (error) {
+            console.error("Move table error: ", error);
+            alert("เกิดข้อผิดพลาดในการย้ายโต๊ะ");
+        }
+    }
+
+    // --- ฟังก์ชันเสริม: ยกเลิกโต๊ะ แบบสมบูรณ์ (ล้างออเดอร์ด้วย) ---
+    async function cancelTablePrompt() {
+        const reason = prompt('ระบุเหตุผลการยกเลิกโต๊ะนี้ (เช่น ลูกค้าเปลี่ยนใจ, เปิดผิด):');
+        if (reason) {
+            try {
+                const tableRef = db.collection("tables").doc(selectedTableId);
+                const batch = db.batch();
+
+                // 1. เคลียร์สถานะโต๊ะให้ว่าง
+                batch.update(tableRef, { status: 'free', people: 0 });
+                
+                // 2. บันทึกประวัติการยกเลิก
+                const voidRef = db.collection("void_logs").doc();
+                batch.set(voidRef, {
                     tableId: selectedTableId,
                     reason: reason,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
+
+                // 3. ลบรายการอาหารที่สั่งไว้ทั้งหมดทิ้ง
+                const ordersSnap = await tableRef.collection("orders").get();
+                ordersSnap.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+
+                await batch.commit();
                 modal.hide();
-                alert('ยกเลิกโต๊ะเรียบร้อยแล้ว');
+                alert('ยกเลิกโต๊ะ และล้างรายการอาหารเรียบร้อยแล้ว');
+            } catch (error) {
+                console.error("Cancel table error: ", error);
+                alert("เกิดข้อผิดพลาดในการยกเลิกโต๊ะ");
             }
-        };
-
-        modal.show();
-    }
-
-    function goToOrderPage() {
-        if (selectedTableId) {
-            window.location.href = `order.html?table=${selectedTableId}`;
         }
     }
 </script>
