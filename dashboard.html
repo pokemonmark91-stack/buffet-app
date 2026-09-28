@@ -218,86 +218,202 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- JavaScript จำลองข้อมูลและการคลิก -->
-    <script>
-        let selectedTableId = null;
+    <!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-        // จำลองข้อมูลโต๊ะ 1-12 (ให้โต๊ะ 1 และ 5 มีลูกค้า)
-        const tables = [
-            { id: 1, status: 'busy', people: 1 },
-            { id: 2, status: 'free', people: 0 },
-            { id: 3, status: 'free', people: 0 },
-            { id: 4, status: 'free', people: 0 },
-            { id: 5, status: 'busy', people: 4 }, // จำลองโต๊ะ 5 มี 4 คน
-            { id: 6, status: 'free', people: 0 },
-            { id: 7, status: 'free', people: 0 },
-            { id: 8, status: 'free', people: 0 },
-            { id: 9, status: 'free', people: 0 },
-            { id: 10, status: 'free', people: 0 },
-            { id: 11, status: 'free', people: 0 },
-            { id: 12, status: 'free', people: 0 }
-        ];
+<script>
+    // Config Firebase (นำค่าของคุณมาใส่ตรงนี้)
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-        const container = document.getElementById('tableContainer');
-        const modal = new bootstrap.Modal(document.getElementById('tableActionModal'));
+    let selectedTableId = null;
+    let currentShiftId = null;
+    const modal = new bootstrap.Modal(document.getElementById('tableActionModal'));
 
-        // ฟังก์ชันวาดโต๊ะ
-        function renderTables() {
+    window.onload = function() {
+        initShiftStatus();
+        listenToTables();
+        bindShiftButtons();
+    };
+
+    // --- 1. ระบบจัดการกะ (Shift) ---
+    function initShiftStatus() {
+        db.collection("shifts").where("status", "==", "open").limit(1).onSnapshot(snapshot => {
+            if (!snapshot.empty) {
+                const shiftDoc = snapshot.docs[0];
+                currentShiftId = shiftDoc.id;
+                const data = shiftDoc.data();
+                document.querySelector('.shift-card .badge').className = "badge bg-success rounded-pill px-3 py-1 fw-normal";
+                document.querySelector('.shift-card .badge').innerText = `กำลังเปิดกะ (${currentShiftId.substring(0,8)}...)`;
+                document.querySelector('.shift-card .text-info').innerHTML = `<i class="bi bi-person-circle"></i> ${data.staffName || 'เรย์'}`;
+            } else {
+                currentShiftId = null;
+                document.querySelector('.shift-card .badge').className = "badge bg-danger rounded-pill px-3 py-1 fw-normal";
+                document.querySelector('.shift-card .badge').innerText = "ยังไม่เปิดกะ";
+            }
+        });
+    }
+
+    function bindShiftButtons() {
+        // ปุ่มปิดกะ
+        const shiftBtns = document.querySelectorAll('.shift-card button');
+        shiftBtns[0].onclick = function() {
+            if (!currentShiftId) return alert('ยังไม่มีกะที่เปิดอยู่');
+            const cashAmount = prompt('กรอกจำนวนเงินสดจริงในลิ้นชัก (บาท):');
+            if (cashAmount !== null) {
+                db.collection("shifts").doc(currentShiftId).update({
+                    status: 'closed',
+                    closedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    endingCash: parseFloat(cashAmount) || 0
+                }).then(() => alert('ปิดกะการทำงานเรียบร้อยแล้ว'));
+            }
+        };
+
+        // ปุ่มเงินเข้า-ออก
+        shiftBtns[1].onclick = function() {
+            if (!currentShiftId) return alert('กรุณาเปิดกะก่อนทำรายการเงินเข้า-ออก');
+            const type = prompt('พิมพ์ "in" สำหรับเงินเข้า / "out" สำหรับเงินออก:');
+            if (type === 'in' || type === 'out') {
+                const amount = prompt('กรอกจำนวนเงิน:');
+                const note = prompt('ระบุเหตุผล/หมายเหตุ:');
+                if (amount) {
+                    db.collection("cash_flows").add({
+                        shiftId: currentShiftId,
+                        type: type,
+                        amount: parseFloat(amount),
+                        note: note || '',
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    }).then(() => alert('บันทึกรายการเงินเข้า-ออกเรียบร้อย'));
+                }
+            }
+        };
+
+        // ปุ่มบิลย้อนหลัง
+        shiftBtns[2].onclick = function() {
+            alert('กำลังเปิดหน้าประวัติบิลสำหรับกะปัจจุบัน');
+        };
+    }
+
+    // --- 2. ระบบผังโต๊ะ (Table Grid) ---
+    function listenToTables() {
+        db.collection("tables").orderBy("id", "asc").onSnapshot(snapshot => {
+            const container = document.getElementById('tableContainer');
             container.innerHTML = '';
-            tables.forEach(table => {
+            snapshot.forEach(doc => {
+                const table = doc.data();
+                const tableId = doc.id;
                 let cardHtml = '';
-                
-                if(table.status === 'busy') {
-                    // แบบโต๊ะมีลูกค้า
+
+                if (table.status === 'busy') {
                     cardHtml = `
-                        <div class="table-card table-busy shadow-sm" onclick="openTableModal(${table.id})">
-                            <div class="fw-bold fs-5">โต๊ะ ${table.id}</div>
+                        <div class="table-card table-busy shadow-sm" onclick="openTableModal('${tableId}')">
+                            <div class="fw-bold fs-5">โต๊ะ ${table.id || tableId}</div>
                             <div class="d-flex align-items-center gap-1 mt-1">
                                 <i class="bi bi-person-fill icon fs-5"></i>
-                                <span class="fw-bold fs-5">${table.people}</span>
+                                <span class="fw-bold fs-5">${table.people || 0}</span>
                             </div>
                             <div class="small fw-bold">คน</div>
-                        </div>
-                    `;
+                        </div>`;
                 } else {
-                    // แบบโต๊ะว่าง
                     cardHtml = `
-                        <div class="table-card table-free shadow-sm" onclick="openNewTable(${table.id})">
-                            <div class="fw-bold fs-5">โต๊ะ ${table.id}</div>
+                        <div class="table-card table-free shadow-sm" onclick="openNewTable('${tableId}')">
+                            <div class="fw-bold fs-5">โต๊ะ ${table.id || tableId}</div>
                             <div class="mt-1 fs-6 text-success"><i class="bi bi-check-circle"></i> ว่าง</div>
-                        </div>
-                    `;
+                        </div>`;
                 }
-
                 container.innerHTML += `<div class="col-6 col-sm-4 col-md-3">${cardHtml}</div>`;
             });
-        }
+        });
+    }
 
-        // ฟังก์ชันเมื่อคลิกโต๊ะว่าง
-        function openNewTable(tableId) {
-            alert(`กำลังเปิดฟอร์มสำหรับเปิดโต๊ะที่ ${tableId}...`);
-            // ในระบบจริง จะเปลี่ยนหน้าหรือเปิด Modal เปิดโต๊ะ
-        }
-
-        // ฟังก์ชันเมื่อคลิกโต๊ะที่มีลูกค้า (เรียก Modal)
-        function openTableModal(tableId) {
-            selectedTableId = tableId;
-            document.getElementById('modalTableTitle').innerText = `จัดการโต๊ะ ${tableId}`;
-            modal.show();
-        }
-
-        // ฟังก์ชันกดปุ่ม "เข้าโต๊ะ" ใน Modal
-        function goToOrderPage() {
-            if(selectedTableId) {
-                // เปลี่ยนหน้าไปยัง order.html พร้อมส่งพารามิเตอร์โต๊ะ
-                window.location.href = `order.html?table=${selectedTableId}`;
+    // ปุ่มเพิ่ม-ลด โต๊ะ
+    document.querySelectorAll('.dashboard-card .btn-outline-danger')[0].onclick = function() {
+        db.collection("tables").get().then(snap => {
+            if (snap.empty) return;
+            const lastDoc = snap.docs[snap.docs.length - 1];
+            if (confirm(`คุณต้องการลบ โต๊ะ ${lastDoc.id} ใช่หรือไม่?`)) {
+                db.collection("tables").doc(lastDoc.id).delete();
             }
-        }
+        });
+    };
 
-        // โหลดข้อมูลเมื่อเปิดหน้า
-        window.onload = () => {
-            renderTables();
+    document.querySelectorAll('.dashboard-card .btn-outline-primary')[0].onclick = function() {
+        db.collection("tables").get().then(snap => {
+            const nextNum = snap.size + 1;
+            db.collection("tables").doc(String(nextNum)).set({
+                id: nextNum,
+                status: 'free',
+                people: 0
+            });
+        });
+    };
+
+    function openNewTable(tableId) {
+        window.location.href = `order.html?table=${tableId}&action=new`;
+    }
+
+    function openTableModal(tableId) {
+        selectedTableId = tableId;
+        document.getElementById('modalTableTitle').innerText = `จัดการโต๊ะ ${tableId}`;
+        
+        // ผูกปุ่มภายใน Modal จัดการโต๊ะ
+        const modalBtns = document.querySelectorAll('#tableActionModal .action-btn');
+        
+        // สมาชิกในโต๊ะ
+        modalBtns[0].onclick = function() {
+            alert(`สมาชิกในโต๊ะ ${selectedTableId}`);
         };
-    </script>
+        // ย้ายโต๊ะ
+        modalBtns[1].onclick = function() {
+            const targetTable = prompt(`ย้ายโต๊ะ ${selectedTableId} ไปยังโต๊ะเลขที่:`);
+            if (targetTable) {
+                db.collection("tables").doc(targetTable).get().then(targetDoc => {
+                    if (targetDoc.exists && targetDoc.data().status === 'busy') {
+                        return alert('โต๊ะปลายทางไม่ว่าง!');
+                    }
+                    // ทำการย้ายข้อมูลสถานะ
+                    db.collection("tables").doc(selectedTableId).get().then(currentDoc => {
+                        const data = currentDoc.data();
+                        db.collection("tables").doc(targetTable).set({ ...data, id: parseInt(targetTable) });
+                        db.collection("tables").doc(selectedTableId).update({ status: 'free', people: 0 });
+                        modal.hide();
+                        alert(`ย้ายโต๊ะ ${selectedTableId} ไปโต๊ะ ${targetTable} สำเร็จ`);
+                    });
+                });
+            }
+        };
+        // ยกเลิกโต๊ะ
+        modalBtns[2].onclick = function() {
+            const reason = prompt('ระบุเหตุผลการยกเลิกโต๊ะ:');
+            if (reason) {
+                db.collection("tables").doc(selectedTableId).update({ status: 'free', people: 0 });
+                db.collection("void_logs").add({
+                    tableId: selectedTableId,
+                    reason: reason,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                modal.hide();
+                alert('ยกเลิกโต๊ะเรียบร้อยแล้ว');
+            }
+        };
+
+        modal.show();
+    }
+
+    function goToOrderPage() {
+        if (selectedTableId) {
+            window.location.href = `order.html?table=${selectedTableId}`;
+        }
+    }
+</script>
 </body>
 </html>
