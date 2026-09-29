@@ -3,16 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>จัดการโต๊ะ / สั่งอาหาร</title>
-    <!-- Bootstrap 5 -->
+    <title>สั่งอาหาร - จัดการโต๊ะ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .bill-item { font-size: 14.5px; border-bottom: 1px dashed #e0e0e0; padding-bottom: 8px; margin-bottom: 8px; }
-        .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .btn-qty { width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .bill-item { border-bottom: 1px dashed #e0e0e0; padding-bottom: 8px; margin-bottom: 8px; font-size: 14px; }
+        .bill-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .card { border-radius: 10px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body class="container py-3">
@@ -20,10 +18,10 @@
     <!-- Header -->
     <div class="row align-items-center mb-3 pb-2 border-bottom g-2">
         <div class="col-4">
-            <a href="dashboard.html" class="btn btn-outline-secondary btn-sm fw-bold">◀ ย้อนกลับ</a>
+            <a href="dashboard.html" class="btn btn-outline-secondary btn-sm fw-bold">◀ กลับ</a>
         </div>
         <div class="col-4 text-center">
-            <h5 class="fw-bold m-0 text-primary text-truncate" id="tableTitle">โต๊ะ: -</h5>
+            <h5 class="fw-bold m-0 text-primary text-truncate" id="tableTitle">โต๊ะ: กำลังโหลด...</h5>
         </div>
         <div class="col-4 text-end">
             <span id="shiftStatus" class="badge bg-secondary">กำลังกะ...</span>
@@ -31,27 +29,27 @@
     </div>
 
     <div class="row g-3">
-        <!-- ฝั่งซ้าย: เครื่องมือจัดการ -->
+        <!-- ฝั่งซ้าย: เครื่องมือ -->
         <div class="col-lg-7">
             
-            <!-- โซน 1: เปิดโต๊ะใหม่ (แสดงเมื่อโต๊ะว่าง) -->
-            <div id="sectionOpenTable" class="card p-4 mb-3" style="display: none; border-top: 5px solid #198754;">
+            <!-- โซน 1: เปิดโต๊ะใหม่ -->
+            <div id="sectionOpenTable" class="card p-4 mb-3" style="display: none; border-top: 4px solid #198754;">
                 <h5 class="fw-bold mb-3 text-success">🛎️ เปิดโต๊ะใหม่</h5>
                 <div class="row g-3">
                     <div class="col-6">
-                        <label class="form-label small fw-bold">ผู้ใหญ่ (เต็มราคา):</label>
+                        <label class="form-label small fw-bold">ผู้ใหญ่ (ราคาเต็ม):</label>
                         <input type="number" id="pplAdult" class="form-control text-center" value="1" min="0">
                     </div>
                     <div class="col-6">
-                        <label class="form-label small fw-bold">เด็ก (ครึ่งราคา 50%):</label>
+                        <label class="form-label small fw-bold">เด็ก (ครึ่งราคา):</label>
                         <input type="number" id="pplChild" class="form-control text-center" value="0" min="0">
                     </div>
                     <div class="col-12">
-                        <label class="form-label small fw-bold">เลือกแพ็กเกจบุฟเฟต์:</label>
+                        <label class="form-label small fw-bold">เลือกแพ็กเกจ:</label>
                         <select id="pkg" class="form-select"></select>
                     </div>
                     <div class="col-12 mt-3">
-                        <button class="btn btn-success w-100 fw-bold shadow-sm" onclick="openNewTable()">✅ ยืนยันเปิดโต๊ะ</button>
+                        <button class="btn btn-success w-100 fw-bold shadow-sm" onclick="openNewTable()">✅ เปิดโต๊ะ</button>
                     </div>
                 </div>
             </div>
@@ -59,31 +57,31 @@
             <!-- โซน 2: จัดการโต๊ะที่เปิดแล้ว -->
             <div id="sectionManageTable" style="display: none;">
                 
-                <!-- เพิ่มลูกค้า -->
-                <div class="card p-3 mb-3" style="border-left: 4px solid #0d6efd;">
-                    <h6 class="fw-bold mb-2 text-primary">👥 ลูกค้ามาเพิ่ม</h6>
-                    <div class="d-flex gap-2">
-                        <input type="number" id="addAdultQty" min="0" value="0" class="form-control form-control-sm text-center" placeholder="ผู้ใหญ่">
-                        <input type="number" id="addChildQty" min="0" value="0" class="form-control form-control-sm text-center" placeholder="เด็ก">
-                        <button class="btn btn-primary btn-sm fw-bold px-3 text-nowrap" onclick="addPerson()">บันทึก</button>
-                    </div>
-                </div>
-
-                <!-- สั่งเตา / ซุป -->
+                <!-- สั่งเตา/ซุป -->
                 <div class="card p-3 mb-3" style="border-left: 4px solid #ffc107;">
                     <h6 class="fw-bold mb-2 text-dark">🔥 สั่งเตา / น้ำซุป</h6>
-                    <select id="stoveType" class="form-select form-select-sm mb-2" onchange="toggleSoup()">
+                    <select id="stoveType" class="form-select mb-2" onchange="toggleSoup()">
                         <option value="">-- เลือกประเภทเตา --</option>
                         <option value="เตาหมูกระทะ|50">เตาหมูกระทะ (+50 บ.)</option>
                         <option value="หม้อชาบู|20">หม้อชาบู (+20 บ.)</option>
                     </select>
                     <div id="soupSection" style="display:none;">
-                        <select id="soup1" class="form-select form-select-sm mb-2"></select>
+                        <select id="soup1" class="form-select mb-2"></select>
                         <div id="soup2Div" style="display:none;">
-                            <select id="soup2" class="form-select form-select-sm mb-2"></select>
+                            <select id="soup2" class="form-select mb-2"></select>
                         </div>
                     </div>
-                    <button class="btn btn-warning btn-sm w-100 fw-bold" onclick="orderStove()">ส่งรายการเตา เข้าครัว 📤</button>
+                    <button class="btn btn-warning w-100 fw-bold" onclick="orderStove()">ส่งรายการเตา 📤</button>
+                </div>
+
+                <!-- เพิ่มลูกค้า -->
+                <div class="card p-3 mb-3" style="border-left: 4px solid #0d6efd;">
+                    <h6 class="fw-bold mb-2 text-primary">👥 ลูกค้ามาเพิ่ม</h6>
+                    <div class="d-flex gap-2">
+                        <input type="number" id="addAdultQty" min="0" value="0" class="form-control text-center" placeholder="ผู้ใหญ่">
+                        <input type="number" id="addChildQty" min="0" value="0" class="form-control text-center" placeholder="เด็ก">
+                        <button class="btn btn-primary fw-bold px-3 text-nowrap" onclick="addPerson()">เพิ่ม</button>
+                    </div>
                 </div>
 
                 <!-- สั่งอาหาร -->
@@ -94,8 +92,8 @@
                             <option value="all">-- ทุกหมวดหมู่ --</option>
                         </select>
                     </div>
-                    <div id="menuGrid" class="row g-2 mb-3" style="max-height: 320px; overflow-y: auto;"></div>
-                    <button class="btn btn-danger w-100 fw-bold shadow-sm" onclick="submitOrder()">📤 ส่งรายการอาหารเข้าครัว</button>
+                    <div id="menuGrid" class="row g-2 mb-3" style="max-height: 350px; overflow-y: auto;"></div>
+                    <button class="btn btn-danger w-100 fw-bold shadow-sm" onclick="submitOrder()">📤 ส่งอาหารเข้าครัว</button>
                 </div>
             </div>
         </div>
@@ -103,7 +101,7 @@
         <!-- ฝั่งขวา: สรุปบิล -->
         <div class="col-lg-5">
             <div id="resultArea">
-                <div class="card p-4 text-center text-muted">กำลังโหลดบิล...</div>
+                <div class="card p-4 text-center text-muted">กำลังตรวจสอบโต๊ะ...</div>
             </div>
         </div>
     </div>
@@ -113,6 +111,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script>
+        // 1. Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -122,106 +121,83 @@
             appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
             measurementId: "G-82JK3EL1HL"
         };
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const db = firebase.firestore();
 
+        // 2. Global Variables
         const urlParams = new URLSearchParams(window.location.search);
         const currentTableId = urlParams.get('table');
         
         let globalMenus = [];
         let currentPkgPrice = "0";
-        let totalTableAmount = 0;
         let tableData = null;
-        let currentShift = null;
+        let currentShiftId = "";
+        let currentShiftName = "";
 
+        // 3. Init Function
         window.onload = async function() {
             if (!currentTableId) {
-                alert("ไม่พบเลขโต๊ะ");
-                window.location.href = "dashboard.html";
+                Swal.fire("ข้อผิดพลาด", "ไม่พบเลขโต๊ะ กรุณาเข้าจากหน้าแดชบอร์ด", "error").then(() => {
+                    window.location.href = "dashboard.html";
+                });
                 return;
             }
-            document.getElementById('tableTitle').innerText = "โต๊ะ " + currentTableId;
+            
+            document.getElementById('tableTitle').innerText = "โต๊ะ: " + currentTableId;
 
-            await checkCurrentShift();
-            await loadPackages();
-            await loadSoupList();
-            await fetchMenuList();
-            initTableData();
+            await loadShift();
+            await loadDropdowns();
+            initTableListener();
         };
 
-        async function checkCurrentShift() {
+        // 4. Load Data
+        async function loadShift() {
             try {
-                const snapshot = await db.collection("shifts").where("status", "==", "open").limit(1).get();
-                if (!snapshot.empty) {
-                    currentShift = { shiftId: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+                const snap = await db.collection("shifts").where("status", "==", "open").limit(1).get();
+                if (!snap.empty) {
+                    const doc = snap.docs[0];
+                    currentShiftId = doc.id;
+                    currentShiftName = doc.data().staffName || "พนักงาน";
                     document.getElementById('shiftStatus').className = "badge bg-success";
-                    document.getElementById('shiftStatus').innerText = "กะ: " + currentShift.staffName;
+                    document.getElementById('shiftStatus').innerText = "กะ: " + currentShiftName;
                 } else {
                     document.getElementById('shiftStatus').className = "badge bg-danger";
                     document.getElementById('shiftStatus').innerText = "ยังไม่เปิดกะ";
                 }
-            } catch (err) {
-                console.error("Shift error:", err);
+            } catch (e) {
+                console.error("Shift Error:", e);
             }
         }
 
-        function initTableData() {
-            db.collection("tables").doc(String(currentTableId)).onSnapshot(doc => {
-                if (doc.exists) {
-                    tableData = doc.data();
-                } else {
-                    tableData = { status: "ว่าง", packagePrice: 0 };
-                }
-
-                let status = tableData.status || "ว่าง";
-                if (status === "ว่าง" || status === "free") {
-                    document.getElementById('sectionOpenTable').style.display = "block";
-                    document.getElementById('sectionManageTable').style.display = "none";
-                    document.getElementById('resultArea').innerHTML = `<div class="card p-4 text-center text-muted">โต๊ะนี้ว่าง กรุณาเปิดโต๊ะก่อน</div>`;
-                } else {
-                    document.getElementById('sectionOpenTable').style.display = "none";
-                    document.getElementById('sectionManageTable').style.display = "block";
-                    currentPkgPrice = String(tableData.packagePrice || "0");
-                    prepareMenuCategories();
-                    listenToOrders();
-                }
-            }, err => {
-                console.error("Table listener error:", err);
-            });
-        }
-
-        async function loadPackages() {
+        async function loadDropdowns() {
             try {
-                const snap = await db.collection("packages").get();
-                let html = "";
-                snap.forEach(doc => {
-                    const p = doc.data();
-                    html += `<option value="${p.price}">${p.name} (${p.price} บ.)</option>`;
+                // Packages
+                const pSnap = await db.collection("packages").get();
+                let pHtml = "";
+                pSnap.forEach(doc => {
+                    let p = doc.data();
+                    pHtml += `<option value="${p.price}">${p.name} (${p.price} บ.)</option>`;
                 });
-                document.getElementById('pkg').innerHTML = html;
-            } catch(e) { console.error(e); }
-        }
+                document.getElementById('pkg').innerHTML = pHtml;
 
-        async function loadSoupList() {
-            try {
-                const snap = await db.collection("soups").get();
-                let html = "";
-                snap.forEach(doc => {
-                    const s = doc.data();
-                    let pText = s.price > 0 ?  (+${s.price} บ.) : "";
-                    html += `<option value="${s.name}|${s.price}">${s.name}${pText}</option>`;
+                // Soups
+                const sSnap = await db.collection("soups").get();
+                let sHtml = "";
+                sSnap.forEach(doc => {
+                    let s = doc.data();
+                    let pText = s.price > 0 ?  (+${s.price}) : "";
+                    sHtml += `<option value="${s.name}|${s.price}">${s.name}${pText}</option>`;
                 });
-                document.getElementById('soup1').innerHTML = html;
-                document.getElementById('soup2').innerHTML = html;
-            } catch(e) { console.error(e); }
-        }
+                document.getElementById('soup1').innerHTML = sHtml;
+                document.getElementById('soup2').innerHTML = sHtml;
 
-        async function fetchMenuList() {
-            try {
-                const snap = await db.collection("menu").get();
+                // Menus
+                const mSnap = await db.collection("menu").get();
                 globalMenus = [];
-                snap.forEach(doc => {
-                    const data = doc.data();
+                mSnap.forEach(doc => {
+                    let data = doc.data();
                     globalMenus.push({
                         id: doc.id,
                         name: data.name,
@@ -230,19 +206,57 @@
                         allowed: data.allowedPackage || data.allowed || ""
                     });
                 });
-            } catch(e) { console.error(e); }
+            } catch (e) {
+                console.error("Load Data Error:", e);
+            }
         }
 
+        // 5. Table Listener
+        function initTableListener() {
+            const tableRef = db.collection("tables").doc(String(currentTableId));
+            
+            tableRef.onSnapshot(doc => {
+                if (doc.exists) {
+                    tableData = doc.data();
+                } else {
+                    tableData = { status: "ว่าง", packagePrice: 0 };
+                }
+
+                let status = tableData.status || "ว่าง";
+                
+                if (status === "ว่าง" || status === "free") {
+                    document.getElementById('sectionOpenTable').style.display = "block";
+                    document.getElementById('sectionManageTable').style.display = "none";
+                    document.getElementById('resultArea').innerHTML = `<div class="card p-4 text-center text-muted">โต๊ะว่าง กรุณาเปิดโต๊ะเพื่อเริ่มสั่งอาหาร</div>`;
+                } else {
+                    document.getElementById('sectionOpenTable').style.display = "none";
+                    document.getElementById('sectionManageTable').style.display = "block";
+                    currentPkgPrice = String(tableData.packagePrice || "0");
+                    
+                    prepareMenuCategories();
+                    listenToOrders();
+                }
+            }, error => {
+                console.error("Table Listener Error:", error);
+            });
+        }
+
+        // 6. Actions (Open, Add Person, Stove)
         async function openNewTable() {
             const adult = parseInt(document.getElementById('pplAdult').value) || 0;
             const child = parseInt(document.getElementById('pplChild').value) || 0;
-            const pkgPrice = parseFloat(document.getElementById('pkg').value) || 0;
+            const pkg = document.getElementById('pkg');
+            const pkgPrice = parseFloat(pkg.value) || 0;
+            const pkgName = pkg.options[pkg.selectedIndex].text;
             
-            if (adult + child <= 0) return Swal.fire("แจ้งเตือน", "กรุณาระบุจำนวนลูกค้า", "warning");
+            if (adult + child <= 0) {
+                Swal.fire("เตือน", "กรุณาระบุจำนวนลูกค้า", "warning");
+                return;
+            }
 
             const childPrice = Math.ceil(pkgPrice / 2);
             const totalAmount = (adult * pkgPrice) + (child * childPrice);
-            const detailText = `เปิดโต๊ะ (ผู้ใหญ่ ${adult}, เด็ก ${child} - แพ็กเกจ ${pkgPrice} บ.)`;
+            const detailText = `เปิดโต๊ะ (ผู้ใหญ่ ${adult}, เด็ก ${child} - ${pkgName})`;
 
             try {
                 await db.collection("tables").doc(String(currentTableId)).set({
@@ -254,25 +268,27 @@
                     totalPeople: adult + child
                 }, { merge: true });
 
-                await recordOrder({ action: "เปิดโต๊ะ", details: detailText, amount: totalAmount, toKitchen: false });
-                Swal.fire({ icon: 'success', title: 'เปิดโต๊ะสำเร็จ!', timer: 1000, showConfirmButton: false });
-            } catch (err) {
-                Swal.fire("ข้อผิดพลาด", err.message, "error");
+                await sendOrderToFirestore("เปิดโต๊ะ", detailText, totalAmount, false);
+                Swal.fire({ icon: 'success', title: 'เปิดโต๊ะแล้ว', timer: 1000, showConfirmButton: false });
+            } catch (e) {
+                Swal.fire("ผิดพลาด", e.message, "error");
             }
         }
 
         async function addPerson() {
             const adult = parseInt(document.getElementById('addAdultQty').value) || 0;
             const child = parseInt(document.getElementById('addChildQty').value) || 0;
-            if (adult === 0 && child === 0) return Swal.fire("แจ้งเตือน", "กรุณาระบุจำนวนลูกค้า", "warning");
+            
+            if (adult === 0 && child === 0) {
+                Swal.fire("เตือน", "ใส่จำนวนคนก่อนกดเพิ่ม", "warning");
+                return;
+            }
 
             const pkgPrice = parseFloat(tableData.packagePrice) || 0;
             const childPrice = Math.ceil(pkgPrice / 2);
-            const addAmount = (adult * pkgPrice) + (child * childPrice);
+            const totalAmount = (adult * pkgPrice) + (child * childPrice);
             
-            let parts = [];
-            if (adult > 0) parts.push(`ผู้ใหญ่ ${adult} ท่าน`);
-            if (child > 0) parts.push(`เด็ก ${child} ท่าน`);
+            let details = `เพิ่มลูกค้า: ผู้ใหญ่ ${adult}, เด็ก ${child}`;
 
             try {
                 await db.collection("tables").doc(String(currentTableId)).update({
@@ -281,53 +297,79 @@
                     totalPeople: (parseInt(tableData.totalPeople) || 0) + adult + child
                 });
 
-                await recordOrder({ action: "เพิ่มลูกค้า", details: `เพิ่มลูกค้า (${parts.join(", ")})`, amount: addAmount, toKitchen: true });
-                document.getElementById('addAdultQty').value = 0;
-                document.getElementById('addChildQty').value = 0;
-                Swal.fire({ icon: 'success', title: 'เพิ่มลูกค้าสำเร็จ!', timer: 1000, showConfirmButton: false });
-            } catch (err) {
-                Swal.fire("ข้อผิดพลาด", err.message, "error");
+                await sendOrderToFirestore("เพิ่มลูกค้า", details, totalAmount, false);
+                
+                document.getElementById('addAdultQty').value = "0";
+                document.getElementById('addChildQty').value = "0";
+                Swal.fire({ icon: 'success', title: 'เพิ่มลูกค้าแล้ว', timer: 1000, showConfirmButton: false });
+            } catch (e) {
+                Swal.fire("ผิดพลาด", e.message, "error");
             }
         }
 
         function toggleSoup() {
             const stove = document.getElementById('stoveType').value;
-            document.getElementById('soupSection').style.display = stove ? 'block' : 'none';
-            document.getElementById('soup2Div').style.display = stove.includes("หม้อชาบู") ? 'block' : 'none';
+            const section = document.getElementById('soupSection');
+            const soup2 = document.getElementById('soup2Div');
+            
+            if(stove !== "") {
+                section.style.display = "block";
+                if(stove.includes("หม้อชาบู")) {
+                    soup2.style.display = "block";
+                } else {
+                    soup2.style.display = "none";
+                }
+            } else {
+                section.style.display = "none";
+            }
         }
 
         async function orderStove() {
-            const stoveVal = document.getElementById('stoveType').value.split('|');
-            if (!stoveVal[0]) return Swal.fire("แจ้งเตือน", "กรุณาเลือกเตา", "warning");
+            const stoveVal = document.getElementById('stoveType').value;
+            if (!stoveVal) {
+                Swal.fire("เตือน", "เลือกเตาก่อน", "warning");
+                return;
+            }
             
-            const s1 = document.getElementById('soup1').value.split('|');
-            const s2 = document.getElementById('soup2').value.split('|');
-            
-            let totalSoup = parseFloat(s1[1]) || 0;
-            let detail = `${stoveVal[0]} (${s1[0]}`;
-            if (stoveVal[0].includes("หม้อชาบู")) {
-                detail += ` + ${s2[0]}`;
-                totalSoup += parseFloat(s2[1]) || 0;
+            let stoveParts = stoveVal.split('|');
+            let stoveName = stoveParts[0];
+            let stovePrice = parseFloat(stoveParts[1]) || 0;
+
+            let s1Parts = document.getElementById('soup1').value.split('|');
+            let soupTotal = parseFloat(s1Parts[1]) || 0;
+            let detail = `${stoveName} (ซุป: ${s1Parts[0]}`;
+
+            if (stoveName.includes("หม้อชาบู")) {
+                let s2Parts = document.getElementById('soup2').value.split('|');
+                soupTotal += parseFloat(s2Parts[1]) || 0;
+                detail += ` + ${s2Parts[0]}`;
             }
             detail += ")";
 
-            await recordOrder({ action: "สั่งเตา/ซุป", details: detail, amount: parseFloat(stoveVal[1]) + totalSoup, toKitchen: true });
-            document.getElementById('stoveType').value = ""; toggleSoup();
-            Swal.fire({ icon: 'success', title: 'ส่งรายการเตาแล้ว!', timer: 1000, showConfirmButton: false });
+            await sendOrderToFirestore("สั่งเตา", detail, stovePrice + soupTotal, true);
+            
+            document.getElementById('stoveType').value = "";
+            toggleSoup();
+            Swal.fire({ icon: 'success', title: 'ส่งเตาแล้ว', timer: 1000, showConfirmButton: false });
         }
 
+        // 7. Menu UI
         function prepareMenuCategories() {
             let categories = [];
             globalMenus.forEach(m => {
-                let allowed = m.allowed ? String(m.allowed) : "";
-                if (!allowed || allowed.indexOf(currentPkgPrice) !== -1) {
+                let allowed = String(m.allowed || "");
+                if (allowed === "" || allowed.includes(currentPkgPrice)) {
                     let cat = m.category || "อื่นๆ";
-                    if (!categories.includes(cat)) categories.push(cat);
+                    if (!categories.includes(cat)) {
+                        categories.push(cat);
+                    }
                 }
             });
             
             let catHtml = '<option value="all">-- ทุกหมวดหมู่ --</option>';
-            categories.forEach(c => catHtml += `<option value="${c}">${c}</option>`);
+            categories.forEach(c => {
+                catHtml += `<option value="${c}">${c}</option>`;
+            });
             document.getElementById('menuCategory').innerHTML = catHtml;
             renderMenuGrid();
         }
@@ -337,22 +379,20 @@
             let html = "";
             
             globalMenus.forEach((m, index) => {
-                let allowed = m.allowed ? String(m.allowed) : "";
+                let allowed = String(m.allowed || "");
                 let cat = m.category || "อื่นๆ";
                 
-                if (!allowed || allowed.indexOf(currentPkgPrice) !== -1) {
+                if (allowed === "" || allowed.includes(currentPkgPrice)) {
                     if (selectedCat === "all" || selectedCat === cat) {
-                        let pText = m.price > 0 ?  <span class="text-danger small">(+${m.price}฿)</span> : "";
+                        let pText = m.price > 0 ?  <span class="text-danger small">(+${m.price})</span> : "";
                         html += `
                         <div class="col-12 col-md-6">
                             <div class="d-flex justify-content-between align-items-center p-2 border rounded bg-white shadow-sm">
-                                <div class="fw-bold text-dark text-truncate pe-2" style="font-size:14px; flex:1;">
-                                    ${m.name}${pText}
-                                </div>
-                                <div class="d-flex align-items-center bg-light rounded border p-1">
-                                    <button class="btn btn-outline-secondary btn-qty bg-white" onclick="changeQty(${index}, -1)">-</button>
-                                    <input type="number" id="qty_${index}" class="form-control text-center fw-bold text-primary border-0 bg-transparent px-1" value="0" style="width:40px;" readonly>
-                                    <button class="btn btn-outline-secondary btn-qty bg-white" onclick="changeQty(${index}, 1)">+</button>
+                                <div class="fw-bold text-dark text-truncate pe-2" style="font-size:14px;">${m.name}${pText}</div>
+                                <div class="d-flex align-items-center">
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="changeQty(${index}, -1)">-</button>
+                                    <input type="number" id="qty_${index}" class="form-control text-center mx-1 p-0 border-0 fw-bold text-primary bg-transparent" value="0" style="width: 35px;" readonly>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="changeQty(${index}, 1)">+</button>
                                 </div>
                             </div>
                         </div>`;
@@ -362,79 +402,92 @@
             document.getElementById('menuGrid').innerHTML = html;
         }
 
-        function changeQty(index, delta) {
+        function changeQty(index, amount) {
             const input = document.getElementById(`qty_${index}`);
             if (input) {
-                let newVal = parseInt(input.value) + delta;
-                if (newVal >= 0) input.value = newVal;
+                let val = parseInt(input.value) + amount;
+                if (val >= 0) input.value = val;
             }
         }
 
         async function submitOrder() {
-            let selectedItems = [];
+            let items = [];
             let totalAmount = 0;
             
             globalMenus.forEach((m, index) => {
                 const input = document.getElementById(`qty_${index}`);
-                if (input && parseInt(input.value) > 0) {
-                    const qty = parseInt(input.value);
-                    selectedItems.push(`${m.name} (x${qty})`);
-                    totalAmount += (m.price || 0) * qty;
-                    input.value = 0;
+                if (input) {
+                    let qty = parseInt(input.value);
+                    if (qty > 0) {
+                        items.push(`${m.name} (x${qty})`);
+                        totalAmount += (m.price * qty);
+                        input.value = 0; // reset
+                    }
                 }
             });
             
-            if (selectedItems.length === 0) return Swal.fire("แจ้งเตือน", "กรุณาเลือกเมนูอาหารอย่างน้อย 1 รายการ", "warning");
+            if (items.length === 0) {
+                Swal.fire("เตือน", "กรุณาเลือกอาหารก่อน", "warning");
+                return;
+            }
 
-            await recordOrder({ action: "สั่งอาหาร", details: selectedItems.join(", "), amount: totalAmount, toKitchen: true });
-            Swal.fire({ icon: 'success', title: 'ส่งออเดอร์เข้าครัวแล้ว!', timer: 1000, showConfirmButton: false });
+            await sendOrderToFirestore("สั่งอาหาร", items.join(", "), totalAmount, true);
+            Swal.fire({ icon: 'success', title: 'ส่งอาหารเข้าครัวแล้ว', timer: 1000, showConfirmButton: false });
         }
 
-        async function recordOrder(data) {
+        // 8. DB Writers & Readers
+        async function sendOrderToFirestore(actionStr, detailStr, amountNum, isKitchen) {
             try {
                 await db.collection("tables").doc(String(currentTableId)).collection("orders").add({
-                    action: data.action,
-                    details: data.details,
-                    amount: data.amount || 0,
-                    kitchenStatus: data.toKitchen ? "เตรียม" : "-",
-                    shiftId: currentShift ? currentShift.shiftId : "",
+                    action: actionStr,
+                    details: detailStr,
+                    amount: amountNum || 0,
+                    kitchenStatus: isKitchen ? "เตรียม" : "-",
+                    shiftId: currentShiftId,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-            } catch (err) {
-                console.error(err);
+            } catch (e) {
+                console.error("Order Error:", e);
             }
         }
 
         function listenToOrders() {
-            db.collection("tables").doc(String(currentTableId)).collection("orders").orderBy("timestamp").onSnapshot(snap => {
-                totalTableAmount = 0;
+            const orderRef = db.collection("tables").doc(String(currentTableId)).collection("orders").orderBy("timestamp");
+            
+            orderRef.onSnapshot(snap => {
+                let totalAmount = 0;
                 let html = `
-                    <div class="card p-3 shadow-sm border-0" style="border-top: 5px solid #212529;">
+                    <div class="card p-3 shadow-sm" style="border-top: 4px solid #343a40;">
                         <h5 class="fw-bold mb-3">🧾 บิลโต๊ะ ${currentTableId}</h5>
-                        <div class="mb-3" style="max-height: 380px; overflow-y: auto;">`;
+                        <div style="max-height: 400px; overflow-y: auto; overflow-x: hidden;" class="pe-2 mb-3">`;
                 
                 if(snap.empty) {
-                    html += `<div class="text-muted text-center py-3">ยังไม่มีรายการสั่ง</div>`;
+                    html += `<div class="text-center text-muted py-3">ยังไม่มีรายการสั่ง</div>`;
                 } else {
                     snap.forEach(doc => {
-                        const item = doc.data();
-                        const docId = doc.id;
-                        totalTableAmount += (parseFloat(item.amount) || 0);
-                        const safeDetail = item.details ? item.details.replace(/'/g, "\\'").replace(/"/g, '&quot;') : "";
+                        let item = doc.data();
+                        let docId = doc.id;
+                        let amt = parseFloat(item.amount) || 0;
+                        totalAmount += amt;
+
+                        let safeDetail = "";
+                        if(item.details) {
+                            safeDetail = item.details.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        }
                         
-                        let kBadge = "";
-                        if (item.kitchenStatus === "เตรียม") kBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size:10px;">ครัวกำลังทำ</span>';
-                        if (item.kitchenStatus === "เสร็จ") kBadge = '<span class="badge bg-success ms-1" style="font-size:10px;">เสิร์ฟแล้ว</span>';
+                        let badge = "";
+                        if (item.kitchenStatus === "เตรียม") badge = '<span class="badge bg-warning text-dark ms-1">ครัวทำ</span>';
+                        if (item.kitchenStatus === "เสร็จ") badge = '<span class="badge bg-success ms-1">เสิร์ฟแล้ว</span>';
 
                         html += `
                         <div class="bill-item d-flex justify-content-between align-items-start">
-                            <div style="flex: 1; padding-right: 8px;">
-                                <div class="fw-bold text-dark">${item.action} <span class="text-danger">(${item.amount} บ.)</span></div>
-                                <div class="text-muted" style="font-size: 12px;">${item.details || ""} ${kBadge}</div>
+                            <div style="flex: 1; padding-right: 5px;">
+                                <div class="fw-bold">${item.action} <span class="text-danger">(${amt} บ.)</span></div>
+                                <div class="text-muted small">${item.details || ""} ${badge}</div>
                             </div>
-                            <div class="text-nowrap">
-                                <button onclick="promptEdit('${docId}', '${safeDetail}')" class="btn btn-sm btn-outline-secondary py-0 px-1">✏️</button>
-                                <button onclick="confirmDelete('${docId}')" class="btn btn-sm btn-outline-danger py-0 px-1">🗑️</button>
+                            <div>
+                                <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="editOrder('${docId}', '${safeDetail}')">✏️</button>
+                                <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteOrder('${docId}')">🗑</button>
                             </div>
                         </div>`;
                     });
@@ -442,12 +495,12 @@
 
                 html += `
                         </div>
-                        <div class="p-2 bg-light rounded border mb-3 text-center">
-                            <div class="small fw-bold text-muted">ยอดรวมทั้งหมด</div>
-                            <div class="fw-bold text-danger fs-4">${totalTableAmount.toLocaleString()} บาท</div>
+                        <div class="bg-light p-3 rounded text-center border mb-3">
+                            <div class="text-muted small fw-bold">ยอดรวมทั้งหมด</div>
+                            <div class="text-danger fw-bold fs-3">${totalAmount.toLocaleString()} ฿</div>
                         </div>
-                        <button onclick="goToCheckout()" class="btn btn-dark btn-lg w-100 fw-bold shadow-sm" ${snap.empty ? 'disabled' : ''}>
-                            💳 สรุปยอด / เช็คบิล
+                        <button class="btn btn-dark w-100 fw-bold py-2" onclick="goCheckout()" ${snap.empty ? 'disabled' : ''}>
+                            💳 เช็คบิล / สรุปยอด
                         </button>
                     </div>`;
                 
@@ -455,25 +508,33 @@
             });
         }
 
-        async function confirmDelete(docId) {
-            const { isConfirmed } = await Swal.fire({
-                title: 'ลบรายการนี้?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก'
+        async function editOrder(docId, oldText) {
+            const { value: newText } = await Swal.fire({
+                title: 'แก้ไขรายละเอียด',
+                input: 'textarea',
+                inputValue: oldText,
+                showCancelButton: true
             });
-            if (isConfirmed) {
+            if (newText !== undefined && newText.trim() !== "") {
+                await db.collection("tables").doc(String(currentTableId)).collection("orders").doc(docId).update({
+                    details: newText.trim()
+                });
+            }
+        }
+
+        async function deleteOrder(docId) {
+            const res = await Swal.fire({
+                title: 'ลบรายการนี้?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33'
+            });
+            if (res.isConfirmed) {
                 await db.collection("tables").doc(String(currentTableId)).collection("orders").doc(docId).delete();
             }
         }
 
-        async function promptEdit(docId, oldDetails) {
-            const { value: newDetails } = await Swal.fire({
-                title: 'แก้ไขรายละเอียด', input: 'textarea', inputValue: oldDetails, showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก'
-            });
-            if (newDetails !== undefined && newDetails.trim() !== "") {
-                await db.collection("tables").doc(String(currentTableId)).collection("orders").doc(docId).update({ details: newDetails.trim() });
-            }
-        }
-
-        function goToCheckout() {
+        function goCheckout() {
             window.location.href = `checkout.html?table=${currentTableId}`;
         }
     </script>
