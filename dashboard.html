@@ -550,60 +550,97 @@
         }
     }
 
+        // --- ฟังก์ชันย้ายโต๊ะ (แสดงตัวเลือกเฉพาะโต๊ะว่าง) ---
     async function moveTablePrompt() {
-    const { value: targetTable } = await Swal.fire({
-        title: 'ย้ายโต๊ะ',
-        text: `ต้องการย้ายจากโต๊ะ ${selectedTableId} ไปยังโต๊ะเลขที่ใด?`,
-        icon: 'question',
-        input: 'number',
-        inputAttributes: {
-            min: 1,
-            step: 1
-        },
-        inputPlaceholder: 'ระบุเลขโต๊ะปลายทาง',
-        showCancelButton: true,
-        confirmButtonText: 'ย้ายโต๊ะ',
-        cancelButtonText: 'ยกเลิก',
-        inputValidator: (value) => {
-            if (!value) {
-                return 'กรุณาระบุเลขโต๊ะ!';
+        if (!selectedTableId) return;
+
+        try {
+            // 1. ดึงข้อมูลโต๊ะทั้งหมดจาก Firestore เพื่อหาโต๊ะที่ว่าง
+            const snapshot = await db.collection("tables").get();
+            let freeTablesOptions = {};
+
+            // แปลง snapshot เป็น array เพื่อนำมาเรียงลำดับเลขโต๊ะก่อน
+            let tablesList = [];
+            snapshot.forEach(doc => {
+                tablesList.push({ tableId: doc.id, ...doc.data() });
+            });
+            tablesList.sort((a, b) => parseInt(a.tableId) - parseInt(b.tableId));
+
+            // คัดเลือกเฉพาะโต๊ะที่ว่าง และไม่ใช่โต๊ะปัจจุบัน
+            tablesList.forEach(table => {
+                const isBusy = table.status === 'busy' || table.status === 'ไม่ว่าง' || (table.people && parseInt(table.people) > 0);
+                if (table.tableId !== selectedTableId && !isBusy) {
+                    freeTablesOptions[table.tableId] = `โต๊ะ ${table.id || table.tableId}`;
+                }
+            });
+
+            // เช็กว่ามีโต๊ะว่างให้ย้ายไหม
+            if (Object.keys(freeTablesOptions).length === 0) {
+                return Swal.fire('แจ้งเตือน', 'ไม่มีโต๊ะว่างสำหรับย้ายในขณะนี้', 'warning');
             }
+
+            // 2. แสดง SweetAlert2 พร้อมดรอปดาวน์เลือกโต๊ะว่าง
+            const { value: targetTable } = await Swal.fire({
+                title: 'ย้ายโต๊ะ',
+                text: `ต้องการย้ายจากโต๊ะ ${selectedTableId} ไปยังโต๊ะใด?`,
+                icon: 'question',
+                input: 'select',
+                inputOptions: freeTablesOptions,
+                inputPlaceholder: '-- เลือกโต๊ะว่างปลายทาง --',
+                showCancelButton: true,
+                confirmButtonText: 'ย้ายโต๊ะ',
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: '#7066e0',
+                cancelButtonColor: '#6c757d',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'กรุณาเลือกโต๊ะปลายทาง!';
+                    }
+                }
+            });
+
+            if (!targetTable) return;
+
+            // 3. ย้ายข้อมูลโต๊ะและออเดอร์ทั้งหมดใน Firestore
+            const oldTableRef = db.collection("tables").doc(selectedTableId);
+            const newTableRef = db.collection("tables").doc(targetTable);
+
+            const currentDoc = await oldTableRef.get();
+            if (!currentDoc.exists) return;
+            const tableData = currentDoc.data();
+
+            const batch = db.batch();
+
+            // คัดลอกข้อมูลไปยังโต๊ะใหม่
+            batch.set(newTableRef, {
+                ...tableData,
+                id: parseInt(targetTable)
+            });
+
+            // คืนค่าให้โต๊ะเดิมเป็นโต๊ะว่าง
+            batch.update(oldTableRef, {
+                status: 'free',
+                people: 0,
+                activeMembers: []
+            });
+
+            // ย้ายรายการออเดอร์ย่อย (Subcollection orders) ทั้งหมด
+            const ordersSnap = await oldTableRef.collection("orders").get();
+            ordersSnap.forEach(doc => {
+                batch.set(newTableRef.collection("orders").doc(doc.id), doc.data());
+                batch.delete(doc.ref);
+            });
+
+            await batch.commit();
+
+            if (modal) modal.hide();
+            Swal.fire('สำเร็จ', `ย้ายจากโต๊ะ ${selectedTableId} ไปโต๊ะ ${targetTable} เรียบร้อยแล้ว`, 'success');
+
+        } catch (error) {
+            console.error("Error moving table:", error);
+            Swal.fire("เกิดข้อผิดพลาด", "ไม่สามารถย้ายโต๊ะได้: " + error.message, "error");
         }
-    });
-
-    if (!targetTable || targetTable === selectedTableId) return;
-
-    try {
-        const oldTableRef = db.collection("tables").doc(selectedTableId);
-        const newTableRef = db.collection("tables").doc(targetTable);
-
-        const targetDoc = await newTableRef.get();
-        if (targetDoc.exists && (targetDoc.data().status === 'busy' || targetDoc.data().status === 'ไม่ว่าง')) {
-            return Swal.fire('เกิดข้อผิดพลาด', 'โต๊ะปลายทางไม่ว่าง!', 'error');
-        }
-
-        const currentDoc = await oldTableRef.get();
-        if (!currentDoc.exists) return;
-        const tableData = currentDoc.data();
-
-        const batch = db.batch();
-        batch.set(newTableRef, { ...tableData, id: parseInt(targetTable) });
-        batch.update(oldTableRef, { status: 'free', people: 0 });
-
-        const ordersSnap = await oldTableRef.collection("orders").get();
-        ordersSnap.forEach(doc => {
-            batch.set(newTableRef.collection("orders").doc(doc.id), doc.data());
-            batch.delete(doc.ref);
-        });
-
-        await batch.commit();
-        if (modal) modal.hide();
-        Swal.fire('สำเร็จ', `ย้ายโต๊ะจาก ${selectedTableId} ไป ${targetTable} สำเร็จ`, 'success');
-    } catch (error) {
-        Swal.fire("เกิดข้อผิดพลาด", "เกิดข้อผิดพลาดในการย้ายโต๊ะ", "error");
     }
-}
-
     async function cancelTablePrompt() {
     const { value: reason } = await Swal.fire({
         title: 'ยกเลิกโต๊ะ',
