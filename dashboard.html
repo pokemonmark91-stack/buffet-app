@@ -551,65 +551,101 @@
     }
 
     async function moveTablePrompt() {
-        const targetTable = prompt(`ย้ายโต๊ะ ${selectedTableId} ไปยังโต๊ะเลขที่:`);
-        if (!targetTable || targetTable === selectedTableId) return;
-
-        try {
-            const oldTableRef = db.collection("tables").doc(selectedTableId);
-            const newTableRef = db.collection("tables").doc(targetTable);
-
-            const targetDoc = await newTableRef.get();
-            if (targetDoc.exists && (targetDoc.data().status === 'busy' || targetDoc.data().status === 'ไม่ว่าง')) {
-                return alert('โต๊ะปลายทางไม่ว่าง!');
+    const { value: targetTable } = await Swal.fire({
+        title: 'ย้ายโต๊ะ',
+        text: `ต้องการย้ายจากโต๊ะ ${selectedTableId} ไปยังโต๊ะเลขที่ใด?`,
+        icon: 'question',
+        input: 'number',
+        inputAttributes: {
+            min: 1,
+            step: 1
+        },
+        inputPlaceholder: 'ระบุเลขโต๊ะปลายทาง',
+        showCancelButton: true,
+        confirmButtonText: 'ย้ายโต๊ะ',
+        cancelButtonText: 'ยกเลิก',
+        inputValidator: (value) => {
+            if (!value) {
+                return 'กรุณาระบุเลขโต๊ะ!';
             }
+        }
+    });
 
-            const currentDoc = await oldTableRef.get();
-            if (!currentDoc.exists) return;
-            const tableData = currentDoc.data();
+    if (!targetTable || targetTable === selectedTableId) return;
 
+    try {
+        const oldTableRef = db.collection("tables").doc(selectedTableId);
+        const newTableRef = db.collection("tables").doc(targetTable);
+
+        const targetDoc = await newTableRef.get();
+        if (targetDoc.exists && (targetDoc.data().status === 'busy' || targetDoc.data().status === 'ไม่ว่าง')) {
+            return Swal.fire('เกิดข้อผิดพลาด', 'โต๊ะปลายทางไม่ว่าง!', 'error');
+        }
+
+        const currentDoc = await oldTableRef.get();
+        if (!currentDoc.exists) return;
+        const tableData = currentDoc.data();
+
+        const batch = db.batch();
+        batch.set(newTableRef, { ...tableData, id: parseInt(targetTable) });
+        batch.update(oldTableRef, { status: 'free', people: 0 });
+
+        const ordersSnap = await oldTableRef.collection("orders").get();
+        ordersSnap.forEach(doc => {
+            batch.set(newTableRef.collection("orders").doc(doc.id), doc.data());
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        if (modal) modal.hide();
+        Swal.fire('สำเร็จ', `ย้ายโต๊ะจาก ${selectedTableId} ไป ${targetTable} สำเร็จ`, 'success');
+    } catch (error) {
+        Swal.fire("เกิดข้อผิดพลาด", "เกิดข้อผิดพลาดในการย้ายโต๊ะ", "error");
+    }
+}
+
+    async function cancelTablePrompt() {
+    const { value: reason } = await Swal.fire({
+        title: 'ยกเลิกโต๊ะ',
+        text: `ระบุเหตุผลการยกเลิกโต๊ะ ${selectedTableId}:`,
+        icon: 'warning',
+        input: 'text',
+        inputPlaceholder: 'เช่น ลูกค้าเปลี่ยนใจ, พิมพ์ผิด...',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'ยืนยันยกเลิกโต๊ะ',
+        cancelButtonText: 'ยกเลิก',
+        inputValidator: (value) => {
+            if (!value) {
+                return 'กรุณาระบุเหตุผล!';
+            }
+        }
+    });
+
+    if (reason) {
+        try {
+            const tableRef = db.collection("tables").doc(selectedTableId);
             const batch = db.batch();
-            batch.set(newTableRef, { ...tableData, id: parseInt(targetTable) });
-            batch.update(oldTableRef, { status: 'free', people: 0 });
 
-            const ordersSnap = await oldTableRef.collection("orders").get();
-            ordersSnap.forEach(doc => {
-                batch.set(newTableRef.collection("orders").doc(doc.id), doc.data());
-                batch.delete(doc.ref);
+            batch.update(tableRef, { status: 'free', people: 0 });
+            batch.set(db.collection("void_logs").doc(), {
+                tableId: selectedTableId,
+                reason: reason,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
+
+            const ordersSnap = await tableRef.collection("orders").get();
+            ordersSnap.forEach(doc => batch.delete(doc.ref));
 
             await batch.commit();
             if (modal) modal.hide();
-            Swal.fire('สำเร็จ', `ย้ายโต๊ะจาก ${selectedTableId} ไป ${targetTable} สำเร็จ`, 'success');
+            Swal.fire('สำเร็จ', 'ยกเลิกโต๊ะเรียบร้อยแล้ว', 'success');
         } catch (error) {
-            alert("เกิดข้อผิดพลาดในการย้ายโต๊ะ");
+            Swal.fire("เกิดข้อผิดพลาด", "เกิดข้อผิดพลาดในการยกเลิกโต๊ะ", "error");
         }
     }
-
-    async function cancelTablePrompt() {
-        const reason = prompt('ระบุเหตุผลการยกเลิกโต๊ะนี้:');
-        if (reason) {
-            try {
-                const tableRef = db.collection("tables").doc(selectedTableId);
-                const batch = db.batch();
-
-                batch.update(tableRef, { status: 'free', people: 0 });
-                batch.set(db.collection("void_logs").doc(), {
-                    tableId: selectedTableId,
-                    reason: reason,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                const ordersSnap = await tableRef.collection("orders").get();
-                ordersSnap.forEach(doc => batch.delete(doc.ref));
-
-                await batch.commit();
-                if (modal) modal.hide();
-                Swal.fire('สำเร็จ', 'ยกเลิกโต๊ะเรียบร้อยแล้ว', 'success');
-            } catch (error) {
-                alert("เกิดข้อผิดพลาดในการยกเลิกโต๊ะ");
-            }
-        }
-    }
+}
 </script>
 </body>
 </html>
