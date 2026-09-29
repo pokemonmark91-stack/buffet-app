@@ -187,7 +187,7 @@
                 let sHtml = "";
                 sSnap.forEach(doc => {
                     let s = doc.data();
-                    // แก้ไขบรรทัดนี้: ใส่ backtick ครอบแล้ว
+                    // ✅ ใส่ Backtick ครอบ String Template อย่างถูกต้อง
                     let pText = s.price > 0 ?  (+${s.price}) : "";
                     sHtml += `<option value="${s.name}|${s.price}">${s.name}${pText}</option>`;
                 });
@@ -384,7 +384,8 @@
                 
                 if (allowed === "" || allowed.includes(currentPkgPrice)) {
                     if (selectedCat === "all" || selectedCat === cat) {
-                        let pText = m.price > 0 ?  <span class="text-danger small">(+${m.price})</span> : "";
+                        // ✅ ใส่ Backtick ครอบ String Template อย่างถูกต้อง
+                        let pText = m.price > 0 ? <span class="text-danger small">(+${m.price})</span> : "";
                         html += `
                         <div class="col-12 col-md-6">
                             <div class="d-flex justify-content-between align-items-center p-2 border rounded bg-white shadow-sm">
