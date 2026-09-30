@@ -85,7 +85,6 @@
                     <span class="badge bg-primary" id="suggestedPoints">ได้แต้มรวม: 0 แต้ม</span>
                 </div>
                 <div id="membersList" class="mb-4">
-                    <!-- รายชื่อสมาชิกจะแสดงตรงนี้ -->
                     <div class="text-muted small">กำลังโหลดข้อมูลสมาชิก...</div>
                 </div>
 
@@ -141,7 +140,7 @@
                 totalBillAmount = 0;
                 let html = "";
 
-                // A. ดึงข้อมูลโต๊ะ (เช็คจำนวนหัวผู้ใหญ่/เด็ก และสมาชิกในโต๊ะ)
+                // A. ดึงข้อมูลโต๊ะ
                 const tableDoc = await db.collection("tables").doc(currentTableId).get();
                 let activeMembers = [];
                 
@@ -149,7 +148,6 @@
                     const tableData = tableDoc.data();
                     activeMembers = tableData.activeMembers || [];
 
-                    // คำนวณราคาบุฟเฟต์ผู้ใหญ่/เด็ก (ถ้ามีบันทึกไว้ในโต๊ะ)
                     const adults = parseInt(tableData.adults) || 0;
                     const children = parseInt(tableData.children) || 0;
                     const pkgPrice = parseFloat(tableData.packagePrice) || 0;
@@ -189,7 +187,6 @@
                 try {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
                 } catch (e) {
-                    // สำรองกรณีเอกสารไม่มีฟิลด์ timestamp
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
                 }
 
@@ -199,7 +196,7 @@
                         let amt = parseFloat(item.amount || item.price || item.totalAmount) || 0;
                         let title = item.action || item.menuName || item.name || item.details || "รายการอาหาร";
                         totalBillAmount += amt;
-                        let detailText = item.details && item.details !== title ? <br><small class="text-muted">${item.details}</small> : "";
+                        let detailText = (item.details && item.details !== title) ? <br><small class="text-muted">${item.details}</small> : "";
                         
                         html += `
                         <li class="d-flex justify-content-between align-items-start mb-2 pb-2 border-bottom">
@@ -218,11 +215,11 @@
                 document.getElementById('receiptItems').innerHTML = html;
                 document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
-                totalEarnedPoints = Math.floor(totalBillAmount / 100); // 100 บาท = 1 แต้ม
+                totalEarnedPoints = Math.floor(totalBillAmount / 100);
                 document.getElementById('suggestedPoints').innerText = `แต้มรวมของบิลนี้: ${totalEarnedPoints} แต้ม`;
                 
                 renderMembersList(activeMembers, totalEarnedPoints);
-                calculateNetTotal(); // คำนวณยอดสุทธิเริ่มต้น
+                calculateNetTotal();
 
             } catch (error) {
                 console.error("Error loading bill:", error);
@@ -241,7 +238,7 @@
             let defaultPoints = Math.floor(totalPoints / members.length);
             let html = "";
 
-            members.forEach((m, idx) => {
+            members.forEach((m) => {
                 let name = m.displayName || m.name || m.phone || "สมาชิก";
                 let img = m.pictureUrl || m.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff`;
                 let uid = m.uid || m.phone || "";
@@ -289,7 +286,7 @@
 
             net = net < 0 ? 0 : net;
             document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
-            document.getElementById('netTotalTxt').dataset.net = net; // เก็บค่าจริงไว้ใช้
+            document.getElementById('netTotalTxt').dataset.net = net;
             calculateChange();
         }
 
@@ -312,12 +309,12 @@
                 display.innerText = `เงินทอน: ${change.toLocaleString()} บาท`;
                 display.className = "text-center fw-bold text-success fs-5";
             } else {
-                display.innerText = `เงินขาด: ${Math.abs(change.toLocaleString())} บาท`;
+                display.innerText = `เงินขาด: ${Math.abs(change).toLocaleString()} บาท`;
                 display.className = "text-center fw-bold text-danger fs-5";
             }
         }
 
-        // --- 6. ยืนยันการชำระเงิน (ลบออเดอร์, บันทึกประวัติ, เพิ่มแต้ม) ---
+        // --- 6. ยืนยันการชำระเงิน ---
         async function confirmPayment() {
             let net = parseFloat(document.getElementById('netTotalTxt').dataset.net) || 0;
             let payType = document.getElementById('payType').value;
@@ -327,7 +324,6 @@
                 return Swal.fire("แจ้งเตือน", "จำนวนเงินสดที่รับมาไม่เพียงพอครับ", "warning");
             }
 
-            // ตรวจสอบแต้มไม่ให้เกิน
             let inputs = document.querySelectorAll('.point-input');
             let sumPoints = 0;
             inputs.forEach(inp => sumPoints += parseInt(inp.value) || 0);
@@ -335,16 +331,16 @@
                 return Swal.fire("แจ้งเตือน", "แต้มรวมที่แจกเกินโควต้าของบิลนี้", "warning");
             }
 
-            // กดปุ่มยืนยัน
             document.getElementById('btnConfirm').disabled = true;
             document.getElementById('btnConfirm').innerText = "กำลังบันทึกข้อมูล...";
 
             try {
                 const batch = db.batch();
                 let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-                let discText = discVal > 0 ? ${discVal} ${document.getElementById('discountType').value} : "ไม่มี";
+                let discTypeVal = document.getElementById('discountType').value;
+                let discText = discVal > 0 ? ${discVal} ${discTypeVal} : "ไม่มี";
 
-                // 1. บันทึกประวัติลง checkouts (บิลย้อนหลัง)
+                // 1. บันทึกประวัติ
                 const checkoutRef = db.collection("checkouts").doc();
                 batch.set(checkoutRef, {
                     tableNo: currentTableId,
@@ -358,11 +354,11 @@
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                // 2. ลบออเดอร์ในโต๊ะนี้ทิ้ง
+                // 2. ลบออเดอร์ในโต๊ะ
                 const ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
                 ordersSnap.forEach(doc => batch.delete(doc.ref));
 
-                // 3. รีเซ็ตสถานะโต๊ะกลับเป็น "ว่าง"
+                // 3. รีเซ็ตโต๊ะ
                 const tableRef = db.collection("tables").doc(currentTableId);
                 batch.update(tableRef, {
                     status: "ว่าง",
@@ -373,7 +369,7 @@
                     packagePrice: 0
                 });
 
-                // 4. บันทึกแต้มให้สมาชิกแต่ละคน
+                // 4. บันทึกแต้ม
                 inputs.forEach(inp => {
                     let uid = inp.getAttribute('data-uid');
                     let pts = parseInt(inp.value) || 0;
