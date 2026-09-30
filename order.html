@@ -137,19 +137,18 @@
         let currentShiftName = "";
 
         // 3. Init Function
-        window.onload = async function() {
+        window.onload = function() {
             if (!currentTableId) {
-                Swal.fire("ข้อผิดพลาด", "ไม่พบเลขโต๊ะ กรุณาเข้าจากหน้าแดชบอร์ด", "error").then(() => {
-                    window.location.href = "dashboard.html";
-                });
+                document.getElementById('resultArea').innerHTML = '<div class="card p-4 text-center text-danger">⚠️ ไม่พบระบุเลขโต๊ะใน URL (?table=X)</div>';
                 return;
             }
             
             document.getElementById('tableTitle').innerText = "โต๊ะ: " + currentTableId;
 
-            await loadShift();
-            await loadDropdowns();
+            // รันขนานกันทันที ไม่บล็อกกัน
             initTableListener();
+            loadShift();
+            loadDropdowns();
         };
 
         // 4. Load Data
@@ -168,6 +167,7 @@
                 }
             } catch (e) {
                 console.error("Shift Error:", e);
+                document.getElementById('shiftStatus').innerText = "โหลดกะล้มเหลว";
             }
         }
 
@@ -178,7 +178,7 @@
                 let pHtml = "";
                 pSnap.forEach(doc => {
                     let p = doc.data();
-                    pHtml += `<option value="${p.price}">${p.name} (${p.price} บ.)</option>`;
+                    pHtml += '<option value="' + p.price + '">' + p.name + ' (' + p.price + ' บ.)</option>';
                 });
                 document.getElementById('pkg').innerHTML = pHtml;
 
@@ -187,9 +187,8 @@
                 let sHtml = "";
                 sSnap.forEach(doc => {
                     let s = doc.data();
-                    // ✅ ใส่ Backtick ครอบ String Template อย่างถูกต้อง
-                    let pText = s.price > 0 ?  (+${s.price}) : "";
-                    sHtml += `<option value="${s.name}|${s.price}">${s.name}${pText}</option>`;
+                    let pText = s.price > 0 ? ' (+' + s.price + ')' : '';
+                    sHtml += '<option value="' + s.name + '|' + s.price + '">' + s.name + pText + '</option>';
                 });
                 document.getElementById('soup1').innerHTML = sHtml;
                 document.getElementById('soup2').innerHTML = sHtml;
@@ -227,7 +226,7 @@
                 if (status === "ว่าง" || status === "free") {
                     document.getElementById('sectionOpenTable').style.display = "block";
                     document.getElementById('sectionManageTable').style.display = "none";
-                    document.getElementById('resultArea').innerHTML = `<div class="card p-4 text-center text-muted">โต๊ะว่าง กรุณาเปิดโต๊ะเพื่อเริ่มสั่งอาหาร</div>`;
+                    document.getElementById('resultArea').innerHTML = '<div class="card p-4 text-center text-muted">โต๊ะว่าง กรุณาเปิดโต๊ะเพื่อเริ่มสั่งอาหาร</div>';
                 } else {
                     document.getElementById('sectionOpenTable').style.display = "none";
                     document.getElementById('sectionManageTable').style.display = "block";
@@ -238,6 +237,11 @@
                 }
             }, error => {
                 console.error("Table Listener Error:", error);
+                // แสดงข้อผิดพลาดจาก Firebase ลงบนหน้าจอทันที
+                document.getElementById('resultArea').innerHTML = '<div class="card p-4 text-center text-danger">' +
+                    '<h6 class="fw-bold">❌ เกิดข้อผิดพลาดจาก Firebase</h6>' +
+                    '<div class="small text-muted">' + error.message + '</div>' +
+                '</div>';
             });
         }
 
@@ -256,7 +260,7 @@
 
             const childPrice = Math.ceil(pkgPrice / 2);
             const totalAmount = (adult * pkgPrice) + (child * childPrice);
-            const detailText = `เปิดโต๊ะ (ผู้ใหญ่ ${adult}, เด็ก ${child} - ${pkgName})`;
+            const detailText = "เปิดโต๊ะ (ผู้ใหญ่ " + adult + ", เด็ก " + child + " - " + pkgName + ")";
 
             try {
                 await db.collection("tables").doc(String(currentTableId)).set({
@@ -288,7 +292,7 @@
             const childPrice = Math.ceil(pkgPrice / 2);
             const totalAmount = (adult * pkgPrice) + (child * childPrice);
             
-            let details = `เพิ่มลูกค้า: ผู้ใหญ่ ${adult}, เด็ก ${child}`;
+            let details = "เพิ่มลูกค้า: ผู้ใหญ่ " + adult + ", เด็ก " + child;
 
             try {
                 await db.collection("tables").doc(String(currentTableId)).update({
@@ -337,12 +341,12 @@
 
             let s1Parts = document.getElementById('soup1').value.split('|');
             let soupTotal = parseFloat(s1Parts[1]) || 0;
-            let detail = `${stoveName} (ซุป: ${s1Parts[0]}`;
+            let detail = stoveName + " (ซุป: " + s1Parts[0];
 
             if (stoveName.includes("หม้อชาบู")) {
                 let s2Parts = document.getElementById('soup2').value.split('|');
                 soupTotal += parseFloat(s2Parts[1]) || 0;
-                detail += ` + ${s2Parts[0]}`;
+                detail += " + " + s2Parts[0];
             }
             detail += ")";
 
@@ -368,7 +372,7 @@
             
             let catHtml = '<option value="all">-- ทุกหมวดหมู่ --</option>';
             categories.forEach(c => {
-                catHtml += `<option value="${c}">${c}</option>`;
+                catHtml += '<option value="' + c + '">' + c + '</option>';
             });
             document.getElementById('menuCategory').innerHTML = catHtml;
             renderMenuGrid();
@@ -384,19 +388,17 @@
                 
                 if (allowed === "" || allowed.includes(currentPkgPrice)) {
                     if (selectedCat === "all" || selectedCat === cat) {
-                        // ✅ ใส่ Backtick ครอบ String Template อย่างถูกต้อง
-                        let pText = m.price > 0 ? <span class="text-danger small">(+${m.price})</span> : "";
-                        html += `
-                        <div class="col-12 col-md-6">
-                            <div class="d-flex justify-content-between align-items-center p-2 border rounded bg-white shadow-sm">
-                                <div class="fw-bold text-dark text-truncate pe-2" style="font-size:14px;">${m.name}${pText}</div>
-                                <div class="d-flex align-items-center">
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="changeQty(${index}, -1)">-</button>
-                                    <input type="number" id="qty_${index}" class="form-control text-center mx-1 p-0 border-0 fw-bold text-primary bg-transparent" value="0" style="width: 35px;" readonly>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="changeQty(${index}, 1)">+</button>
-                                </div>
-                            </div>
-                        </div>`;
+                        let pText = m.price > 0 ? '<span class="text-danger small">(+' + m.price + ')</span>' : '';
+                        html += '<div class="col-12 col-md-6">' +
+                                    '<div class="d-flex justify-content-between align-items-center p-2 border rounded bg-white shadow-sm">' +
+                                        '<div class="fw-bold text-dark text-truncate pe-2" style="font-size:14px;">' + m.name + pText + '</div>' +
+                                        '<div class="d-flex align-items-center">' +
+                                            '<button class="btn btn-sm btn-outline-secondary" onclick="changeQty(' + index + ', -1)">-</button>' +
+                                            '<input type="number" id="qty_' + index + '" class="form-control text-center mx-1 p-0 border-0 fw-bold text-primary bg-transparent" value="0" style="width: 35px;" readonly>' +
+                                            '<button class="btn btn-sm btn-outline-secondary" onclick="changeQty(' + index + ', 1)">+</button>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>';
                     }
                 }
             });
@@ -404,7 +406,7 @@
         }
 
         function changeQty(index, amount) {
-            const input = document.getElementById(`qty_${index}`);
+            const input = document.getElementById('qty_' + index);
             if (input) {
                 let val = parseInt(input.value) + amount;
                 if (val >= 0) input.value = val;
@@ -416,13 +418,13 @@
             let totalAmount = 0;
             
             globalMenus.forEach((m, index) => {
-                const input = document.getElementById(`qty_${index}`);
+                const input = document.getElementById('qty_' + index);
                 if (input) {
                     let qty = parseInt(input.value);
                     if (qty > 0) {
-                        items.push(`${m.name} (x${qty})`);
+                        items.push(m.name + ' (x' + qty + ')');
                         totalAmount += (m.price * qty);
-                        input.value = 0; // reset
+                        input.value = 0;
                     }
                 }
             });
@@ -457,13 +459,12 @@
             
             orderRef.onSnapshot(snap => {
                 let totalAmount = 0;
-                let html = `
-                    <div class="card p-3 shadow-sm" style="border-top: 4px solid #343a40;">
-                        <h5 class="fw-bold mb-3">🧾 บิลโต๊ะ ${currentTableId}</h5>
-                        <div style="max-height: 400px; overflow-y: auto; overflow-x: hidden;" class="pe-2 mb-3">`;
+                let html = '<div class="card p-3 shadow-sm" style="border-top: 4px solid #343a40;">' +
+                           '<h5 class="fw-bold mb-3">🧾 บิลโต๊ะ ' + currentTableId + '</h5>' +
+                           '<div style="max-height: 400px; overflow-y: auto; overflow-x: hidden;" class="pe-2 mb-3">';
                 
                 if(snap.empty) {
-                    html += `<div class="text-center text-muted py-3">ยังไม่มีรายการสั่ง</div>`;
+                    html += '<div class="text-center text-muted py-3">ยังไม่มีรายการสั่ง</div>';
                 } else {
                     snap.forEach(doc => {
                         let item = doc.data();
@@ -480,32 +481,32 @@
                         if (item.kitchenStatus === "เตรียม") badge = '<span class="badge bg-warning text-dark ms-1">ครัวทำ</span>';
                         if (item.kitchenStatus === "เสร็จ") badge = '<span class="badge bg-success ms-1">เสิร์ฟแล้ว</span>';
 
-                        html += `
-                        <div class="bill-item d-flex justify-content-between align-items-start">
-                            <div style="flex: 1; padding-right: 5px;">
-                                <div class="fw-bold">${item.action} <span class="text-danger">(${amt} บ.)</span></div>
-                                <div class="text-muted small">${item.details || ""} ${badge}</div>
-                            </div>
-                            <div>
-                                <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="editOrder('${docId}', '${safeDetail}')">✏️</button>
-                                <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteOrder('${docId}')">🗑</button>
-                            </div>
-                        </div>`;
+                        html += '<div class="bill-item d-flex justify-content-between align-items-start">' +
+                                    '<div style="flex: 1; padding-right: 5px;">' +
+                                        '<div class="fw-bold">' + item.action + ' <span class="text-danger">(' + amt + ' บ.)</span></div>' +
+                                        '<div class="text-muted small">' + (item.details || "") + ' ' + badge + '</div>' +
+                                    '</div>' +
+                                    '<div>' +
+                                        '<button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="editOrder(\'' + docId + '\', \'' + safeDetail + '\')">✏️</button>' +
+                                        '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteOrder(\'' + docId + '\')">🗑</button>' +
+                                    '</div>' +
+                                '</div>';
                     });
                 }
 
-                html += `
-                        </div>
-                        <div class="bg-light p-3 rounded text-center border mb-3">
-                            <div class="text-muted small fw-bold">ยอดรวมทั้งหมด</div>
-                            <div class="text-danger fw-bold fs-3">${totalAmount.toLocaleString()} ฿</div>
-                        </div>
-                        <button class="btn btn-dark w-100 fw-bold py-2" onclick="goCheckout()" ${snap.empty ? 'disabled' : ''}>
-                            💳 เช็คบิล / สรุปยอด
-                        </button>
-                    </div>`;
+                html += '</div>' +
+                        '<div class="bg-light p-3 rounded text-center border mb-3">' +
+                            '<div class="text-muted small fw-bold">ยอดรวมทั้งหมด</div>' +
+                            '<div class="text-danger fw-bold fs-3">' + totalAmount.toLocaleString() + ' ฿</div>' +
+                        '</div>' +
+                        '<button class="btn btn-dark w-100 fw-bold py-2" onclick="goCheckout()" ' + (snap.empty ? 'disabled' : '') + '>' +
+                            '💳 เช็คบิล / สรุปยอด' +
+                        '</button>' +
+                    '</div>';
                 
                 document.getElementById('resultArea').innerHTML = html;
+            }, error => {
+                console.error("Orders Listener Error:", error);
             });
         }
 
@@ -536,7 +537,7 @@
         }
 
         function goCheckout() {
-            window.location.href = `checkout.html?table=${currentTableId}`;
+            window.location.href = 'checkout.html?table=' + currentTableId;
         }
     </script>
 </body>
