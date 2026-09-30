@@ -519,7 +519,10 @@
         }
 
         async function deleteOrder(docId) {
-    var tNo = getActiveTable();
+    // แก้ไข: ดึงเลขโต๊ะจาก URL โดยตรง (เช่น ?table=1) แทนการใช้ getActiveTable() ที่หาไม่เจอ
+    const urlParams = new URLSearchParams(window.location.search);
+    var tNo = urlParams.get('table');
+
     if (!tNo) {
         alert("❌ ไม่พบข้อมูลเลขโต๊ะ");
         return;
@@ -567,16 +570,12 @@
                 await orderRef.delete();
                 alert("🗑️ ลบรายการเรียบร้อย!");
 
-                // 4. ดึงข้อมูลบิลใหม่ทันที
-                if (typeof checkBill === 'function') {
-                    checkBill();
-                } else {
-                    location.reload();
-                }
+                // 4. รีเฟรชหน้าจอใหม่เพื่ออัปเดตข้อมูล
+                window.location.reload();
 
             } else {
                 alert("❌ ไม่พบรายการนี้ในระบบ (อาจถูกลบไปแล้ว)");
-                if (typeof checkBill === 'function') checkBill();
+                window.location.reload();
             }
 
         } catch (err) {
