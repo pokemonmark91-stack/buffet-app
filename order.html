@@ -496,7 +496,6 @@
                                         '<div class="text-muted small">' + (item.details || "") + ' ' + badge + '</div>' +
                                     '</div>' +
                                     '<div>' +
-                                        '<button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="editOrder(\'' + docId + '\', \'' + safeDetail + '\')">✏️</button>' +
                                         '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteOrder(\'' + docId + '\')">🗑</button>' +
                                     '</div>' +
                                 '</div>';
@@ -517,20 +516,6 @@
             }, error => {
                 console.error("Orders Listener Error:", error);
             });
-        }
-
-        async function editOrder(docId, oldText) {
-            const { value: newText } = await Swal.fire({
-                title: 'แก้ไขรายละเอียด',
-                input: 'textarea',
-                inputValue: oldText,
-                showCancelButton: true
-            });
-            if (newText !== undefined && newText.trim() !== "") {
-                await db.collection("tables").doc(String(currentTableId)).collection("orders").doc(docId).update({
-                    details: newText.trim()
-                });
-            }
         }
 
         async function deleteOrder(docId) {
