@@ -519,6 +519,11 @@
         }
 
         async function deleteOrder(docId) {
+            if (!docId) {
+                Swal.fire("ผิดพลาด", "ไม่พบ ID ของออเดอร์นี้ (docId เป็น undefined)", "error");
+                return;
+            }
+
             Swal.fire({
                 title: 'ยืนยันการลบ?',
                 text: "ต้องการลบรายการนี้ใช่หรือไม่?",
@@ -531,28 +536,33 @@
             }).then(async (result) => {
                 if (result.isConfirmed) {
                     try {
-                        const orderRef = db.collection("orders").doc(docId);
+                        console.log("กำลังลบ Order ID:", docId);
+                        const orderRef = db.collection("orders").doc(String(docId));
                         const docSnap = await orderRef.get();
                         
-                        if (docSnap.exists) {
-                            const data = docSnap.data();
-                            
-                            // จัดการเรื่องการหักลบจำนวนคน
-                            if (data.category === "เปิดโต๊ะ" || data.category === "เพิ่มลูกค้า" || (data.details && data.details.includes("ผู้ใหญ่"))) {
-                                let adultMatch = data.details ? data.details.match(/ผู้ใหญ่\s*(\d+)/) : null;
-                                let childMatch = data.details ? data.details.match(/เด็ก\s*(\d+)/) : null;
+                        // เช็คว่ามีเอกสารนี้ใน Firebase จริงไหม
+                        if (!docSnap.exists) {
+                            Swal.fire("ลบไม่สำเร็จ", `ไม่พบออเดอร์นี้ในระบบ (ID ที่ส่งมา: ${docId})`, "error");
+                            return;
+                        }
+
+                        const data = docSnap.data();
+
+                        // คำนวณหักลบจำนวนคน
+                        try {
+                            const isPeopleOrder = data.category === "เปิดโต๊ะ" || 
+                                                  data.category === "เพิ่มลูกค้า" || 
+                                                  (typeof data.details === 'string' && data.details.includes("ผู้ใหญ่"));
+
+                            if (isPeopleOrder && data.details) {
+                                let adultMatch = data.details.match(/ผู้ใหญ่\s*(\d+)/);
+                                let childMatch = data.details.match(/เด็ก\s*(\d+)/);
                                 
                                 let delAdult = adultMatch ? parseInt(adultMatch[1]) : 0;
                                 let delChild = childMatch ? parseInt(childMatch[1]) : 0;
-                                
-                                // หาเลขโต๊ะจาก URL (เช่น ?table=1) ชัวร์ที่สุด
+
                                 const urlParams = new URLSearchParams(window.location.search);
-                                let activeTableId = urlParams.get('table') || urlParams.get('id');
-                                
-                                // หากันพลาด ถ้าไม่มีใน URL ให้หาจากตัวแปร currentTableId
-                                if (!activeTableId && typeof currentTableId !== 'undefined') {
-                                    activeTableId = currentTableId;
-                                }
+                                let activeTableId = urlParams.get('table') || urlParams.get('id') || (typeof currentTableId !== 'undefined' ? currentTableId : null);
 
                                 if (activeTableId && (delAdult > 0 || delChild > 0)) {
                                     const tableRef = db.collection("tables").doc(String(activeTableId));
@@ -573,22 +583,25 @@
                                     }
                                 }
                             }
+                        } catch (err) {
+                            console.error("เกิดข้อผิดพลาดตอนคำนวณจำนวนคน:", err);
                         }
-                        
-                        // ไม่ว่าจะเกิดอะไรขึ้น ต้องลบออเดอร์ออกจากระบบเสมอ
+
+                        // สั่งลบเอกสารจริง
                         await orderRef.delete();
-                        
-                        Swal.fire({ 
-                            icon: 'success', 
-                            title: 'ลบเรียบร้อย', 
-                            timer: 1000, 
-                            showConfirmButton: false 
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'ลบเรียบร้อย',
+                            timer: 1000,
+                            showConfirmButton: false
                         }).then(() => {
                             window.location.reload();
                         });
-                        
+
                     } catch (error) {
-                        Swal.fire("เกิดข้อผิดพลาด", error.message, "error");
+                        console.error("Error deleting order:", error);
+                        Swal.fire("ผิดพลาด", error.message, "error");
                     }
                 }
             });
