@@ -206,6 +206,10 @@
                         allowed: data.allowedPackage || data.allowed || ""
                     });
                 });
+
+                // ✅ เพิ่มบรรทัดนี้: โหลดเมนูเสร็จปุ๊บ ให้วาดรายการอาหารขึ้นหน้าจอทันที
+                prepareMenuCategories();
+
             } catch (e) {
                 console.error("Load Data Error:", e);
             }
