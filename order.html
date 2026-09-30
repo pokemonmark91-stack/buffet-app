@@ -531,60 +531,60 @@
             }).then(async (result) => {
                 if (result.isConfirmed) {
                     try {
-                        // 1. ดึงเลขโต๊ะให้ถูกต้องทุกกรณี (รองรับทั้งตัวแปรในหน้าและ URL)
-                        const urlParams = new URLSearchParams(window.location.search);
-                        const activeTableId = (typeof currentTableId !== 'undefined' && currentTableId) 
-                            ? currentTableId 
-                            : (typeof tableNo !== 'undefined' && tableNo ? tableNo : (urlParams.get('table') || urlParams.get('id') || '1'));
-
                         const orderRef = db.collection("orders").doc(docId);
                         const docSnap = await orderRef.get();
                         
                         if (docSnap.exists) {
                             const data = docSnap.data();
                             
-                            // 2. เช็คว่าเป็นรายการที่เกี่ยวกับจำนวนคนหรือไม่
-                            if (data.category === "เปิดโต๊ะ" || data.category === "เพิ่มลูกค้า" || (data.details && data.details.includes("ผู้ใหญ่"))) {
-                                
-                                // 3. ดึงตัวเลขจำนวนคนออกจากข้อความ
-                                let adultMatch = data.details ? data.details.match(/ผู้ใหญ่\s*(\d+)/) : null;
-                                let childMatch = data.details ? data.details.match(/เด็ก\s*(\d+)/) : null;
-                                
-                                let delAdult = adultMatch ? parseInt(adultMatch[1]) : 0;
-                                let delChild = childMatch ? parseInt(childMatch[1]) : 0;
-                                
-                                // 4. หักลบจำนวนคนออกจากฐานข้อมูลโต๊ะ
-                                const tableRef = db.collection("tables").doc(String(activeTableId));
-                                const tableDoc = await tableRef.get();
-                                
-                                if (tableDoc.exists) {
-                                    let tData = tableDoc.data();
-                                    let newAdults = Math.max(0, (parseInt(tData.adults) || 0) - delAdult);
-                                    let newChildren = Math.max(0, (parseInt(tData.children) || 0) - delChild);
-                                    let newTotal = newAdults + newChildren;
+                            // ลองหักลบจำนวนคนเฉพาะเมื่อข้อมูลครบถ้วน
+                            try {
+                                if (data.category === "เปิดโต๊ะ" || data.category === "เพิ่มลูกค้า" || (data.details && data.details.includes("ผู้ใหญ่"))) {
+                                    let adultMatch = data.details ? data.details.match(/ผู้ใหญ่\s*(\d+)/) : null;
+                                    let childMatch = data.details ? data.details.match(/เด็ก\s*(\d+)/) : null;
                                     
-                                    // อัปเดตทุกฟิลด์ที่เกี่ยวข้องกับจำนวนคน
-                                    await tableRef.update({
-                                        adults: newAdults,
-                                        children: newChildren,
-                                        totalPeople: newTotal,
-                                        people: newTotal
-                                    });
+                                    let delAdult = adultMatch ? parseInt(adultMatch[1]) : 0;
+                                    let delChild = childMatch ? parseInt(childMatch[1]) : 0;
+                                    
+                                    if (delAdult > 0 || delChild > 0) {
+                                        const urlParams = new URLSearchParams(window.location.search);
+                                        let activeTableId = (typeof currentTableId !== 'undefined' && currentTableId) ? currentTableId : urlParams.get('table');
+                                        
+                                        if (activeTableId) {
+                                            const tableRef = db.collection("tables").doc(String(activeTableId));
+                                            const tableDoc = await tableRef.get();
+                                            
+                                            if (tableDoc.exists) {
+                                                let tData = tableDoc.data();
+                                                let newAdults = Math.max(0, (parseInt(tData.adults) || 0) - delAdult);
+                                                let newChildren = Math.max(0, (parseInt(tData.children) || 0) - delChild);
+                                                let newTotal = newAdults + newChildren;
+                                                
+                                                await tableRef.update({
+                                                    adults: newAdults,
+                                                    children: newChildren,
+                                                    totalPeople: newTotal,
+                                                    people: newTotal
+                                                });
+                                            }
+                                        }
+                                    }
                                 }
+                            } catch (err) {
+                                console.log("ข้ามการหักลบยอดคน:", err);
                             }
                         }
                         
-                        // 5. ลบรายการออกจากฐานข้อมูล
+                        // ลบรายการออกจากฐานข้อมูล (ทำงานเสมอไม่ว่าจะเกิดข้อผิดพลาดด้านบนหรือไม่)
                         await orderRef.delete();
                         
-                        // 6. แจ้งเตือน และสั่งรีเฟรชหน้าจอทันทีเพื่อให้ออเดอร์หายไปจากหน้าบิล
                         Swal.fire({ 
                             icon: 'success', 
                             title: 'ลบเรียบร้อย', 
                             timer: 1000, 
                             showConfirmButton: false 
                         }).then(() => {
-                            location.reload(); // โหลดหน้าใหม่ทันที
+                            location.reload();
                         });
                         
                     } catch (error) {
@@ -593,7 +593,6 @@
                 }
             });
         }
-
         function goCheckout() {
             window.location.href = 'checkout.html?table=' + currentTableId;
         }
