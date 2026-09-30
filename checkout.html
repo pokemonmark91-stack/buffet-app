@@ -187,6 +187,16 @@
         let totalBillAmount = 0;
         let totalEarnedPoints = 0;
 
+        // ตารางราคารายการที่มีค่าบริการเพิ่มเติม (เครื่องดื่ม)
+        const drinkPrices = {
+            "น้ำเปล่า": 10,
+            "โซดา": 20,
+            "โคล่า": 15,
+            "น้ำส้ม": 15,
+            "น้ำแดง": 15,
+            "น้ำเขียว": 15
+        };
+
         window.onload = function() {
             if (!currentTableId) {
                 alert("ไม่พบเลขโต๊ะ กรุณาเลือกโต๊ะใหม่");
@@ -209,7 +219,7 @@
         async function loadBillDetails() {
             try {
                 totalBillAmount = 0;
-                let itemsMap = {}; // ตัวแปรสำหรับรวมเมนูที่ซ้ำกัน
+                let itemsMap = {};
 
                 function addItemToMap(name, qty, amt) {
                     name = name.trim();
@@ -261,39 +271,49 @@
                         let title = item.action || item.menuName || item.name || "";
                         let details = item.details || "";
 
-                        // ข้ามรายการ "เปิดโต๊ะ" เพื่อไม่ให้คิดเงินซ้ำกับส่วนของผู้ใหญ่/เด็ก
+                        // ข้ามรายการ "เปิดโต๊ะ" เพื่อไม่ให้คิดเงินซ้ำ
                         if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ")) {
                             return;
                         }
 
                         // ถ้าเป็น สั่งเตา / ซุป
-                        if (title.includes("สั่งเตา")) {
-                            let name = details ? "สั่งเตา (" + details + ")" : "สั่งเตา";
+                        if (title.includes("สั่งเตา") || details.includes("สั่งเตา") || details.includes("ซุป")) {
+                            let name = details ? "สั่งเตา (" + details + ")" : title;
                             addItemToMap(name, 1, amt);
                             return;
                         }
 
-                        // แกะรายการเมนูย่อย (เช่น "หมูหมักงา x 2 สาหร่ายวากาเมะ x 2")
+                        // แกะรายการเมนูย่อย (เช่น "น้ำเปล่า x 1 โซดา x 2" หรือ "หมูหมักงา x 2")
                         if (details && (details.includes('x') || details.includes('X') || details.includes('×'))) {
                             let regex = /([^\d\s][^xX×\n\r]*?)\s*[xX×]\s*(\d+)/g;
                             let match;
-                            let found = false;
+                            let itemsInBatch = [];
 
                             while ((match = regex.exec(details)) !== null) {
-                                found = true;
                                 let itemName = match[1].trim();
                                 let itemQty = parseInt(match[2]) || 1;
-                                addItemToMap(itemName, itemQty, amt);
-                                amt = 0; // ใส่ราคาเฉพาะในรายการแรก เพื่อไม่ให้บวกราคาซ้ำ
+                                itemsInBatch.push({ name: itemName, qty: itemQty });
                             }
 
-                            if (!found) {
+                            if (itemsInBatch.length > 0) {
+                                itemsInBatch.forEach(it => {
+                                    let itemPrice = 0;
+                                    // เช็คราคาจากตารางเครื่องดื่มก่อน
+                                    if (drinkPrices[it.name]) {
+                                        itemPrice = drinkPrices[it.name] * it.qty;
+                                    } else if (itemsInBatch.length === 1) {
+                                        itemPrice = amt;
+                                    }
+                                    addItemToMap(it.name, it.qty, itemPrice);
+                                });
+                            } else {
                                 let name = details || title || "สั่งอาหาร";
                                 addItemToMap(name, 1, amt);
                             }
                         } else {
                             let name = details || title || "สั่งอาหาร";
-                            addItemToMap(name, 1, amt);
+                            let itemPrice = drinkPrices[name] ? drinkPrices[name] : amt;
+                            addItemToMap(name, 1, itemPrice);
                         }
                     });
                 }
