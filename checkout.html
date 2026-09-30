@@ -32,7 +32,7 @@
                 left: 0;
                 top: 0;
                 width: 100%;
-                max-width: 80mm; /* ขนาดกระดาษความร้อนมาตรฐาน */
+                max-width: 80mm;
                 padding: 10px !important;
                 border: none !important;
                 box-shadow: none !important;
@@ -98,7 +98,7 @@
                     *** ขอบคุณที่อุดหนุนครับ ***
                 </div>
 
-                <!-- ปุ่มพิมพ์ใบเสร็จ (ซ่อนเวลาพิมพ์จริง) -->
+                <!-- ปุ่มพิมพ์ใบเสร็จ -->
                 <div class="mt-3 no-print">
                     <button onclick="window.print()" class="btn btn-outline-primary w-100 fw-bold shadow-sm">
                         🖨️ พิมพ์ใบเสร็จ / บันทึก PDF
@@ -108,7 +108,7 @@
             </div>
         </div>
 
-        <!-- ฝั่งขวา: รับชำระเงินและแจกแต้ม (ซ่อนเวลาพิมพ์) -->
+        <!-- ฝั่งขวา: รับชำระเงินและแจกแต้ม -->
         <div class="col-md-7 no-print">
             <div class="card payment-card shadow-sm p-4">
                 
@@ -196,7 +196,6 @@
             document.getElementById('displayTableNo').innerText = currentTableId;
             document.getElementById('receiptTableNo').innerText = currentTableId;
             
-            // แสดงวันที่และเวลาปัจจุบัน
             const now = new Date();
             document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
 
@@ -210,8 +209,20 @@
         async function loadBillDetails() {
             try {
                 totalBillAmount = 0;
-                let html = "";
+                let itemsMap = {}; // ตัวแปรสำหรับรวมเมนูที่ซ้ำกัน
 
+                function addItemToMap(name, qty, amt) {
+                    name = name.trim();
+                    if (!name) return;
+                    if (itemsMap[name]) {
+                        itemsMap[name].qty += qty;
+                        itemsMap[name].amt += amt;
+                    } else {
+                        itemsMap[name] = { qty: qty, amt: amt };
+                    }
+                }
+
+                // A. ดึงข้อมูลโต๊ะ (บุฟเฟต์ผู้ใหญ่ / เด็ก)
                 const tableDoc = await db.collection("tables").doc(currentTableId).get();
                 let activeMembers = [];
                 
@@ -224,33 +235,18 @@
                     const pkgPrice = parseFloat(tableData.packagePrice) || 0;
 
                     if (adults > 0 && pkgPrice > 0) {
-                        const adultTotal = adults * pkgPrice;
-                        totalBillAmount += adultTotal;
-                        html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
-                                    "<div>" +
-                                        "<span class='fw-bold'>บุฟเฟต์ผู้ใหญ่ (" + adults + " ท่าน)</span><br>" +
-                                        "<small class='text-muted'>ท่านละ " + pkgPrice.toLocaleString() + " บ.</small>" +
-                                    "</div>" +
-                                    "<span class='fw-bold text-nowrap'>" + adultTotal.toLocaleString() + " บ.</span>" +
-                                "</li>";
+                        addItemToMap("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice);
                     }
 
                     if (children > 0) {
                         const childPrice = parseFloat(tableData.childPackagePrice || tableData.childPrice) || (pkgPrice / 2);
-                        const childTotal = children * childPrice;
-                        if (childTotal > 0) {
-                            totalBillAmount += childTotal;
-                            html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
-                                        "<div>" +
-                                            "<span class='fw-bold'>บุฟเฟต์เด็ก (" + children + " ท่าน)</span><br>" +
-                                            "<small class='text-muted'>ท่านละ " + childPrice.toLocaleString() + " บ.</small>" +
-                                        "</div>" +
-                                        "<span class='fw-bold text-nowrap'>" + childTotal.toLocaleString() + " บ.</span>" +
-                                    "</li>";
+                        if (childPrice > 0) {
+                            addItemToMap("บุฟเฟต์เด็ก", children, children * childPrice);
                         }
                     }
                 }
 
+                // B. ดึงรายการอาหารเพิ่มเติมจาก Subcollection 'orders'
                 let ordersSnap;
                 try {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
@@ -262,21 +258,60 @@
                     ordersSnap.forEach(doc => {
                         let item = doc.data();
                         let amt = parseFloat(item.amount || item.price || item.totalAmount) || 0;
-                        let title = item.action || item.menuName || item.name || item.details || "รายการอาหาร";
-                        totalBillAmount += amt;
-                        
-                        let detailText = "";
-                        if (item.details && item.details !== title) {
-                            detailText = "<br><small class='text-muted'>" + item.details + "</small>";
+                        let title = item.action || item.menuName || item.name || "";
+                        let details = item.details || "";
+
+                        // ข้ามรายการ "เปิดโต๊ะ" เพื่อไม่ให้คิดเงินซ้ำกับส่วนของผู้ใหญ่/เด็ก
+                        if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ")) {
+                            return;
                         }
-                        
-                        html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
-                                    "<div>" +
-                                        "<span class='fw-bold'>" + title + "</span>" + detailText +
-                                    "</div>" +
-                                    "<span class='fw-bold text-nowrap'>" + amt.toLocaleString() + " บ.</span>" +
-                                "</li>";
+
+                        // ถ้าเป็น สั่งเตา / ซุป
+                        if (title.includes("สั่งเตา")) {
+                            let name = details ? "สั่งเตา (" + details + ")" : "สั่งเตา";
+                            addItemToMap(name, 1, amt);
+                            return;
+                        }
+
+                        // แกะรายการเมนูย่อย (เช่น "หมูหมักงา x 2 สาหร่ายวากาเมะ x 2")
+                        if (details && (details.includes('x') || details.includes('X') || details.includes('×'))) {
+                            let regex = /([^\d\s][^xX×\n\r]*?)\s*[xX×]\s*(\d+)/g;
+                            let match;
+                            let found = false;
+
+                            while ((match = regex.exec(details)) !== null) {
+                                found = true;
+                                let itemName = match[1].trim();
+                                let itemQty = parseInt(match[2]) || 1;
+                                addItemToMap(itemName, itemQty, amt);
+                                amt = 0; // ใส่ราคาเฉพาะในรายการแรก เพื่อไม่ให้บวกราคาซ้ำ
+                            }
+
+                            if (!found) {
+                                let name = details || title || "สั่งอาหาร";
+                                addItemToMap(name, 1, amt);
+                            }
+                        } else {
+                            let name = details || title || "สั่งอาหาร";
+                            addItemToMap(name, 1, amt);
+                        }
                     });
+                }
+
+                // C. แสดงผลลงในสลิป
+                let html = "";
+                for (let key in itemsMap) {
+                    let item = itemsMap[key];
+                    totalBillAmount += item.amt;
+
+                    let priceText = item.amt > 0 ? item.amt.toLocaleString() + " บ." : "0 บ.";
+                    html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
+                                "<div>" +
+                                    "<span class='fw-bold'>" + key + "</span> " +
+                                    "<span class='badge bg-light text-dark border ms-1'>x " + item.qty + "</span>" +
+                                "</div>" +
+                                "<span class='fw-bold text-nowrap'>" + priceText + "</span>" +
+                            "</li>";
                 }
 
                 if (!html) {
@@ -346,7 +381,6 @@
             net = totalBillAmount - discountAmount;
             net = net < 0 ? 0 : net;
 
-            // อัปเดตส่วนลดในสลิปใบเสร็จ
             let discRow = document.getElementById('discountRow');
             if (discountAmount > 0) {
                 discRow.style.display = 'flex';
