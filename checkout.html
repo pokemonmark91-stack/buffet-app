@@ -187,7 +187,6 @@
         let totalBillAmount = 0;
         let totalEarnedPoints = 0;
 
-        // ตารางราคารายการที่มีค่าบริการเพิ่มเติม (เครื่องดื่ม)
         const drinkPrices = {
             "น้ำเปล่า": 10,
             "โซดา": 20,
@@ -219,20 +218,21 @@
         async function loadBillDetails() {
             try {
                 totalBillAmount = 0;
-                let itemsMap = {};
+                let itemsList = [];
 
-                function addItemToMap(name, qty, amt) {
+                function addItem(name, qty, amt, type) {
                     name = name.trim();
                     if (!name) return;
-                    if (itemsMap[name]) {
-                        itemsMap[name].qty += qty;
-                        itemsMap[name].amt += amt;
+                    let existing = itemsList.find(i => i.name === name && i.type === type);
+                    if (existing) {
+                        existing.qty += qty;
+                        existing.amt += amt;
                     } else {
-                        itemsMap[name] = { qty: qty, amt: amt };
+                        itemsList.push({ name: name, qty: qty, amt: amt, type: type });
                     }
                 }
 
-                // A. ดึงข้อมูลโต๊ะ (บุฟเฟต์ผู้ใหญ่ / เด็ก)
+                // A. ดึงข้อมูลโต๊ะ (หมวด 1: ค่าหัว)
                 const tableDoc = await db.collection("tables").doc(currentTableId).get();
                 let activeMembers = [];
                 
@@ -245,18 +245,18 @@
                     const pkgPrice = parseFloat(tableData.packagePrice) || 0;
 
                     if (adults > 0 && pkgPrice > 0) {
-                        addItemToMap("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice);
+                        addItem("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice, "head");
                     }
 
                     if (children > 0) {
                         const childPrice = parseFloat(tableData.childPackagePrice || tableData.childPrice) || (pkgPrice / 2);
                         if (childPrice > 0) {
-                            addItemToMap("บุฟเฟต์เด็ก", children, children * childPrice);
+                            addItem("บุฟเฟต์เด็ก", children, children * childPrice, "head");
                         }
                     }
                 }
 
-                // B. ดึงรายการอาหารเพิ่มเติมจาก Subcollection 'orders'
+                // B. ดึงรายการออเดอร์ใน Subcollection 'orders'
                 let ordersSnap;
                 try {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
@@ -276,14 +276,14 @@
                             return;
                         }
 
-                        // ถ้าเป็น สั่งเตา / ซุป
+                        // หมวด 2: ค่าเตา / ซุป
                         if (title.includes("สั่งเตา") || details.includes("สั่งเตา") || details.includes("ซุป")) {
                             let name = details ? "สั่งเตา (" + details + ")" : title;
-                            addItemToMap(name, 1, amt);
+                            addItem(name, 1, amt, "stove");
                             return;
                         }
 
-                        // แกะรายการเมนูย่อย (เช่น "น้ำเปล่า x 1 โซดา x 2" หรือ "หมูหมักงา x 2")
+                        // แยกแยะรายการเครื่องดื่ม และ รายการอาหาร
                         if (details && (details.includes('x') || details.includes('X') || details.includes('×'))) {
                             let regex = /([^\d\s][^xX×\n\r]*?)\s*[xX×]\s*(\d+)/g;
                             let match;
@@ -297,42 +297,63 @@
 
                             if (itemsInBatch.length > 0) {
                                 itemsInBatch.forEach(it => {
-                                    let itemPrice = 0;
-                                    // เช็คราคาจากตารางเครื่องดื่มก่อน
-                                    if (drinkPrices[it.name]) {
-                                        itemPrice = drinkPrices[it.name] * it.qty;
-                                    } else if (itemsInBatch.length === 1) {
-                                        itemPrice = amt;
+                                    if (drinkPrices[it.name] !== undefined) {
+                                        // หมวด 3: เครื่องดื่ม
+                                        addItem(it.name, it.qty, drinkPrices[it.name] * it.qty, "drink");
+                                    } else {
+                                        // หมวด 4: รายการอาหาร
+                                        let itemPrice = (itemsInBatch.length === 1) ? amt : 0;
+                                        addItem(it.name, it.qty, itemPrice, "food");
                                     }
-                                    addItemToMap(it.name, it.qty, itemPrice);
                                 });
                             } else {
                                 let name = details || title || "สั่งอาหาร";
-                                addItemToMap(name, 1, amt);
+                                if (drinkPrices[name] !== undefined) {
+                                    addItem(name, 1, drinkPrices[name], "drink");
+                                } else {
+                                    addItem(name, 1, amt, "food");
+                                }
                             }
                         } else {
                             let name = details || title || "สั่งอาหาร";
-                            let itemPrice = drinkPrices[name] ? drinkPrices[name] : amt;
-                            addItemToMap(name, 1, itemPrice);
+                            if (drinkPrices[name] !== undefined) {
+                                addItem(name, 1, drinkPrices[name], "drink");
+                            } else {
+                                addItem(name, 1, amt, "food");
+                            }
                         }
                     });
                 }
 
-                // C. แสดงผลลงในสลิป
-                let html = "";
-                for (let key in itemsMap) {
-                    let item = itemsMap[key];
-                    totalBillAmount += item.amt;
+                // C. จัดเรียงลำดับตามเงื่อนไข
+                let headItems = itemsList.filter(i => i.type === 'head');
+                let stoveItems = itemsList.filter(i => i.type === 'stove');
+                let drinkItems = itemsList.filter(i => i.type === 'drink');
+                let foodItems = itemsList.filter(i => i.type === 'food');
 
+                // เครื่องดื่ม: ราคาสูงสุดขึ้นก่อน
+                drinkItems.sort((a, b) => b.amt - a.amt);
+
+                // รายการอาหาร: จำนวนมากสุดขึ้นก่อน
+                foodItems.sort((a, b) => b.qty - a.qty);
+
+                // รวมลำดับ: ค่าหัว -> ค่าเตา -> เครื่องดื่ม -> รายการอาหาร
+                let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
+
+                // D. แสดงผลบนใบเสร็จ
+                let html = "";
+                finalOrderedItems.forEach(item => {
+                    totalBillAmount += item.amt;
                     let priceText = item.amt > 0 ? item.amt.toLocaleString() + " บ." : "0 บ.";
+                    
                     html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
                                 "<div>" +
-                                    "<span class='fw-bold'>" + key + "</span> " +
+                                    "<span class='fw-bold'>" + item.name + "</span> " +
                                     "<span class='badge bg-light text-dark border ms-1'>x " + item.qty + "</span>" +
                                 "</div>" +
                                 "<span class='fw-bold text-nowrap'>" + priceText + "</span>" +
                             "</li>";
-                }
+                });
 
                 if (!html) {
                     html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
