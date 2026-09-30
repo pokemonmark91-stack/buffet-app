@@ -246,6 +246,13 @@
     let currentShiftId = null;
     let modal = null;
 
+    // โค้ดป้องกันหน้าต่าง Modal แย่ง Focus จาก SweetAlert (ทำให้พิมพ์ข้อความได้)
+    document.addEventListener('focusin', function (e) {
+       if (e.target.closest && e.target.closest('.swal2-container')) {
+           e.stopImmediatePropagation();
+       }
+    }, true);
+    
     window.onload = function() {
         modal = new bootstrap.Modal(document.getElementById('tableActionModal'));
         initShiftStatus();
