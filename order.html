@@ -537,45 +537,45 @@
                         if (docSnap.exists) {
                             const data = docSnap.data();
                             
-                            // ลองหักลบจำนวนคนเฉพาะเมื่อข้อมูลครบถ้วน
-                            try {
-                                if (data.category === "เปิดโต๊ะ" || data.category === "เพิ่มลูกค้า" || (data.details && data.details.includes("ผู้ใหญ่"))) {
-                                    let adultMatch = data.details ? data.details.match(/ผู้ใหญ่\s*(\d+)/) : null;
-                                    let childMatch = data.details ? data.details.match(/เด็ก\s*(\d+)/) : null;
+                            // จัดการเรื่องการหักลบจำนวนคน
+                            if (data.category === "เปิดโต๊ะ" || data.category === "เพิ่มลูกค้า" || (data.details && data.details.includes("ผู้ใหญ่"))) {
+                                let adultMatch = data.details ? data.details.match(/ผู้ใหญ่\s*(\d+)/) : null;
+                                let childMatch = data.details ? data.details.match(/เด็ก\s*(\d+)/) : null;
+                                
+                                let delAdult = adultMatch ? parseInt(adultMatch[1]) : 0;
+                                let delChild = childMatch ? parseInt(childMatch[1]) : 0;
+                                
+                                // หาเลขโต๊ะจาก URL (เช่น ?table=1) ชัวร์ที่สุด
+                                const urlParams = new URLSearchParams(window.location.search);
+                                let activeTableId = urlParams.get('table') || urlParams.get('id');
+                                
+                                // หากันพลาด ถ้าไม่มีใน URL ให้หาจากตัวแปร currentTableId
+                                if (!activeTableId && typeof currentTableId !== 'undefined') {
+                                    activeTableId = currentTableId;
+                                }
+
+                                if (activeTableId && (delAdult > 0 || delChild > 0)) {
+                                    const tableRef = db.collection("tables").doc(String(activeTableId));
+                                    const tableDoc = await tableRef.get();
                                     
-                                    let delAdult = adultMatch ? parseInt(adultMatch[1]) : 0;
-                                    let delChild = childMatch ? parseInt(childMatch[1]) : 0;
-                                    
-                                    if (delAdult > 0 || delChild > 0) {
-                                        const urlParams = new URLSearchParams(window.location.search);
-                                        let activeTableId = (typeof currentTableId !== 'undefined' && currentTableId) ? currentTableId : urlParams.get('table');
+                                    if (tableDoc.exists) {
+                                        let tData = tableDoc.data();
+                                        let newAdults = Math.max(0, (parseInt(tData.adults) || 0) - delAdult);
+                                        let newChildren = Math.max(0, (parseInt(tData.children) || 0) - delChild);
+                                        let newTotal = newAdults + newChildren;
                                         
-                                        if (activeTableId) {
-                                            const tableRef = db.collection("tables").doc(String(activeTableId));
-                                            const tableDoc = await tableRef.get();
-                                            
-                                            if (tableDoc.exists) {
-                                                let tData = tableDoc.data();
-                                                let newAdults = Math.max(0, (parseInt(tData.adults) || 0) - delAdult);
-                                                let newChildren = Math.max(0, (parseInt(tData.children) || 0) - delChild);
-                                                let newTotal = newAdults + newChildren;
-                                                
-                                                await tableRef.update({
-                                                    adults: newAdults,
-                                                    children: newChildren,
-                                                    totalPeople: newTotal,
-                                                    people: newTotal
-                                                });
-                                            }
-                                        }
+                                        await tableRef.update({
+                                            adults: newAdults,
+                                            children: newChildren,
+                                            totalPeople: newTotal,
+                                            people: newTotal
+                                        });
                                     }
                                 }
-                            } catch (err) {
-                                console.log("ข้ามการหักลบยอดคน:", err);
                             }
                         }
                         
-                        // ลบรายการออกจากฐานข้อมูล (ทำงานเสมอไม่ว่าจะเกิดข้อผิดพลาดด้านบนหรือไม่)
+                        // ไม่ว่าจะเกิดอะไรขึ้น ต้องลบออเดอร์ออกจากระบบเสมอ
                         await orderRef.delete();
                         
                         Swal.fire({ 
@@ -584,15 +584,16 @@
                             timer: 1000, 
                             showConfirmButton: false 
                         }).then(() => {
-                            location.reload();
+                            window.location.reload();
                         });
                         
                     } catch (error) {
-                        Swal.fire("ผิดพลาด", error.message, "error");
+                        Swal.fire("เกิดข้อผิดพลาด", error.message, "error");
                     }
                 }
             });
         }
+        
         function goCheckout() {
             window.location.href = 'checkout.html?table=' + currentTableId;
         }
