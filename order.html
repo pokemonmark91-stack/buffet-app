@@ -285,38 +285,68 @@
         }
 
         async function addPerson() {
-            const adult = parseInt(document.getElementById('addAdultQty').value) || 0;
-            const child = parseInt(document.getElementById('addChildQty').value) || 0;
+    const adult = parseInt(document.getElementById('addAdultQty').value) || 0;
+    const child = parseInt(document.getElementById('addChildQty').value) || 0;
+    
+    if (adult === 0 && child === 0) {
+        Swal.fire("เตือน", "ใส่จำนวนคนก่อนกดเพิ่ม", "warning");
+        return;
+    }
+
+    const pkgPrice = parseFloat(tableData.packagePrice) || 0;
+    const childPrice = Math.ceil(pkgPrice / 2);
+    const totalAmount = (adult * pkgPrice) + (child * childPrice);
+    
+    let details = "เพิ่มลูกค้า: ผู้ใหญ่ " + adult + ", เด็ก " + child;
+
+    try {
+        // 1. ชี้ไปที่โต๊ะปัจจุบันและดึงข้อมูลล่าสุดจากฐานข้อมูลก่อนบวก
+        const tableRef = db.collection("tables").doc(String(currentTableId));
+        const docSnap = await tableRef.get();
+        
+        if (docSnap.exists) {
+            let currentData = docSnap.data();
             
-            if (adult === 0 && child === 0) {
-                Swal.fire("เตือน", "ใส่จำนวนคนก่อนกดเพิ่ม", "warning");
-                return;
-            }
-
-            const pkgPrice = parseFloat(tableData.packagePrice) || 0;
-            const childPrice = Math.ceil(pkgPrice / 2);
-            const totalAmount = (adult * pkgPrice) + (child * childPrice);
+            // 2. เอาข้อมูลล่าสุดที่อยู่ในระบบตอนนี้มาตั้งต้น
+            let currentAdults = parseInt(currentData.adults) || 0;
+            let currentChildren = parseInt(currentData.children) || 0;
             
-            let details = "เพิ่มลูกค้า: ผู้ใหญ่ " + adult + ", เด็ก " + child;
+            // 3. บวกจำนวนที่ลูกค้าต้องการเพิ่ม
+            let newAdults = currentAdults + adult;
+            let newChildren = currentChildren + child;
+            let newTotal = newAdults + newChildren;
 
-            try {
-                await db.collection("tables").doc(String(currentTableId)).update({
-                    adults: (parseInt(tableData.adults) || 0) + adult,
-                    children: (parseInt(tableData.children) || 0) + child,
-                    totalPeople: (parseInt(tableData.totalPeople) || 0) + adult + child
-                });
-
-                // แก้ไขพารามิเตอร์ตัวสุดท้ายเป็น true เพื่อส่งเข้าครัว
-                await sendOrderToFirestore("เพิ่มลูกค้า", details, totalAmount, true);
-                
-                document.getElementById('addAdultQty').value = "0";
-                document.getElementById('addChildQty').value = "0";
-                Swal.fire({ icon: 'success', title: 'เพิ่มลูกค้าแล้ว', timer: 1000, showConfirmButton: false });
-            } catch (e) {
-                Swal.fire("ผิดพลาด", e.message, "error");
-            }
+            // 4. สั่งอัปเดตกลับไปที่ฐานข้อมูล (อัปเดตให้ครบทุกฟิลด์เหมือนตอนลบ)
+            await tableRef.update({
+                adults: newAdults,
+                children: newChildren,
+                totalPeople: newTotal,
+                people: newTotal
+            });
         }
 
+        // ส่งออเดอร์เข้าครัว
+        await sendOrderToFirestore("เพิ่มลูกค้า", details, totalAmount, true);
+        
+        // เคลียร์ช่องกรอกข้อมูล
+        document.getElementById('addAdultQty').value = "0";
+        document.getElementById('addChildQty').value = "0";
+        
+        // แจ้งเตือนและรีเฟรชหน้าเพื่อเคลียร์ตัวแปรความจำเก่าทิ้ง
+        Swal.fire({ 
+            icon: 'success', 
+            title: 'เพิ่มลูกค้าแล้ว', 
+            timer: 1000, 
+            showConfirmButton: false 
+        }).then(() => {
+            window.location.reload(); 
+        });
+
+    } catch (e) {
+        Swal.fire("ผิดพลาด", e.message, "error");
+    }
+}
+        
         function toggleSoup() {
             const stove = document.getElementById('stoveType').value;
             const section = document.getElementById('soupSection');
