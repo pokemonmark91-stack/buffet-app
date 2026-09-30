@@ -272,7 +272,8 @@
                     totalPeople: adult + child
                 }, { merge: true });
 
-                await sendOrderToFirestore("เปิดโต๊ะ", detailText, totalAmount, false);
+                // แก้ไขพารามิเตอร์ตัวสุดท้ายเป็น true เพื่อส่งเข้าครัว
+                await sendOrderToFirestore("เปิดโต๊ะ", detailText, totalAmount, true);
                 Swal.fire({ icon: 'success', title: 'เปิดโต๊ะแล้ว', timer: 1000, showConfirmButton: false });
             } catch (e) {
                 Swal.fire("ผิดพลาด", e.message, "error");
@@ -301,7 +302,8 @@
                     totalPeople: (parseInt(tableData.totalPeople) || 0) + adult + child
                 });
 
-                await sendOrderToFirestore("เพิ่มลูกค้า", details, totalAmount, false);
+                // แก้ไขพารามิเตอร์ตัวสุดท้ายเป็น true เพื่อส่งเข้าครัว
+                await sendOrderToFirestore("เพิ่มลูกค้า", details, totalAmount, true);
                 
                 document.getElementById('addAdultQty').value = "0";
                 document.getElementById('addChildQty').value = "0";
