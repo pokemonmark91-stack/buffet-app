@@ -416,35 +416,30 @@
         }
 
                 async function submitOrder() {
-            let hasOrder = false;
+            let items = [];
+            let totalAmount = 0;
             
-            // วนลูปเช็ครายการอาหารที่ถูกสั่ง
-            for (let index = 0; index < globalMenus.length; index++) {
-                const m = globalMenus[index];
+            globalMenus.forEach((m, index) => {
                 const input = document.getElementById('qty_' + index);
-                
                 if (input) {
                     let qty = parseInt(input.value);
                     if (qty > 0) {
-                        hasOrder = true;
-                        // สร้างข้อความรายละเอียดของ 1 เมนู
-                        let detailText = m.name + ' (x' + qty + ')';
-                        let itemTotal = m.price * qty;
-
-                        // ส่งข้อมูลเข้า Firestore แยกทีละ 1 ออเดอร์
-                        await sendOrderToFirestore("สั่งอาหาร", detailText, itemTotal, true);
-                        
-                        // เคลียร์ค่ากลับเป็น 0 หลังส่งเสร็จ
-                        input.value = 0;
+                        // เก็บรายการลง Array โดยใช้รูปแบบ ชื่อ xจำนวน
+                        items.push(m.name + ' x' + qty);
+                        totalAmount += (m.price * qty);
+                        input.value = 0; // เคลียร์ช่องจำนวน
                     }
                 }
-            }
+            });
             
-            if (!hasOrder) {
+            if (items.length === 0) {
                 Swal.fire("เตือน", "กรุณาเลือกอาหารก่อน", "warning");
                 return;
             }
 
+            // ส่งข้อมูลครั้งเดียว โดยคั่นแต่ละรายการด้วย \n (ขึ้นบรรทัดใหม่)
+            await sendOrderToFirestore("สั่งอาหาร", items.join("\n"), totalAmount, true);
+            
             Swal.fire({ icon: 'success', title: 'ส่งอาหารเข้าครัวแล้ว', timer: 1000, showConfirmButton: false });
         }
         
