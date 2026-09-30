@@ -519,69 +519,103 @@
         }
 
         async function deleteOrder(docId) {
-    // แก้ไข: ดึงเลขโต๊ะจาก URL โดยตรง (เช่น ?table=1) แทนการใช้ getActiveTable() ที่หาไม่เจอ
     const urlParams = new URLSearchParams(window.location.search);
     var tNo = urlParams.get('table');
 
     if (!tNo) {
-        alert("❌ ไม่พบข้อมูลเลขโต๊ะ");
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: 'ไม่พบข้อมูลเลขโต๊ะ',
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'ตกลง'
+        });
         return;
     }
 
-    if (confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการ 'ลบ' รายการนี้?")) {
-        try {
-            // 1. ชี้ Reference ไปที่ Subcollection ของโต๊ะนั้นๆ ให้ถูกต้อง
-            const orderRef = db.collection("tables").doc(String(tNo)).collection("orders").doc(docId);
-            const docSnap = await orderRef.get();
+    // กล่องแจ้งเตือนยืนยันการลบแบบสวยงาม
+    Swal.fire({
+        title: 'ยืนยันการลบ?',
+        text: "ต้องการลบรายการนี้ใช่หรือไม่?",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'ใช่, ลบเลย',
+        cancelButtonText: 'ยกเลิก',
+        reverseButtons: true
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            try {
+                // 1. ชี้ Reference ไปที่ Subcollection ของโต๊ะนั้นๆ
+                const orderRef = db.collection("tables").doc(String(tNo)).collection("orders").doc(docId);
+                const docSnap = await orderRef.get();
 
-            if (docSnap.exists) {
-                const data = docSnap.data();
+                if (docSnap.exists) {
+                    const data = docSnap.data();
 
-                // 2. เช็คว่าเป็นรายการเพิ่มจำนวนคนหรือไม่ เพื่อนำไปหักลบออกจากยอดรวมโต๊ะ
-                if (data.category === "เปิดโต๊ะ" || data.category === "เพิ่มลูกค้า" || (data.details && data.details.includes("ผู้ใหญ่"))) {
-                    let adultMatch = data.details ? data.details.match(/ผู้ใหญ่\s*(\d+)/) : null;
-                    let childMatch = data.details ? data.details.match(/เด็ก\s*(\d+)/) : null;
+                    // 2. เช็ครายการเพื่อนำไปหักลบจำนวนคนในโต๊ะ
+                    if (data.category === "เปิดโต๊ะ" || data.category === "เพิ่มลูกค้า" || (data.details && data.details.includes("ผู้ใหญ่"))) {
+                        let adultMatch = data.details ? data.details.match(/ผู้ใหญ่\s*(\d+)/) : null;
+                        let childMatch = data.details ? data.details.match(/เด็ก\s*(\d+)/) : null;
 
-                    let delAdult = adultMatch ? parseInt(adultMatch[1]) : 0;
-                    let delChild = childMatch ? parseInt(childMatch[1]) : 0;
+                        let delAdult = adultMatch ? parseInt(adultMatch[1]) : 0;
+                        let delChild = childMatch ? parseInt(childMatch[1]) : 0;
 
-                    // ถ้ามีจำนวนคน ให้ไปอัปเดตหักลบที่ Document ของโต๊ะ
-                    if (delAdult > 0 || delChild > 0) {
-                        const tableRef = db.collection("tables").doc(String(tNo));
-                        const tableDoc = await tableRef.get();
+                        if (delAdult > 0 || delChild > 0) {
+                            const tableRef = db.collection("tables").doc(String(tNo));
+                            const tableDoc = await tableRef.get();
 
-                        if (tableDoc.exists) {
-                            let tData = tableDoc.data();
-                            let newAdults = Math.max(0, (parseInt(tData.adults) || 0) - delAdult);
-                            let newChildren = Math.max(0, (parseInt(tData.children) || 0) - delChild);
-                            let newTotal = newAdults + newChildren;
+                            if (tableDoc.exists) {
+                                let tData = tableDoc.data();
+                                let newAdults = Math.max(0, (parseInt(tData.adults) || 0) - delAdult);
+                                let newChildren = Math.max(0, (parseInt(tData.children) || 0) - delChild);
+                                let newTotal = newAdults + newChildren;
 
-                            await tableRef.update({
-                                adults: newAdults,
-                                children: newChildren,
-                                totalPeople: newTotal,
-                                people: newTotal
-                            });
+                                await tableRef.update({
+                                    adults: newAdults,
+                                    children: newChildren,
+                                    totalPeople: newTotal,
+                                    people: newTotal
+                                });
+                            }
                         }
                     }
+
+                    // 3. ลบออเดอร์ออกจากระบบ
+                    await orderRef.delete();
+
+                    // กล่องแจ้งเตือนสำเร็จแบบเด้งแล้วหายไปเอง
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'ลบเรียบร้อยแล้ว!',
+                        timer: 1200,
+                        showConfirmButton: false
+                    }).then(() => {
+                        window.location.reload();
+                    });
+
+                } else {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'ไม่พบรายการนี้',
+                        text: 'รายการนี้อาจถูกลบไปแล้ว',
+                        confirmButtonText: 'ตกลง'
+                    }).then(() => {
+                        window.location.reload();
+                    });
                 }
 
-                // 3. ลบออเดอร์ออกจาก Subcollection จริง
-                await orderRef.delete();
-                alert("🗑️ ลบรายการเรียบร้อย!");
-
-                // 4. รีเฟรชหน้าจอใหม่เพื่ออัปเดตข้อมูล
-                window.location.reload();
-
-            } else {
-                alert("❌ ไม่พบรายการนี้ในระบบ (อาจถูกลบไปแล้ว)");
-                window.location.reload();
+            } catch (err) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: err.message,
+                    confirmButtonText: 'ตกลง'
+                });
             }
-
-        } catch (err) {
-            alert("❌ เกิดข้อผิดพลาด: " + err.message);
         }
-    }
+    });
 }
         
         function goCheckout() {
