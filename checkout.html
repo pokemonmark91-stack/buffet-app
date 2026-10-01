@@ -170,6 +170,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script>
+        // 1. ตั้งค่า Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -187,13 +188,18 @@
         let totalBillAmount = 0;
         let totalEarnedPoints = 0;
 
+        // คำดักจับสำรองกรณีไม่ได้บันทึก category ใน Firestore
+        const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
+        
         const drinkPrices = {
             "น้ำเปล่า": 10,
             "โซดา": 20,
             "โคล่า": 15,
             "น้ำส้ม": 15,
             "น้ำแดง": 15,
-            "น้ำเขียว": 15
+            "น้ำเขียว": 15,
+            "เอสใหญ่": 60,
+            "น้ำกระป๋อง": 30
         };
 
         window.onload = function() {
@@ -256,7 +262,7 @@
                     }
                 }
 
-                // B. ดึงรายการออเดอร์ใน Subcollection 'orders'
+                // B. ดึงรายการออเดอร์
                 let ordersSnap;
                 try {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
@@ -270,6 +276,7 @@
                         let amt = parseFloat(item.amount || item.price || item.totalAmount) || 0;
                         let title = item.action || item.menuName || item.name || "";
                         let details = item.details || "";
+                        let category = item.category || item.type || ""; 
 
                         // ข้ามรายการ "เปิดโต๊ะ" เพื่อไม่ให้คิดเงินซ้ำ
                         if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ")) {
@@ -277,13 +284,21 @@
                         }
 
                         // หมวด 2: ค่าเตา / ซุป
-                        if (title.includes("สั่งเตา") || details.includes("สั่งเตา") || details.includes("ซุป")) {
+                        if (title.includes("เตา") || details.includes("เตา") || details.includes("ซุป") || category.includes("เตา")) {
                             let name = details ? "สั่งเตา (" + details + ")" : title;
                             addItem(name, 1, amt, "stove");
                             return;
                         }
 
-                        // แยกแยะรายการเครื่องดื่ม และ รายการอาหาร
+                        // เช็กว่าเป็นหมวดหมู่เครื่องดื่มหรือไม่
+                        let isDrink = false;
+                        if (category === "เครื่องดื่ม" || category.includes("Drink") || category.includes("น้ำ")) {
+                            isDrink = true;
+                        } else {
+                            isDrink = drinkKeywords.some(kw => details.includes(kw) || title.includes(kw)); 
+                        }
+
+                        // แยกแยะและรวมรายการที่มี x จำนวน
                         if (details && (details.includes('x') || details.includes('X') || details.includes('×'))) {
                             let regex = /([^\d\s][^xX×\n\r]*?)\s*[xX×]\s*(\d+)/g;
                             let match;
@@ -297,30 +312,30 @@
 
                             if (itemsInBatch.length > 0) {
                                 itemsInBatch.forEach(it => {
-                                    if (drinkPrices[it.name] !== undefined) {
-                                        // หมวด 3: เครื่องดื่ม
-                                        addItem(it.name, it.qty, drinkPrices[it.name] * it.qty, "drink");
+                                    let itemAmt = 0;
+                                    
+                                    // หากเป็นเครื่องดื่ม ให้พยายามดึงราคาต่อขวดมาคำนวณใหม่เพื่อป้องกันยอด 0
+                                    if (isDrink && drinkPrices[it.name] !== undefined) {
+                                        itemAmt = drinkPrices[it.name] * it.qty;
                                     } else {
-                                        // หมวด 4: รายการอาหาร
-                                        let itemPrice = (itemsInBatch.length === 1) ? amt : 0;
-                                        addItem(it.name, it.qty, itemPrice, "food");
+                                        itemAmt = (itemsInBatch.length === 1) ? amt : 0;
+                                    }
+                                    
+                                    if (isDrink) {
+                                        addItem(it.name, it.qty, itemAmt, "drink");
+                                    } else {
+                                        addItem(it.name, it.qty, itemAmt, "food");
                                     }
                                 });
                             } else {
                                 let name = details || title || "สั่งอาหาร";
-                                if (drinkPrices[name] !== undefined) {
-                                    addItem(name, 1, drinkPrices[name], "drink");
-                                } else {
-                                    addItem(name, 1, amt, "food");
-                                }
+                                if (isDrink) addItem(name, 1, amt, "drink");
+                                else addItem(name, 1, amt, "food");
                             }
                         } else {
                             let name = details || title || "สั่งอาหาร";
-                            if (drinkPrices[name] !== undefined) {
-                                addItem(name, 1, drinkPrices[name], "drink");
-                            } else {
-                                addItem(name, 1, amt, "food");
-                            }
+                            if (isDrink) addItem(name, 1, amt, "drink");
+                            else addItem(name, 1, amt, "food");
                         }
                     });
                 }
@@ -337,7 +352,7 @@
                 // รายการอาหาร: จำนวนมากสุดขึ้นก่อน
                 foodItems.sort((a, b) => b.qty - a.qty);
 
-                // รวมลำดับ: ค่าหัว -> ค่าเตา -> เครื่องดื่ม -> รายการอาหาร
+                // นำมาต่อกัน: ค่าหัว -> ค่าเตา -> เครื่องดื่ม -> รายการอาหาร
                 let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
 
                 // D. แสดงผลบนใบเสร็จ
@@ -374,6 +389,7 @@
             }
         }
 
+        // ฟังก์ชันสร้างรายการสมาชิกที่ได้รับแต้ม
         function renderMembersList(members, totalPoints) {
             let container = document.getElementById('membersList');
             if (!members || members.length === 0) {
@@ -407,6 +423,7 @@
             container.innerHTML = html;
         }
 
+        // ฟังก์ชันคำนวณยอดสุทธิ
         function calculateNetTotal() {
             let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
             let discType = document.getElementById('discountType').value;
@@ -436,12 +453,14 @@
             calculateChange();
         }
 
+        // ฟังก์ชันเปิดปิดช่องรับเงินสด
         function toggleCashInput() {
             let payType = document.getElementById('payType').value;
             document.getElementById('cashInputDiv').style.display = (payType === "เงินสด") ? "block" : "none";
             calculateChange();
         }
 
+        // ฟังก์ชันคำนวณเงินทอน
         function calculateChange() {
             let payType = document.getElementById('payType').value;
             if (payType !== "เงินสด") return;
@@ -460,6 +479,7 @@
             }
         }
 
+        // ฟังก์ชันยืนยันรับชำระเงิน
         async function confirmPayment() {
             let net = parseFloat(document.getElementById('netTotalTxt').dataset.net) || 0;
             let payType = document.getElementById('payType').value;
@@ -478,6 +498,7 @@
                 let discTypeVal = document.getElementById('discountType').value;
                 let discText = discVal > 0 ? (discVal + " " + discTypeVal) : "ไม่มี";
 
+                // บันทึกลง checkouts
                 const checkoutRef = db.collection("checkouts").doc();
                 batch.set(checkoutRef, {
                     tableNo: currentTableId,
@@ -490,9 +511,11 @@
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
+                // ลบออเดอร์ปัจจุบันทิ้ง
                 const ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
                 ordersSnap.forEach(doc => batch.delete(doc.ref));
 
+                // เคลียร์โต๊ะให้ว่าง
                 const tableRef = db.collection("tables").doc(currentTableId);
                 batch.update(tableRef, {
                     status: "ว่าง",
@@ -503,6 +526,7 @@
                     packagePrice: 0
                 });
 
+                // เพิ่มแต้มให้สมาชิก
                 let inputs = document.querySelectorAll('.point-input');
                 inputs.forEach(inp => {
                     let uid = inp.getAttribute('data-uid');
