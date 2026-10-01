@@ -174,8 +174,23 @@
         let totalBillAmount = 0;
         let totalEarnedPoints = 0;
 
-        // คำดักจับสำรองกรณีเครื่องดื่ม
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
+
+        // พจนานุกรมราคากลางสำรอง (หาก Firestore ไม่พบบางเมนู)
+        const defaultDrinkPrices = {
+            "น้ำเปล่า": 10,
+            "โซดา": 20,
+            "เอสใหญ่": 30,
+            "น้ำกระป๋อง": 30,
+            "โคล่า": 15,
+            "โค้ก": 15,
+            "เป๊ปซี่": 15,
+            "สไปรท์": 15,
+            "น้ำส้ม": 15,
+            "น้ำแดง": 15,
+            "น้ำเขียว": 15,
+            "น้ำแข็ง": 10
+        };
 
         window.onload = function() {
             if (!currentTableId) {
@@ -199,9 +214,9 @@
         async function loadBillDetails() {
             try {
                 totalBillAmount = 0;
-                let itemsList = [];
+                let groupedItemsMap = {}; // เก็บข้อมูลรายการแบบรวมชื่อซ้ำ
 
-                // 🌟 Step 1: ดึงราคาเมนูกลางจากฐานข้อมูล Firebase (Collection 'menus')
+                // 1. ดึงราคากลางจากคอลเลกชัน 'menus' ใน Firebase
                 let dbMenuPrices = {};
                 try {
                     const menuSnap = await db.collection("menus").get();
@@ -210,25 +225,28 @@
                             let data = doc.data();
                             let mName = (data.name || data.menuName || "").trim();
                             let mPrice = parseFloat(data.price || data.amount) || 0;
-                            if (mName) {
-                                dbMenuPrices[mName] = mPrice;
-                            }
+                            if (mName) dbMenuPrices[mName] = mPrice;
                         });
                     }
                 } catch (err) {
                     console.warn("ไม่สามารถดึงข้อมูล menus master ได้:", err);
                 }
 
-                function addItem(name, qty, amt, type) {
-                    name = name.trim().replace(/^[,\-\+]\s*/, '');
+                function addOrUpdateGroupItem(name, qty, fixedAmt, type) {
+                    name = name.trim().replace(/^[,\-\+\s]+/, '');
                     if (!name) return;
-                    
-                    let existing = itemsList.find(i => i.name === name && i.type === type);
-                    if (existing) {
-                        existing.qty += qty;
-                        existing.amt += amt;
+
+                    let key = name + "_" + type;
+                    if (groupedItemsMap[key]) {
+                        groupedItemsMap[key].qty += qty;
+                        if (fixedAmt > 0) groupedItemsMap[key].fixedAmt += fixedAmt;
                     } else {
-                        itemsList.push({ name: name, qty: qty, amt: amt, type: type });
+                        groupedItemsMap[key] = {
+                            name: name,
+                            qty: qty,
+                            fixedAmt: fixedAmt,
+                            type: type
+                        };
                     }
                 }
 
@@ -243,14 +261,14 @@
                     const children = parseInt(tableData.children) || 0;
                     const pkgPrice = parseFloat(tableData.packagePrice) || 0;
 
-                    if (adults > 0 && pkgPrice > 0) addItem("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice, "head");
+                    if (adults > 0 && pkgPrice > 0) addOrUpdateGroupItem("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice, "head");
                     if (children > 0) {
                         const childPrice = parseFloat(tableData.childPackagePrice || tableData.childPrice) || (pkgPrice / 2);
-                        if (childPrice > 0) addItem("บุฟเฟต์เด็ก", children, children * childPrice, "head");
+                        if (childPrice > 0) addOrUpdateGroupItem("บุฟเฟต์เด็ก", children, children * childPrice, "head");
                     }
                 }
 
-                // B. ดึงข้อมูลออเดอร์ในโต๊ะ
+                // B. ดึงข้อมูลออเดอร์
                 let ordersSnap;
                 try {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
@@ -261,7 +279,7 @@
                 if (!ordersSnap.empty) {
                     ordersSnap.forEach(doc => {
                         let item = doc.data();
-                        let amt = parseFloat(item.amount || item.price || item.totalAmount) || 0;
+                        let orderAmt = parseFloat(item.amount || item.price || item.totalAmount) || 0;
                         let title = item.action || item.menuName || item.name || "";
                         let details = item.details || "";
                         let category = item.category || item.type || ""; 
@@ -271,7 +289,7 @@
                         // หมวดค่าเตา / ซุป
                         if (title.includes("เตา") || details.includes("เตา") || details.includes("ซุป") || category.includes("เตา")) {
                             let name = details ? "สั่งเตา (" + details + ")" : title;
-                            addItem(name, 1, amt, "stove");
+                            addOrUpdateGroupItem(name, 1, orderAmt, "stove");
                             return;
                         }
 
@@ -280,42 +298,50 @@
                         let textToParse = details || title;
                         textToParse = textToParse.replace(/^สั่งอาหาร\s*[\(\-]?.*?[\)\-]?\s*/, '').trim();
 
-                        // แกะรายการเมนูย่อย เช่น "น้ำเปล่า x 1 โซดา x 2" หรือ "หมูหมักงา x 2"
-                        let regex = /(.*?)\s*[xX×]\s*(\d+)/g;
+                        // แกะข้อความรายการอาหาร/เครื่องดื่ม เช่น "น้ำเปล่า x 1 โซดา x 2"
+                        let regex = /([^\d\s][^xX×\n\r,]*?)\s*[xX×]\s*(\d+)/g;
                         let match;
-                        let itemsInBatch = [];
+                        let parsedItems = [];
 
                         while ((match = regex.exec(textToParse)) !== null) {
-                            let itemName = match[1].replace(/^[,\-\+]\s*/, '').trim();
+                            let itemName = match[1].replace(/^[,\-\+\s]+/, '').trim();
                             let itemQty = parseInt(match[2]) || 1;
-                            if (itemName) itemsInBatch.push({ name: itemName, qty: itemQty });
+                            if (itemName) parsedItems.push({ name: itemName, qty: itemQty });
                         }
 
-                        if (itemsInBatch.length === 0 && textToParse) {
-                            itemsInBatch.push({ name: textToParse, qty: 1 });
+                        if (parsedItems.length === 0 && textToParse) {
+                            parsedItems.push({ name: textToParse, qty: 1 });
                         }
 
-                        // 🌟 Step 2: ค้นหาราคาจริงจากฐานข้อมูล Firebase Menu Master
-                        itemsInBatch.forEach(it => {
-                            let calculatedAmt = 0;
-
-                            // ถ้ามีราคาในฐานข้อมูล Firebase (เช่น น้ำเปล่า 10.- / โซดา 20.- / เอสใหญ่ 60.-)
-                            if (dbMenuPrices[it.name] !== undefined) {
-                                calculatedAmt = dbMenuPrices[it.name] * it.qty;
-                            } else if (itemsInBatch.length === 1) {
-                                // ถ้าไม่มีใน Firebase แต่สั่งมาเมนูเดียว ให้ใช้ราคาจากออเดอร์เดิม
-                                calculatedAmt = amt;
-                            } else {
-                                // ถ้าเป็นเมนู buffet ทั่วไป ราคาคือ 0
-                                calculatedAmt = 0;
-                            }
-
-                            addItem(it.name, it.qty, calculatedAmt, isDrink ? "drink" : "food");
+                        // เพิ่มเข้าแผนที่รวมรายการ
+                        parsedItems.forEach(it => {
+                            let type = isDrink ? "drink" : "food";
+                            // หากเป็นออเดอร์เดี่ยวไม่มีในราคามาตรฐาน ให้บันทึกราคาออเดอร์ตรงๆ
+                            let fixedAmt = (parsedItems.length === 1 && orderAmt > 0) ? orderAmt : 0;
+                            addOrUpdateGroupItem(it.name, it.qty, fixedAmt, type);
                         });
                     });
                 }
 
-                // C. จัดเรียงลำดับ (ค่าหัว -> ค่าเตา -> เครื่องดื่ม[ราคาสูงไปต่ำ] -> อาหาร[จำนวนมากไปน้อย])
+                // C. คำนวณราคาสุดท้ายจาก (ราคาต่อหน่วยใน Firebase * จำนวนรวม)
+                let itemsList = Object.values(groupedItemsMap).map(item => {
+                    let unitPrice = 0;
+                    if (item.type === "head" || item.type === "stove") {
+                        return { ...item, amt: item.fixedAmt };
+                    }
+
+                    // หาดึงราคาต่อหน่วยจาก Firebase -> Default Price
+                    if (dbMenuPrices[item.name] !== undefined) {
+                        unitPrice = dbMenuPrices[item.name];
+                    } else if (defaultDrinkPrices[item.name] !== undefined) {
+                        unitPrice = defaultDrinkPrices[item.name];
+                    }
+
+                    let calculatedAmt = (unitPrice > 0) ? (unitPrice * item.qty) : item.fixedAmt;
+                    return { ...item, amt: calculatedAmt };
+                });
+
+                // D. จัดเรียงลำดับ (ค่าหัว -> ค่าเตา -> เครื่องดื่ม [ราคาสูงไปต่ำ] -> อาหาร [จำนวนมากไปน้อย])
                 let headItems = itemsList.filter(i => i.type === 'head');
                 let stoveItems = itemsList.filter(i => i.type === 'stove');
                 let drinkItems = itemsList.filter(i => i.type === 'drink');
@@ -326,7 +352,7 @@
 
                 let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
 
-                // D. แสดงผลบนสลิปใบเสร็จ
+                // E. แสดงผลลงบนใบเสร็จ
                 let html = "";
                 finalOrderedItems.forEach(item => {
                     totalBillAmount += item.amt;
