@@ -535,100 +535,141 @@
         }
 
         async function confirmPayment() {
-            // 🌟 1. ตรวจสอบว่ารวมแจกแต้มเกินสิทธิ์หรือไม่
-            let pointInputs = document.querySelectorAll('.point-input');
-            let totalAssignedPoints = 0;
-            pointInputs.forEach(inp => totalAssignedPoints += parseInt(inp.value) || 0);
-            
-            if (totalAssignedPoints > totalEarnedPoints) {
-                return Swal.fire("แจ้งเตือน", `คุณแจกแต้มรวม (${totalAssignedPoints} แต้ม) เกินกว่าสิทธิ์ที่ได้รับ (${totalEarnedPoints} แต้ม)`, "warning");
-            }
+    // 🌟 1. ตรวจสอบว่ารวมแจกแต้มเกินสิทธิ์หรือไม่
+    let pointInputs = document.querySelectorAll('.point-input');
+    let totalAssignedPoints = 0;
+    
+    // 🌟 เพิ่ม: อาเรย์สำหรับเก็บข้อมูลว่าใครได้แต้มเท่าไหร่ เพื่อเอาไปโชว์ในบิลย้อนหลัง
+    let memberPointsAssigned = []; 
 
-            let net = parseFloat(document.getElementById('netTotalTxt').dataset.net) || 0;
-            let totalReceived = 0;
-            let paymentDetails = [];
-
-            let rows = document.querySelectorAll('.payment-row');
-            rows.forEach(r => {
-                let method = r.querySelector('.pay-method').value;
-                let amt = parseFloat(r.querySelector('.pay-amount').value) || 0;
-                if (amt > 0) {
-                    paymentDetails.push({ method: method, amount: amt });
-                    totalReceived += amt;
-                }
-            });
-
-            if (paymentDetails.length === 0 || totalReceived < net) {
-                return Swal.fire("แจ้งเตือน", "ยอดเงินที่ชำระรวมกันยังไม่ครบตามยอดสุทธิครับ", "warning");
-            }
-
-            document.getElementById('btnConfirm').disabled = true;
-            document.getElementById('btnConfirm').innerText = "กำลังบันทึกข้อมูล...";
-
-            try {
-                const batch = db.batch();
-                let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-                let discTypeVal = document.getElementById('discountType').value;
-                let discText = discVal > 0 ? (discVal + " " + discTypeVal) : "ไม่มี";
-
-                const checkoutRef = db.collection("checkouts").doc();
-                batch.set(checkoutRef, {
-                    tableNo: currentTableId,
-                    total: totalBillAmount,
-                    discount: discText,
-                    netTotal: net,
-                    payments: paymentDetails,
-                    totalReceived: totalReceived,
-                    change: totalReceived - net,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                const ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
-                ordersSnap.forEach(doc => batch.delete(doc.ref));
-
-                const tableRef = db.collection("tables").doc(currentTableId);
-                batch.update(tableRef, {
-                    status: "ว่าง",
-                    activeMembers: [],
-                    adults: 0,
-                    children: 0,
-                    totalPeople: 0,
-                    packagePrice: 0
-                });
-
-                let inputs = document.querySelectorAll('.point-input');
-                inputs.forEach(inp => {
-                    let uid = inp.getAttribute('data-uid');
-                    let pts = parseInt(inp.value) || 0;
-                    if (uid && pts > 0) {
-                        const memberRef = db.collection("members").doc(uid);
-                        batch.set(memberRef, { points: firebase.firestore.FieldValue.increment(pts) }, { merge: true });
-                    }
-                });
-
-                await batch.commit();
-
-                Swal.fire({
-                    title: "ชำระเงินสำเร็จ!",
-                    text: "ต้องการพิมพ์ใบเสร็จทันทีหรือไม่?",
-                    icon: "success",
-                    showCancelButton: true,
-                    confirmButtonText: "🖨 พิมพ์ใบเสร็จ",
-                    cancelButtonText: "กลับหน้าหลัก"
-                }).then((res) => {
-                    if (res.isConfirmed) {
-                        window.print();
-                    }
-                    window.location.href = "dashboard.html";
-                });
-
-            } catch (error) {
-                console.error("Payment error:", error);
-                Swal.fire("เกิดข้อผิดพลาด", "ไม่สามารถบันทึกการชำระเงินได้", "error");
-                document.getElementById('btnConfirm').disabled = false;
-                document.getElementById('btnConfirm').innerText = "✅ ยืนยันรับชำระเงิน และปิดโต๊ะ";
-            }
+    pointInputs.forEach(inp => {
+        let pts = parseInt(inp.value) || 0;
+        totalAssignedPoints += pts;
+        
+        // 🌟 เพิ่ม: เก็บข้อมูลสมาชิกที่จะได้แต้ม
+        let uid = inp.getAttribute('data-uid');
+        if (uid && pts > 0) {
+            // ดึงชื่อสมาชิก (สมมติว่าชื่ออยู่ในแท็กที่มี class .fw-bold ที่อยู่ใกล้เคียง)
+            let nameElem = inp.closest('.d-flex') ? inp.closest('.d-flex').querySelector('.fw-bold') : null;
+            let memberName = nameElem ? nameElem.innerText : "สมาชิก";
+            memberPointsAssigned.push({ uid: uid, name: memberName, points: pts });
         }
+    });
+    
+    if (totalAssignedPoints > totalEarnedPoints) {
+        return Swal.fire("แจ้งเตือน", `คุณแจกแต้มรวม (${totalAssignedPoints} แต้ม) เกินกว่าสิทธิ์ที่ได้รับ (${totalEarnedPoints} แต้ม)`, "warning");
+    }
+
+    let net = parseFloat(document.getElementById('netTotalTxt').dataset.net) || 0;
+    let totalReceived = 0;
+    let paymentDetails = [];
+
+    let rows = document.querySelectorAll('.payment-row');
+    rows.forEach(r => {
+        let method = r.querySelector('.pay-method').value;
+        let amt = parseFloat(r.querySelector('.pay-amount').value) || 0;
+        if (amt > 0) {
+            paymentDetails.push({ method: method, amount: amt });
+            totalReceived += amt;
+        }
+    });
+
+    if (paymentDetails.length === 0 || totalReceived < net) {
+        return Swal.fire("แจ้งเตือน", "ยอดเงินที่ชำระรวมกันยังไม่ครบตามยอดสุทธิครับ", "warning");
+    }
+
+    document.getElementById('btnConfirm').disabled = true;
+    document.getElementById('btnConfirm').innerText = "กำลังบันทึกข้อมูล...";
+
+    try {
+        const batch = db.batch();
+        let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
+        let discTypeVal = document.getElementById('discountType').value;
+        let discText = discVal > 0 ? (discVal + " " + discTypeVal) : "ไม่มี";
+
+        // 🌟 เพิ่ม: ดึงข้อมูลรายการอาหารจากหน้าจอใบเสร็จฝั่งซ้าย
+        let orderedItemsDetails = [];
+        let receiptListItems = document.querySelectorAll('#receiptItems li');
+        receiptListItems.forEach(li => {
+            let nameSpan = li.querySelector('div span:first-child');
+            let qtySpan = li.querySelector('.badge');
+            let priceSpan = li.querySelectorAll('span.fw-bold')[1]; // ราคาปกติจะอยู่ขวาสุด
+
+            if (nameSpan && priceSpan) {
+                let name = nameSpan.innerText;
+                let qty = qtySpan ? qtySpan.innerText.replace('x ', '').trim() : "1";
+                let priceText = priceSpan.innerText.replace(' บ.', '').replace(/,/g, '').trim();
+                let price = parseFloat(priceText) || 0;
+                
+                orderedItemsDetails.push({ name: name, qty: qty, price: price });
+            }
+        });
+
+        // 🌟 เพิ่ม: ดึงข้อมูลกะที่เปิดอยู่ (เพื่อดูว่าใครเก็บเงินบิลนี้)
+        let shiftId = localStorage.getItem('currentShiftId') || "ไม่มีข้อมูลกะ";
+
+        const checkoutRef = db.collection("checkouts").doc();
+        batch.set(checkoutRef, {
+            tableNo: currentTableId,
+            total: totalBillAmount,
+            discount: discText,
+            netTotal: net,
+            payments: paymentDetails,
+            totalReceived: totalReceived,
+            change: totalReceived - net,
+            items: orderedItemsDetails, // 🌟 เพิ่ม: ส่งรายการอาหารเข้า Firestore
+            membersRewarded: memberPointsAssigned, // 🌟 เพิ่ม: ส่งรายชื่อคนที่ได้แต้มเข้า Firestore
+            shiftId: shiftId, // 🌟 เพิ่ม: ส่ง ID กะ
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        const ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
+        ordersSnap.forEach(doc => batch.delete(doc.ref));
+
+        const tableRef = db.collection("tables").doc(currentTableId);
+        batch.update(tableRef, {
+            status: "ว่าง",
+            activeMembers: [],
+            adults: 0,
+            children: 0,
+            totalPeople: 0,
+            packagePrice: 0
+        });
+
+        let inputs = document.querySelectorAll('.point-input');
+        inputs.forEach(inp => {
+            let uid = inp.getAttribute('data-uid');
+            let pts = parseInt(inp.value) || 0;
+            if (uid && pts > 0) {
+                const memberRef = db.collection("members").doc(uid);
+                batch.set(memberRef, { points: firebase.firestore.FieldValue.increment(pts) }, { merge: true });
+            }
+        });
+
+        await batch.commit();
+
+        Swal.fire({
+            title: "ชำระเงินสำเร็จ!",
+            text: "ต้องการพิมพ์ใบเสร็จทันทีหรือไม่?",
+            icon: "success",
+            showCancelButton: true,
+            confirmButtonText: "🖨 พิมพ์ใบเสร็จ",
+            cancelButtonText: "กลับหน้าหลัก"
+        }).then((res) => {
+            if (res.isConfirmed) {
+                window.print();
+            }
+            window.location.href = "dashboard.html";
+        });
+
+    } catch (error) {
+        console.error("Payment error:", error);
+        Swal.fire("เกิดข้อผิดพลาด", "ไม่สามารถบันทึกการชำระเงินได้", "error");
+        document.getElementById('btnConfirm').disabled = false;
+        document.getElementById('btnConfirm').innerText = "✅ ยืนยันรับชำระเงิน และปิดโต๊ะ";
+    }
+}
+        
     </script>
 </body>
 </html>
