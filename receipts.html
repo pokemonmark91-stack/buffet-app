@@ -37,13 +37,16 @@
             apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
             projectId: "buffet-system-9b165",
-            // ... (ใส่ config ให้ครบ)
+            storageBucket: "buffet-system-9b165.firebasestorage.app",
+            messagingSenderId: "144497251618",
+            appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+            measurementId: "G-82JK3EL1HL"
         };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
         // --- เปลี่ยน LIFF ID ตรงนี้ ---
-        const LIFF_ID = "YOUR_LIFF_ID"; // แทนที่ด้วย Liff ID สำหรับเมนู "ใบเสร็จ"
+        const LIFF_ID = "2011490016-qnih1RGR"; // แทนที่ด้วย Liff ID สำหรับเมนู "ใบเสร็จ"
 
         async function initLiff() {
             try {
