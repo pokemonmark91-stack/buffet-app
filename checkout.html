@@ -436,7 +436,9 @@
                 if (!html) html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
 
                 document.getElementById('receiptItems').innerHTML = html;
-                document.getElementById('subTotalTxt').innerText = Math.round(totalBillAmount).toLocaleString() + " บาท";
+                
+                totalBillAmount = Math.round(totalBillAmount);
+                document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
                 totalEarnedPoints = Math.floor(totalBillAmount / 100);
                 document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
