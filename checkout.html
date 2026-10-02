@@ -485,30 +485,34 @@
         }
 
         function calculateNetTotal() {
-            let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-            let discType = document.getElementById('discountType').value;
-            let net = totalBillAmount;
-            let discountAmount = 0;
+    let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
+    let discType = document.getElementById('discountType').value;
+    let net = totalBillAmount;
+    let discountAmount = 0;
 
-            if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
-            else discountAmount = discVal;
+    if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
+    else discountAmount = discVal;
 
-            net = totalBillAmount - discountAmount;
-            net = net < 0 ? 0 : net;
+    net = totalBillAmount - discountAmount;
+    net = net < 0 ? 0 : net;
 
-            let discRow = document.getElementById('discountRow');
-            if (discountAmount > 0) {
-                discRow.style.display = 'flex';
-                document.getElementById('discountTxt').innerText = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
-            } else {
-                discRow.style.display = 'none';
-            }
+    // 🌟 แก้ไขตรงนี้: ปัดเศษ net ให้เป็นจำนวนเต็มลงตัวทันที
+    net = Math.round(net);
 
-            document.getElementById('netTotalTxt').innerText = Math.round(net).toLocaleString() + " บาท";
-            document.getElementById('receiptNetTotal').innerText = Math.round(net).toLocaleString() + " บาท";
-            document.getElementById('netTotalTxt').dataset.net = net;
-            calculateSplitPayment();
-        }
+    let discRow = document.getElementById('discountRow');
+    if (discountAmount > 0) {
+        discRow.style.display = 'flex';
+        document.getElementById('discountTxt').innerText = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
+    } else {
+        discRow.style.display = 'none';
+    }
+
+    document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
+    document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
+    document.getElementById('netTotalTxt').dataset.net = net; // ตอนนี้ค่าใน dataset.net จะเป็นจำนวนเต็มลงตัวแล้ว (เช่น 717)
+    
+    calculateSplitPayment();
+}
 
         // คำนวณผลรวมจากการแบ่งจ่ายหลายช่องทาง
         function calculateSplitPayment() {
