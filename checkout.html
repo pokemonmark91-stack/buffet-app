@@ -210,9 +210,7 @@
             const now = new Date();
             document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
 
-            // สร้างแถวรับเงินช่องแรกเริ่มต้น
-            addPaymentRow('เงินสด', '');
-
+            addPaymentRow('เงินโอน', '');
             loadBillDetails();
         };
 
@@ -296,6 +294,7 @@
                     }
                 }
 
+                // A. ดึงข้อมูลโต๊ะ (เพื่อนำมาคิดค่าหัวบุฟเฟต์)
                 const tableDoc = await db.collection("tables").doc(currentTableId).get();
                 let activeMembers = [];
                 
@@ -313,6 +312,7 @@
                     }
                 }
 
+                // B. ดึงข้อมูลออเดอร์
                 let ordersSnap;
                 try {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
@@ -328,8 +328,14 @@
                         let details = item.details || "";
                         let category = item.category || item.type || ""; 
 
-                        if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ")) return;
+                        // 🌟 แก้ไข: ซ่อนรายการ "เปิดโต๊ะ" และ "เพิ่มลูกค้า" (และคำที่เกี่ยวข้อง) ไม่นำมาคิดเงินซ้ำ
+                        if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ") ||
+                            title.includes("เพิ่มลูกค้า") || details.includes("เพิ่มลูกค้า") ||
+                            title.includes("เพิ่มผู้ใหญ่") || title.includes("เพิ่มเด็ก")) {
+                            return; 
+                        }
 
+                        // หมวดค่าเตา / ซุป
                         if (title.includes("เตา") || details.includes("เตา") || details.includes("ซุป") || category.includes("เตา")) {
                             let name = details ? "สั่งเตา (" + details + ")" : title;
                             addOrUpdateGroupItem(name, 1, orderAmt, "stove");
@@ -532,7 +538,7 @@
                     total: totalBillAmount,
                     discount: discText,
                     netTotal: net,
-                    payments: paymentDetails, // บันทึกข้อมูลการแบ่งจ่ายหลายช่องทาง
+                    payments: paymentDetails, // บันทึกข้อมูลการแบ่งจ่าย
                     totalReceived: totalReceived,
                     change: totalReceived - net,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
