@@ -261,6 +261,35 @@
             calculateSplitPayment();
         }
 
+        // 🌟 ฟังก์ชันตรวจสอบไม่ให้พิมพ์แต้มเกินยอดรวมแบบ Real-time
+        function checkPointLimit(changedInput) {
+            let inputs = document.querySelectorAll('.point-input');
+            let totalAssigned = 0;
+            
+            inputs.forEach(inp => {
+                if(inp !== changedInput) {
+                    totalAssigned += parseInt(inp.value) || 0;
+                }
+            });
+            
+            let maxAllowed = totalEarnedPoints - totalAssigned;
+            if (maxAllowed < 0) maxAllowed = 0;
+
+            let currentValue = parseInt(changedInput.value) || 0;
+            
+            if (currentValue > maxAllowed) {
+                changedInput.value = maxAllowed;
+                Swal.fire({
+                    toast: true,
+                    position: 'top',
+                    icon: 'warning',
+                    title: `แจกแต้มรวมได้ไม่เกิน ${totalEarnedPoints} แต้ม`,
+                    showConfirmButton: false,
+                    timer: 2000
+                });
+            }
+        }
+
         async function loadBillDetails() {
             try {
                 totalBillAmount = 0;
@@ -328,7 +357,7 @@
                         let details = item.details || "";
                         let category = item.category || item.type || ""; 
 
-                        // 🌟 แก้ไข: ซ่อนรายการ "เปิดโต๊ะ" และ "เพิ่มลูกค้า" (และคำที่เกี่ยวข้อง) ไม่นำมาคิดเงินซ้ำ
+                        // 🌟 ซ่อนรายการ "เปิดโต๊ะ" และ "เพิ่มลูกค้า" (และคำที่เกี่ยวข้อง) ไม่นำมาคิดเงินซ้ำ
                         if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ") ||
                             title.includes("เพิ่มลูกค้า") || details.includes("เพิ่มลูกค้า") ||
                             title.includes("เพิ่มผู้ใหญ่") || title.includes("เพิ่มเด็ก")) {
@@ -445,8 +474,9 @@
                                 "</div>" +
                             "</div>" +
                             "<div class='d-flex align-items-center gap-1' style='width: 100px;'>" +
+                                // 🌟 เช็กการพิมพ์แต้มด้วย checkPointLimit(this)
                                 "<input type='number' class='form-control form-control-sm text-center fw-bold point-input' " +
-                                       "data-uid='" + uid + "' value='" + defaultPoints + "' min='0'>" +
+                                       "data-uid='" + uid + "' value='" + defaultPoints + "' min='0' oninput='checkPointLimit(this)'>" +
                                 "<span class='small text-muted'>แต้ม</span>" +
                             "</div>" +
                         "</div>";
@@ -505,6 +535,15 @@
         }
 
         async function confirmPayment() {
+            // 🌟 1. ตรวจสอบว่ารวมแจกแต้มเกินสิทธิ์หรือไม่
+            let pointInputs = document.querySelectorAll('.point-input');
+            let totalAssignedPoints = 0;
+            pointInputs.forEach(inp => totalAssignedPoints += parseInt(inp.value) || 0);
+            
+            if (totalAssignedPoints > totalEarnedPoints) {
+                return Swal.fire("แจ้งเตือน", `คุณแจกแต้มรวม (${totalAssignedPoints} แต้ม) เกินกว่าสิทธิ์ที่ได้รับ (${totalEarnedPoints} แต้ม)`, "warning");
+            }
+
             let net = parseFloat(document.getElementById('netTotalTxt').dataset.net) || 0;
             let totalReceived = 0;
             let paymentDetails = [];
@@ -538,7 +577,7 @@
                     total: totalBillAmount,
                     discount: discText,
                     netTotal: net,
-                    payments: paymentDetails, // บันทึกข้อมูลการแบ่งจ่าย
+                    payments: paymentDetails,
                     totalReceived: totalReceived,
                     change: totalReceived - net,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
