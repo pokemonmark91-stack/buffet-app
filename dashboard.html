@@ -133,25 +133,39 @@
                     </div>
                     <div>
                         <h6 class="m-0 text-white-50 small">สถานะกะ</h6>
-                        <span class="badge bg-success rounded-pill px-3 py-1 fw-normal">กำลังเปิดกะ (กำลังโหลด...)</span>
+                        <span id="shiftStatusBadge" class="badge bg-secondary rounded-pill px-3 py-1 fw-normal">กำลังตรวจสอบ...</span>
                     </div>
                 </div>
             </div>
             
-            <div class="mb-4">
+            <div class="mb-2">
                 <span class="text-white-50">พนักงานรับผิดชอบ:</span> 
                 <span class="text-info fw-bold fs-5 ms-2"><i class="bi bi-person-circle"></i> เรย์</span>
             </div>
+
+            <!-- เพิ่มส่วนแสดงยอดเงินสดในกะปัจจุบัน -->
+            <div class="mb-3 p-2 bg-dark bg-opacity-50 rounded border border-secondary" id="cashSummaryBox" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-white-50 small">💵 เงินสดสะสมในกะนี้:</span>
+                    <span id="expectedCashText" class="text-success fw-bold fs-5">0.00 ฿</span>
+                </div>
+            </div>
             
-            <div class="d-flex flex-wrap gap-2">
-                <button class="btn btn-danger px-4 rounded-3" onclick="closeShift()">
+            <!-- ปุ่มควบคุมกะ (แยกเปิด/ปิด ชัดเจน) -->
+            <div class="d-flex flex-wrap gap-2" id="shiftActionButtons">
+                <!-- ปุ่มเปิดกะ (จะแสดงเฉพาะตอนยังไม่เปิดกะ) -->
+                <button id="btnOpenShift" class="btn btn-warning px-4 rounded-3 fw-bold text-dark" style="display: none;" onclick="openShiftPrompt()">
+                    <i class="bi bi-play-circle-fill"></i> เปิดกะ
+                </button>
+                <!-- ปุ่มปิดกะ (จะแสดงเฉพาะตอนเปิดกะอยู่) -->
+                <button id="btnCloseShift" class="btn btn-danger px-4 rounded-3" style="display: none;" onclick="closeShift()">
                     <i class="bi bi-power"></i> ปิดกะ
                 </button>
-                <button class="btn btn-shift-action px-3" onclick="addCashFlow()">
+                <button id="btnCashFlow" class="btn btn-shift-action px-3" style="display: none;" onclick="addCashFlow()">
                     <i class="bi bi-cash-coin text-success"></i> เงินเข้า-ออก
                 </button>
                 <a href="admin_history.html" class="btn btn-shift-action px-3">
-                <i class="bi bi-receipt text-warning"></i> บิลย้อนหลัง
+                    <i class="bi bi-receipt text-warning"></i> บิลย้อนหลัง
                 </a>
             </div>
         </div>
@@ -245,6 +259,8 @@
     let selectedTableId = null;
     let currentShiftId = null;
     let modal = null;
+    let unsubCashFlow = null;
+    let unsubCheckouts = null;
 
     // โค้ดป้องกันหน้าต่าง Modal แย่ง Focus จาก SweetAlert (ทำให้พิมพ์ข้อความได้)
     document.addEventListener('focusin', function (e) {
@@ -259,30 +275,129 @@
         listenToTables();
     };
 
-    // --- 1. ระบบจัดการกะ (Shift) ---
+    // --- 1. ระบบจัดการกะ (Shift) และคำนวณเงินสดเรียลไทม์ ---
     function initShiftStatus() {
         db.collection("shifts").where("status", "==", "open").limit(1).onSnapshot(snapshot => {
-            const badge = document.querySelector('.shift-card .badge');
-            const staffEl = document.querySelector('.shift-card .text-info');
+            const badge = document.getElementById('shiftStatusBadge');
+            const btnOpen = document.getElementById('btnOpenShift');
+            const btnClose = document.getElementById('btnCloseShift');
+            const btnCashFlow = document.getElementById('btnCashFlow');
+            const cashSummaryBox = document.getElementById('cashSummaryBox');
+
+            // ยกเลิก listener เก่าถ้ามี
+            if (unsubCashFlow) unsubCashFlow();
+            if (unsubCheckouts) unsubCheckouts();
+
             if (!snapshot.empty) {
                 const shiftDoc = snapshot.docs[0];
                 currentShiftId = shiftDoc.id;
-                const data = shiftDoc.data();
-                if (badge) {
-                    badge.className = "badge bg-success rounded-pill px-3 py-1 fw-normal";
-                    badge.innerText = `กำลังเปิดกะ (${currentShiftId.substring(0, 12)}...)`;
-                }
-                if (staffEl) {
-                    staffEl.innerHTML = `<i class="bi bi-person-circle"></i> ${data.staffName || 'เรย์'}`;
-                }
+                const shiftData = shiftDoc.data();
+                
+                // อัปเดตสถานะ UI เป็นเปิดกะ
+                badge.className = "badge bg-success rounded-pill px-3 py-1 fw-normal";
+                badge.innerText = `กำลังเปิดกะ (${currentShiftId.substring(0, 8)}...)`;
+                
+                btnOpen.style.display = 'none';
+                btnClose.style.display = 'inline-block';
+                btnCashFlow.style.display = 'inline-block';
+                cashSummaryBox.style.display = 'block';
+
+                // คำนวณยอดเงินสดในกะนี้แบบเรียลไทม์
+                calculateShiftCash(currentShiftId, shiftData.timestamp);
+
             } else {
                 currentShiftId = null;
-                if (badge) {
-                    badge.className = "badge bg-danger rounded-pill px-3 py-1 fw-normal";
-                    badge.innerText = "ยังไม่เปิดกะ";
-                }
+                badge.className = "badge bg-danger rounded-pill px-3 py-1 fw-normal";
+                badge.innerText = "ยังไม่เปิดกะ";
+                
+                // สลับปุ่มให้โชว์ปุ่มเปิดกะ
+                btnOpen.style.display = 'inline-block';
+                btnClose.style.display = 'none';
+                btnCashFlow.style.display = 'none';
+                cashSummaryBox.style.display = 'none';
             }
         });
+    }
+
+    // ฟังก์ชันคำนวณยอดเงินสดสะสมในกะ (จากบิลเงินสด + รายการเงินเข้า/ออก)
+    function calculateShiftCash(shiftId, shiftStartTime) {
+        let cashFromCheckouts = 0;
+        let cashFlowTotal = 0;
+
+        // 1. ดึงบิลเช็คเอาต์ที่เกิดขึ้นหลังจากเปิดกะนี้
+        unsubCheckouts = db.collection("checkouts")
+            .where("timestamp", ">=", shiftStartTime)
+            .onSnapshot(checkoutSnap => {
+                cashFromCheckouts = 0;
+                checkoutSnap.forEach(doc => {
+                    let data = doc.data();
+                    // ตรวจสอบช่องทางการชำระเงินว่าเป็นเงินสดหรือไม่
+                    if (data.payments && Array.isArray(data.payments)) {
+                        data.payments.forEach(p => {
+                            if (p.method === 'เงินสด' || p.method === 'cash') {
+                                cashFromCheckouts += Number(p.amount || 0);
+                            }
+                        });
+                    } else if (data.totalReceived) {
+                        // รองรับบิลเก่าที่เก็บ totalReceived รวม
+                        cashFromCheckouts += Number(data.totalReceived || 0) - Number(data.change || 0);
+                    }
+                });
+                updateExpectedCashDisplay(cashFromCheckouts, cashFlowTotal);
+            });
+
+        // 2. ดึงรายการเงินเข้า-ออก (Cash In / Cash Out) ของกะนี้
+        unsubCashFlow = db.collection("cash_flows")
+            .where("shiftId", "==", shiftId)
+            .onSnapshot(flowSnap => {
+                cashFlowTotal = 0;
+                flowSnap.forEach(doc => {
+                    let data = doc.data();
+                    let amt = Number(data.amount || 0);
+                    if (data.type === 'in') {
+                        cashFlowTotal += amt;
+                    } else if (data.type === 'out') {
+                        cashFlowTotal -= amt;
+                    }
+                });
+                updateExpectedCashDisplay(cashFromCheckouts, cashFlowTotal);
+            });
+    }
+
+    function updateExpectedCashDisplay(checkoutCash, flowCash) {
+        let totalExpected = checkoutCash + flowCash;
+        const textEl = document.getElementById('expectedCashText');
+        if (textEl) {
+            textEl.innerText = `${totalExpected.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ฿`;
+        }
+    }
+
+    // --- ฟังก์ชันเปิดกะใหม่ ---
+    async function openShiftPrompt() {
+        const { value: staffName } = await Swal.fire({
+            title: '🟢 เปิดกะการทำงาน',
+            input: 'text',
+            inputLabel: 'ชื่อพนักงานผู้เปิดกะ:',
+            inputValue: 'เรย์',
+            showCancelButton: true,
+            confirmButtonText: 'ยืนยันเปิดกะ',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#198754'
+        });
+
+        if (staffName) {
+            try {
+                const newShiftRef = db.collection("shifts").doc();
+                await newShiftRef.set({
+                    status: 'open',
+                    staffName: staffName,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                Swal.fire({ icon: 'success', title: 'เปิดกะสำเร็จ', timer: 1500, showConfirmButton: false });
+            } catch (error) {
+                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเปิดกะได้: ' + error.message, 'error');
+            }
+        }
     }
 
     // --- 2. ฟังก์ชันปิดกะ (SweetAlert2) ---
@@ -299,7 +414,7 @@
                     <span style="cursor: pointer; font-size: 1.5rem;" onclick="Swal.close()">✕</span>
                 </div>
                 <div style="background-color: #fff8e1; color: #856404; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; text-align: left; border: 1px solid #ffeeba;">
-                    กรุณานับเงินสดจริงทั้งหมดที่มีอยู่ในลิ้นชัก ณ ตอนนี้ แล้วระบุลงในช่องด้านล่าง
+                    กรุณานับเงินสดจริงทั้งหมดที่มีอยู่ในลิ้นชัก ณ ตอนนี้ แล้วระบุลงในช่องด้านล่างเพื่อเทียบยอด
                 </div>
                 <div style="text-align: left;">
                     <label style="font-weight: bold; margin-bottom: 5px; display: block; color: #333;">เงินสดในลิ้นชักที่นับได้จริง (บาท):</label>
@@ -397,7 +512,7 @@
         }
     }
 
-    // --- 4. ระบบเปิดหน้าจัดการสมาชิกร่วมโต๊ะ (ตามภาพต้นฉบับ 100%) ---
+    // --- 4. ระบบเปิดหน้าจัดการสมาชิกร่วมโต๊ะ ---
     async function openTableMembers() {
         if (!selectedTableId) return;
         if (modal) modal.hide();
@@ -460,14 +575,14 @@
                 let members = doc.data().activeMembers || [];
                 members.splice(index, 1);
                 await tableRef.update({ activeMembers: members });
-                openTableMembers(); // รีโหลดแสดงผลใหม่ทันที
+                openTableMembers();
             }
         } catch (error) {
             alert('เกิดข้อผิดพลาดในการลบสมาชิก');
         }
     }
 
-    // --- 5. ระบบผังโต๊ะ (ดึงตรงจาก Firestore) ---
+    // --- 5. ระบบผังโต๊ะ ---
     function listenToTables() {
         db.collection("tables").onSnapshot(snapshot => {
             const container = document.getElementById('tableContainer');
@@ -479,7 +594,6 @@
                 tablesArray.push({ tableId: doc.id, ...doc.data() });
             });
 
-            // เรียงลำดับเลขโต๊ะตามตัวเลข 1, 2, 3...
             tablesArray.sort((a, b) => parseInt(a.tableId) - parseInt(b.tableId));
 
             tablesArray.forEach(table => {
@@ -513,7 +627,6 @@
         });
     }
 
-    // --- 6. ปุ่มเพิ่ม/ลด โต๊ะ และการจัดการอื่นๆ ---
     function removeLastTable() {
         db.collection("tables").get().then(snap => {
             if (snap.empty) return;
@@ -557,23 +670,18 @@
         }
     }
 
-        // --- ฟังก์ชันย้ายโต๊ะ (แสดงตัวเลือกเฉพาะโต๊ะว่าง) ---
     async function moveTablePrompt() {
         if (!selectedTableId) return;
 
         try {
-            // 1. ดึงข้อมูลโต๊ะทั้งหมดจาก Firestore เพื่อหาโต๊ะที่ว่าง
             const snapshot = await db.collection("tables").get();
             let freeTablesOptions = {};
-
-            // แปลง snapshot เป็น array เพื่อนำมาเรียงลำดับเลขโต๊ะก่อน
             let tablesList = [];
             snapshot.forEach(doc => {
                 tablesList.push({ tableId: doc.id, ...doc.data() });
             });
             tablesList.sort((a, b) => parseInt(a.tableId) - parseInt(b.tableId));
 
-            // คัดเลือกเฉพาะโต๊ะที่ว่าง และไม่ใช่โต๊ะปัจจุบัน
             tablesList.forEach(table => {
                 const isBusy = table.status === 'busy' || table.status === 'ไม่ว่าง' || (table.people && parseInt(table.people) > 0);
                 if (table.tableId !== selectedTableId && !isBusy) {
@@ -581,12 +689,10 @@
                 }
             });
 
-            // เช็กว่ามีโต๊ะว่างให้ย้ายไหม
             if (Object.keys(freeTablesOptions).length === 0) {
                 return Swal.fire('แจ้งเตือน', 'ไม่มีโต๊ะว่างสำหรับย้ายในขณะนี้', 'warning');
             }
 
-            // 2. แสดง SweetAlert2 พร้อมดรอปดาวน์เลือกโต๊ะว่าง
             const { value: targetTable } = await Swal.fire({
                 title: 'ย้ายโต๊ะ',
                 text: `ต้องการย้ายจากโต๊ะ ${selectedTableId} ไปยังโต๊ะใด?`,
@@ -600,15 +706,12 @@
                 confirmButtonColor: '#7066e0',
                 cancelButtonColor: '#6c757d',
                 inputValidator: (value) => {
-                    if (!value) {
-                        return 'กรุณาเลือกโต๊ะปลายทาง!';
-                    }
+                    if (!value) return 'กรุณาเลือกโต๊ะปลายทาง!';
                 }
             });
 
             if (!targetTable) return;
 
-            // 3. ย้ายข้อมูลโต๊ะและออเดอร์ทั้งหมดใน Firestore
             const oldTableRef = db.collection("tables").doc(selectedTableId);
             const newTableRef = db.collection("tables").doc(targetTable);
 
@@ -617,21 +720,9 @@
             const tableData = currentDoc.data();
 
             const batch = db.batch();
+            batch.set(newTableRef, { ...tableData, id: parseInt(targetTable) });
+            batch.update(oldTableRef, { status: 'free', people: 0, activeMembers: [] });
 
-            // คัดลอกข้อมูลไปยังโต๊ะใหม่
-            batch.set(newTableRef, {
-                ...tableData,
-                id: parseInt(targetTable)
-            });
-
-            // คืนค่าให้โต๊ะเดิมเป็นโต๊ะว่าง
-            batch.update(oldTableRef, {
-                status: 'free',
-                people: 0,
-                activeMembers: []
-            });
-
-            // ย้ายรายการออเดอร์ย่อย (Subcollection orders) ทั้งหมด
             const ordersSnap = await oldTableRef.collection("orders").get();
             ordersSnap.forEach(doc => {
                 batch.set(newTableRef.collection("orders").doc(doc.id), doc.data());
@@ -639,7 +730,6 @@
             });
 
             await batch.commit();
-
             if (modal) modal.hide();
             Swal.fire('สำเร็จ', `ย้ายจากโต๊ะ ${selectedTableId} ไปโต๊ะ ${targetTable} เรียบร้อยแล้ว`, 'success');
 
@@ -648,48 +738,47 @@
             Swal.fire("เกิดข้อผิดพลาด", "ไม่สามารถย้ายโต๊ะได้: " + error.message, "error");
         }
     }
+
     async function cancelTablePrompt() {
-    const { value: reason } = await Swal.fire({
-        title: 'ยกเลิกโต๊ะ',
-        text: `ระบุเหตุผลการยกเลิกโต๊ะ ${selectedTableId}:`,
-        icon: 'warning',
-        input: 'text',
-        inputPlaceholder: 'เช่น ลูกค้าเปลี่ยนใจ, พิมพ์ผิด...',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'ยืนยันยกเลิกโต๊ะ',
-        cancelButtonText: 'ยกเลิก',
-        inputValidator: (value) => {
-            if (!value) {
-                return 'กรุณาระบุเหตุผล!';
+        const { value: reason } = await Swal.fire({
+            title: 'ยกเลิกโต๊ะ',
+            text: `ระบุเหตุผลการยกเลิกโต๊ะ ${selectedTableId}:`,
+            icon: 'warning',
+            input: 'text',
+            inputPlaceholder: 'เช่น ลูกค้าเปลี่ยนใจ, พิมพ์ผิด...',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'ยืนยันยกเลิกโต๊ะ',
+            cancelButtonText: 'ยกเลิก',
+            inputValidator: (value) => {
+                if (!value) return 'กรุณาระบุเหตุผล!';
+            }
+        });
+
+        if (reason) {
+            try {
+                const tableRef = db.collection("tables").doc(selectedTableId);
+                const batch = db.batch();
+
+                batch.update(tableRef, { status: 'free', people: 0, activeMembers: [] });
+                batch.set(db.collection("void_logs").doc(), {
+                    tableId: selectedTableId,
+                    reason: reason,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                const ordersSnap = await tableRef.collection("orders").get();
+                ordersSnap.forEach(doc => batch.delete(doc.ref));
+
+                await batch.commit();
+                if (modal) modal.hide();
+                Swal.fire('สำเร็จ', 'ยกเลิกโต๊ะเรียบร้อยแล้ว', 'success');
+            } catch (error) {
+                Swal.fire("เกิดข้อผิดพลาด", "เกิดข้อผิดพลาดในการยกเลิกโต๊ะ", "error");
             }
         }
-    });
-
-    if (reason) {
-        try {
-            const tableRef = db.collection("tables").doc(selectedTableId);
-            const batch = db.batch();
-
-            batch.update(tableRef, { status: 'free', people: 0 });
-            batch.set(db.collection("void_logs").doc(), {
-                tableId: selectedTableId,
-                reason: reason,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-
-            const ordersSnap = await tableRef.collection("orders").get();
-            ordersSnap.forEach(doc => batch.delete(doc.ref));
-
-            await batch.commit();
-            if (modal) modal.hide();
-            Swal.fire('สำเร็จ', 'ยกเลิกโต๊ะเรียบร้อยแล้ว', 'success');
-        } catch (error) {
-            Swal.fire("เกิดข้อผิดพลาด", "เกิดข้อผิดพลาดในการยกเลิกโต๊ะ", "error");
-        }
     }
-}
 </script>
 </body>
 </html>
