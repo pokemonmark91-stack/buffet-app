@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ประวัติใบเสร็จของคุณ</title>
+    
     <!-- นำเข้า Bootstrap CSS และ JS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- นำเข้า LIFF SDK -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     
     <style>
@@ -14,6 +16,8 @@
             background-color: #f4f6f9; 
             font-family: 'Sarabun', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
         }
+        
+        /* สไตล์ตารางหน้ารายการบิล */
         .history-card {
             background: white;
             border-radius: 8px;
@@ -53,18 +57,24 @@
             font-weight: 600;
         }
         
-        /* สไตล์ Modal ใบเสร็จ */
+        /* สไตล์ Modal ใบเสร็จ (เหมือนฝั่งร้านค้า) */
+        .modal-content {
+            border-radius: 4px; /* ปรับขอบให้ดูเป็นกระดาษใบเสร็จ */
+        }
         .modal-receipt-content {
             font-family: 'Courier New', Courier, monospace; 
             background-color: white;
             color: #333;
+            padding: 20px;
         }
         .receipt-header {
             text-align: center;
             margin-bottom: 15px;
         }
         .receipt-header h4 {
+            font-family: 'Sarabun', sans-serif;
             font-weight: bold;
+            font-size: 22px;
             margin-bottom: 5px;
         }
         .receipt-divider {
@@ -79,7 +89,11 @@
         }
         .receipt-item-name {
             flex-grow: 1;
-            padding-right: 10px;
+            padding-right: 15px;
+        }
+        .receipt-item-qty {
+            color: #666;
+            font-size: 13px;
         }
     </style>
 </head>
@@ -90,7 +104,7 @@
         <h5 class="mb-0">🧾 บิลย้อนหลัง (Receipt History)</h5>
     </div>
 
-    <!-- ตารางบิล -->
+    <!-- กล่องครอบตาราง -->
     <div class="history-card">
         <div class="table-responsive">
             <table class="table-custom">
@@ -103,11 +117,11 @@
                     </tr>
                 </thead>
                 <tbody id="receiptsTableBody">
-                    <!-- นำหน้าต่างโหลดมาไว้ตรงนี้แทน -->
+                    <!-- หน้าต่างโหลดข้อมูล ย้ายมาไว้ในตารางเพื่อป้องกันหน้าจอขาว -->
                     <tr id="loadingRow">
                         <td colspan="4" class="text-center py-5">
                             <div class="spinner-border text-primary mb-2" role="status"></div>
-                            <div class="text-muted small">กำลังโหลดข้อมูล...</div>
+                            <div class="text-muted small">กำลังโหลดข้อมูลใบเสร็จ...</div>
                         </td>
                     </tr>
                 </tbody>
@@ -115,19 +129,20 @@
         </div>
     </div>
 
-    <!-- Modal สำหรับใบเสร็จ -->
+    <!-- Modal สำหรับแสดงรายละเอียดใบเสร็จ -->
     <div class="modal fade" id="receiptModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold">รายละเอียดใบเสร็จ</h5>
+                <div class="modal-header border-0 pb-0 justify-content-between align-items-center">
+                    <h5 class="modal-title fw-bold" style="font-family: 'Sarabun', sans-serif;">รายละเอียดใบเสร็จ</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body modal-receipt-content" id="modalReceiptBody">
-                    <!-- เนื้อหาจะถูกแทรกด้วย JS -->
+                    <!-- เนื้อหาใบเสร็จจะถูกวาดลงที่นี่โดย JavaScript -->
                 </div>
+                <!-- ส่วนปุ่มด้านล่าง (มีแค่ปุ่มปิด) -->
                 <div class="modal-footer border-0 pt-0 justify-content-center">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิดหน้าต่าง</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
                 </div>
             </div>
         </div>
@@ -152,6 +167,8 @@
         const db = firebase.firestore();
 
         const LIFF_ID = "2011490016-qnih1RGR"; 
+        
+        // ตัวแปรเก็บข้อมูลบิลทั้งหมด
         let allReceiptsData = {};
 
         // ดักจับ Error ภาพรวม
@@ -160,6 +177,7 @@
             document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">พบปัญหา: ${msg}</td></tr>`;
         };
 
+        // เริ่มต้น LIFF
         async function initLiff() {
             try {
                 await liff.init({ liffId: LIFF_ID });
@@ -175,6 +193,7 @@
             }
         }
 
+        // โหลดข้อมูลใบเสร็จ
         async function loadUserReceipts(userId) {
             try {
                 const tbody = document.getElementById('receiptsTableBody');
@@ -197,14 +216,14 @@
 
                         if (userInBill) {
                             foundCount++;
-                            allReceiptsData[docId] = data; // เก็บไว้ใช้ตอนกดเปิดบิล
+                            allReceiptsData[docId] = data; // เก็บไว้ใช้ตอนกดดูรายละเอียด
 
                             let date = (data.timestamp && data.timestamp.toDate) ? data.timestamp.toDate() : new Date();
                             
-                            // 🌟 แก้ไข: จัดการเวลาเอง เพื่อป้องกัน RangeError ในมือถือบางรุ่น
+                            // จัดการฟอร์แมตเวลาเอง (แก้ปัญหาจอดำ/ขาว ในมือถือ Android บางรุ่น)
                             let d = String(date.getDate()).padStart(2, '0');
                             let m = String(date.getMonth() + 1).padStart(2, '0');
-                            let y = date.getFullYear() + 543;
+                            let y = date.getFullYear() + 543; // แปลงเป็น พ.ศ.
                             let h = String(date.getHours()).padStart(2, '0');
                             let min = String(date.getMinutes()).padStart(2, '0');
                             let timeStr = `${h}:${min} น.`;
@@ -213,6 +232,7 @@
                             let points = userInBill.points || 0;
                             let tableNo = data.tableNo || "-";
 
+                            // โครงสร้างแถวของตาราง
                             html += `
                                 <tr onclick="showReceiptDetail('${docId}')">
                                     <td>
@@ -247,19 +267,20 @@
             }
         }
 
-        // ฟังก์ชันวาดหน้าสลิปเมื่อกดที่แถว
+        // ฟังก์ชันแสดงรายละเอียดบิลใน Modal (หน้าตาเหมือนฝั่งร้านค้า)
         function showReceiptDetail(docId) {
             try {
                 let data = allReceiptsData[docId];
                 if (!data) return;
 
                 let date = (data.timestamp && data.timestamp.toDate) ? data.timestamp.toDate() : new Date();
-                let d = String(date.getDate()).padStart(2, '0');
-                let m = String(date.getMonth() + 1).padStart(2, '0');
+                let d = String(date.getDate()); // ไม่ต้องเติม 0 ข้างหน้าให้เหมือนต้นฉบับ
+                let m = String(date.getMonth() + 1);
                 let y = date.getFullYear() + 543;
                 let h = String(date.getHours()).padStart(2, '0');
                 let min = String(date.getMinutes()).padStart(2, '0');
-                let dateTimeFull = `${d}/${m}/${y} ${h}:${min} น.`;
+                let sec = String(date.getSeconds()).padStart(2, '0');
+                let dateTimeFull = `${d}/${m}/${y} ${h}:${min}:${sec}`;
 
                 let itemsHtml = "";
                 let items = Array.isArray(data.items) ? data.items : [];
@@ -272,7 +293,7 @@
                         
                         itemsHtml += `
                             <div class="receipt-item">
-                                <div class="receipt-item-name">${itemName} <span class="text-muted">x${itemQty}</span></div>
+                                <div class="receipt-item-name">${itemName} <span class="receipt-item-qty">x${itemQty}</span></div>
                                 <div>${itemPrice.toLocaleString()}</div>
                             </div>
                         `;
@@ -284,12 +305,13 @@
                 let tableNo = data.tableNo || "-";
                 let netTotalAmt = Number(data.netTotal) || 0;
 
+                // โครงสร้างใบเสร็จด้านใน Modal
                 let modalHtml = `
                     <div class="receipt-header">
                         <h4>ร้านชูใจ ชาบู</h4>
-                        <div class="small">สำเนาใบเสร็จรับเงิน / COPY RECEIPT</div>
-                        <div class="small">โต๊ะ: ${tableNo} | ${dateTimeFull}</div>
-                        <div class="small text-muted" style="font-size:11px;">Ref: ${docId}</div>
+                        <div style="font-size: 13px;">สำเนาใบเสร็จรับเงิน / COPY RECEIPT</div>
+                        <div style="font-size: 13px;">โต๊ะ: ${tableNo} | ${dateTimeFull}</div>
+                        <div style="font-size: 11px; color: #888; margin-top: 2px;">Ref: ${docId}</div>
                     </div>
                     
                     <div class="receipt-divider"></div>
@@ -298,7 +320,7 @@
                     
                     <div class="receipt-divider"></div>
                     
-                    <div class="d-flex justify-content-between fw-bold mt-2">
+                    <div class="d-flex justify-content-between mt-2 mb-2" style="font-weight: bold; font-size: 15px;">
                         <span>ยอดสุทธิ (Net Total)</span>
                         <span>${netTotalAmt.toLocaleString()}</span>
                     </div>
@@ -306,7 +328,7 @@
 
                 document.getElementById('modalReceiptBody').innerHTML = modalHtml;
                 
-                // สั่งเปิด Pop-up Modal ของ Bootstrap
+                // สั่งเปิด Modal
                 let myModal = new bootstrap.Modal(document.getElementById('receiptModal'));
                 myModal.show();
                 
@@ -316,7 +338,7 @@
             }
         }
 
-        // เริ่มการทำงาน
+        // เริ่มต้นการทำงานทันทีที่โหลดหน้าเสร็จ
         initLiff();
     </script>
 </body>
