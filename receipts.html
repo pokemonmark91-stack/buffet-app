@@ -32,7 +32,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script>
-        // --- เปลี่ยน Firebase Config ให้ตรงกับโปรเจกต์ของคุณ ---
+        // --- Firebase Config ---
         const firebaseConfig = {
             apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -45,8 +45,8 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- เปลี่ยน LIFF ID ตรงนี้ ---
-        const LIFF_ID = "2011490016-qnih1RGR"; // แทนที่ด้วย Liff ID สำหรับเมนู "ใบเสร็จ"
+        // --- LIFF ID ---
+        const LIFF_ID = "2011490016-qnih1RGR"; 
 
         async function initLiff() {
             try {
@@ -59,7 +59,7 @@
                 loadUserReceipts(profile.userId);
             } catch (err) {
                 console.error("LIFF Init Error:", err);
-                document.getElementById('receiptsContainer').innerHTML = `<div class="alert alert-danger">ไม่สามารถเชื่อมต่อ LINE ได้</div>`;
+                document.getElementById('receiptsContainer').innerHTML = `<div class="alert alert-danger text-center mt-3">ไม่สามารถเชื่อมต่อ LINE ได้</div>`;
                 document.getElementById('loading').style.display = 'none';
             }
         }
@@ -68,11 +68,9 @@
             try {
                 const container = document.getElementById('receiptsContainer');
                 
-                // ค้นหาบิลที่มี UID ของผู้ใช้อยู่ใน array membersRewarded
-                // หมายเหตุ: การ query แบบนี้ (array-contains) ต้องรอ Firebase จัดการ index เล็กน้อย
                 let querySnap = await db.collection("checkouts")
                     .orderBy("timestamp", "desc")
-                    .limit(20) // ดึง 20 บิลล่าสุด
+                    .limit(20) 
                     .get();
 
                 let html = "";
@@ -82,7 +80,6 @@
                     let data = doc.data();
                     let membersData = data.membersRewarded || [];
                     
-                    // เช็คว่ามี uid ของคนนี้ในบิลนี้ไหม
                     let userInBill = membersData.find(m => m.uid === userId);
 
                     if (userInBill) {
@@ -93,16 +90,19 @@
                         let itemsHtml = "";
                         if (data.items && data.items.length > 0) {
                             data.items.forEach(it => {
+                                let itemPrice = Number(it.price) || 0;
                                 itemsHtml += `<div class="item-row">
                                     <span>${it.name} <span class="text-muted small">x${it.qty}</span></span>
-                                    <span>${it.price.toLocaleString()} บ.</span>
+                                    <span>${itemPrice.toLocaleString()} บ.</span>
                                 </div>`;
                             });
                         } else {
-                            itemsHtml = "<div class="text-muted small text-center">ไม่มีรายละเอียดรายการ</div>";
+                            // ✅ แก้ไขปัญหา Syntax Error ตรงบรรทัดนี้แล้ว (ใช้ Backtick แทน)
+                            itemsHtml = `<div class="text-muted small text-center">ไม่มีรายละเอียดรายการ</div>`;
                         }
 
                         let pointsText = `<span class="badge bg-success">คุณได้รับแต้ม +${userInBill.points}</span>`;
+                        let netTotalAmt = Number(data.netTotal) || 0;
 
                         html += `
                             <div class="receipt-card p-3">
@@ -118,7 +118,7 @@
                                 
                                 <div class="d-flex justify-content-between fw-bold mb-1">
                                     <span>ยอดชำระสุทธิ:</span>
-                                    <span class="text-primary">${data.netTotal.toLocaleString()} บาท</span>
+                                    <span class="text-primary">${netTotalAmt.toLocaleString()} บาท</span>
                                 </div>
                                 <div class="text-end mt-2">
                                     ${pointsText}
@@ -129,14 +129,14 @@
                 });
 
                 if (foundCount === 0) {
-                    html = `<div class="text-center text-muted p-5 bg-white rounded shadow-sm">คุณยังไม่มีประวัติใบเสร็จ</div>`;
+                    html = `<div class="text-center text-muted p-5 bg-white rounded shadow-sm">คุณยังไม่มีประวัติใบเสร็จล่าสุด</div>`;
                 }
 
                 container.innerHTML = html;
 
             } catch (err) {
                 console.error("Error loading receipts:", err);
-                document.getElementById('receiptsContainer').innerHTML = `<div class="alert alert-danger">เกิดข้อผิดพลาดในการโหลดข้อมูล</div>`;
+                document.getElementById('receiptsContainer').innerHTML = `<div class="alert alert-danger text-center mt-3">เกิดข้อผิดพลาดในการโหลดข้อมูล</div>`;
             } finally {
                 document.getElementById('loading').style.display = 'none';
             }
