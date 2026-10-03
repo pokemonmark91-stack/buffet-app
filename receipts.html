@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ประวัติใบเสร็จของคุณ</title>
-    <!-- นำเข้า Bootstrap CSS และ JS (จำเป็นสำหรับ Modal) -->
+    <!-- นำเข้า Bootstrap CSS และ JS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -12,10 +12,8 @@
     <style>
         body { 
             background-color: #f4f6f9; 
-            font-family: 'Sarabun', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* แนะนำให้ใช้ฟอนต์ Sarabun จะเหมือนใบเสร็จจริงมากขึ้น */
+            font-family: 'Sarabun', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
         }
-        
-        /* สไตล์ตารางหน้ารายการบิล (อ้างอิงจากภาพแรก) */
         .history-card {
             background: white;
             border-radius: 8px;
@@ -54,10 +52,10 @@
             color: #28a745;
             font-weight: 600;
         }
-
-        /* สไตล์ Modal ใบเสร็จ (อ้างอิงจากภาพที่สอง) */
+        
+        /* สไตล์ Modal ใบเสร็จ */
         .modal-receipt-content {
-            font-family: 'Courier New', Courier, monospace; /* ใช้ฟอนต์แบบพิมพ์ดีดสำหรับใบเสร็จ */
+            font-family: 'Courier New', Courier, monospace; 
             background-color: white;
             color: #333;
         }
@@ -83,28 +81,16 @@
             flex-grow: 1;
             padding-right: 10px;
         }
-        
-        .loading-screen { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(255, 255, 255, 0.9); 
-            display: flex; justify-content: center; align-items: center; 
-            z-index: 9999; flex-direction: column; 
-        }
     </style>
 </head>
 <body class="container py-4">
 
-    <div id="loading" class="loading-screen">
-        <div class="spinner-border text-primary" role="status"></div>
-        <p class="mt-3 text-muted">กำลังโหลดข้อมูลใบเสร็จ...</p>
-    </div>
-
-    <!-- ส่วนหัว (เหมือนภาพแรก) -->
+    <!-- ส่วนหัว -->
     <div class="bg-dark text-white p-3 rounded mb-3 d-flex align-items-center">
         <h5 class="mb-0">🧾 บิลย้อนหลัง (Receipt History)</h5>
     </div>
 
-    <!-- กล่องครอบตาราง -->
+    <!-- ตารางบิล -->
     <div class="history-card">
         <div class="table-responsive">
             <table class="table-custom">
@@ -117,13 +103,19 @@
                     </tr>
                 </thead>
                 <tbody id="receiptsTableBody">
-                    <!-- ข้อมูลจะถูกแทรกที่นี่ -->
+                    <!-- นำหน้าต่างโหลดมาไว้ตรงนี้แทน -->
+                    <tr id="loadingRow">
+                        <td colspan="4" class="text-center py-5">
+                            <div class="spinner-border text-primary mb-2" role="status"></div>
+                            <div class="text-muted small">กำลังโหลดข้อมูล...</div>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <!-- Modal สำหรับแสดงรายละเอียดใบเสร็จ (เหมือนภาพที่สอง) -->
+    <!-- Modal สำหรับใบเสร็จ -->
     <div class="modal fade" id="receiptModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -132,12 +124,10 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body modal-receipt-content" id="modalReceiptBody">
-                    <!-- เนื้อหาใบเสร็จจะแสดงที่นี่ -->
+                    <!-- เนื้อหาจะถูกแทรกด้วย JS -->
                 </div>
                 <div class="modal-footer border-0 pt-0 justify-content-center">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-                    <!-- ปิดปุ่มพิมพ์ไว้ก่อน เพราะเป็นฝั่งลูกค้า -->
-                    <!-- <button type="button" class="btn btn-primary">🖨 พิมพ์บิลซ้ำ</button> -->
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิดหน้าต่าง</button>
                 </div>
             </div>
         </div>
@@ -148,7 +138,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script>
-        // --- Firebase Config (ใช้ชุดเดิมของคุณ) ---
+        // --- Firebase Config ---
         const firebaseConfig = {
             apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -162,9 +152,13 @@
         const db = firebase.firestore();
 
         const LIFF_ID = "2011490016-qnih1RGR"; 
-        
-        // ตัวแปรเก็บข้อมูลบิลทั้งหมดไว้ใช้ตอนกดดูรายละเอียด
         let allReceiptsData = {};
+
+        // ดักจับ Error ภาพรวม
+        window.onerror = function(msg, url, line) {
+            console.error("Global Error:", msg);
+            document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">พบปัญหา: ${msg}</td></tr>`;
+        };
 
         async function initLiff() {
             try {
@@ -177,8 +171,7 @@
                 loadUserReceipts(profile.userId);
             } catch (err) {
                 console.error("LIFF Init Error:", err);
-                document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger">ไม่สามารถเชื่อมต่อ LINE ได้</td></tr>`;
-                document.getElementById('loading').style.display = 'none';
+                document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">ไม่สามารถเชื่อมต่อระบบ LINE ได้<br><small>${err.message}</small></td></tr>`;
             }
         }
 
@@ -195,45 +188,50 @@
                 let foundCount = 0;
 
                 querySnap.forEach(doc => {
-                    let data = doc.data();
-                    let docId = doc.id;
-                    let membersData = data.membersRewarded || [];
-                    
-                    let userInBill = membersData.find(m => m.uid === userId);
-
-                    if (userInBill) {
-                        foundCount++;
-                        // เก็บข้อมูลไว้ใน Object เพื่อใช้แสดงใน Modal
-                        allReceiptsData[docId] = data;
-
-                        let date = data.timestamp ? data.timestamp.toDate() : new Date();
+                    try {
+                        let data = doc.data();
+                        let docId = doc.id;
+                        let membersData = Array.isArray(data.membersRewarded) ? data.membersRewarded : [];
                         
-                        // ฟอร์แมตวันที่แบบภาพแรก: 2/10/2569 \n 21:19:24
-                        let d = date.getDate();
-                        let m = date.getMonth() + 1;
-                        let y = date.getFullYear() + 543; // ปี พ.ศ.
-                        let timeStr = date.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-                        
-                        let netTotalAmt = Number(data.netTotal) || 0;
-                        let points = userInBill.points || 0;
+                        let userInBill = membersData.find(m => m.uid === userId);
 
-                        // โครงสร้างแถวตารางแบบภาพแรก
-                        html += `
-                            <tr onclick="showReceiptDetail('${docId}')">
-                                <td>
-                                    <div>${d}/${m}/${y}</div>
-                                    <div class="text-muted small">${timeStr}</div>
-                                </td>
-                                <td><span class="table-badge">โต๊ะ ${data.tableNo}</span></td>
-                                <td class="net-total-col">
-                                    ${netTotalAmt.toLocaleString()}<br>
-                                    <small>฿</small>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-success">+${points}</span>
-                                </td>
-                            </tr>
-                        `;
+                        if (userInBill) {
+                            foundCount++;
+                            allReceiptsData[docId] = data; // เก็บไว้ใช้ตอนกดเปิดบิล
+
+                            let date = (data.timestamp && data.timestamp.toDate) ? data.timestamp.toDate() : new Date();
+                            
+                            // 🌟 แก้ไข: จัดการเวลาเอง เพื่อป้องกัน RangeError ในมือถือบางรุ่น
+                            let d = String(date.getDate()).padStart(2, '0');
+                            let m = String(date.getMonth() + 1).padStart(2, '0');
+                            let y = date.getFullYear() + 543;
+                            let h = String(date.getHours()).padStart(2, '0');
+                            let min = String(date.getMinutes()).padStart(2, '0');
+                            let timeStr = `${h}:${min} น.`;
+                            
+                            let netTotalAmt = Number(data.netTotal) || 0;
+                            let points = userInBill.points || 0;
+                            let tableNo = data.tableNo || "-";
+
+                            html += `
+                                <tr onclick="showReceiptDetail('${docId}')">
+                                    <td>
+                                        <div class="fw-bold">${d}/${m}/${y}</div>
+                                        <div class="text-muted small">${timeStr}</div>
+                                    </td>
+                                    <td><span class="table-badge">โต๊ะ ${tableNo}</span></td>
+                                    <td class="net-total-col">
+                                        ${netTotalAmt.toLocaleString()}<br>
+                                        <small>฿</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">+${points}</span>
+                                    </td>
+                                </tr>
+                            `;
+                        }
+                    } catch(innerErr) {
+                        console.error("Error formatting doc:", doc.id, innerErr);
                     }
                 });
 
@@ -245,67 +243,77 @@
 
             } catch (err) {
                 console.error("Error loading receipts:", err);
-                document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>`;
-            } finally {
-                document.getElementById('loading').style.display = 'none';
+                document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">เกิดข้อผิดพลาดในการดึงข้อมูลบิล<br><small>${err.message}</small></td></tr>`;
             }
-        }}
+        }
 
-        // ฟังก์ชันแสดง Modal เมื่อกดที่แถว
+        // ฟังก์ชันวาดหน้าสลิปเมื่อกดที่แถว
         function showReceiptDetail(docId) {
-            let data = allReceiptsData[docId];
-            if (!data) return;
+            try {
+                let data = allReceiptsData[docId];
+                if (!data) return;
 
-            let date = data.timestamp ? data.timestamp.toDate() : new Date();
-            let d = date.getDate();
-            let m = date.getMonth() + 1;
-            let y = date.getFullYear() + 543;
-            let timeStr = date.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-            let dateTimeFull = `${d}/${m}/${y} ${timeStr}`;
+                let date = (data.timestamp && data.timestamp.toDate) ? data.timestamp.toDate() : new Date();
+                let d = String(date.getDate()).padStart(2, '0');
+                let m = String(date.getMonth() + 1).padStart(2, '0');
+                let y = date.getFullYear() + 543;
+                let h = String(date.getHours()).padStart(2, '0');
+                let min = String(date.getMinutes()).padStart(2, '0');
+                let dateTimeFull = `${d}/${m}/${y} ${h}:${min} น.`;
 
-            // สร้างรายการอาหารแบบใบเสร็จ
-            let itemsHtml = "";
-            let items = data.items || [];
-            if (items.length > 0) {
-                items.forEach(it => {
-                    let itemPrice = Number(it.price) || 0;
-                    itemsHtml += `
-                        <div class="receipt-item">
-                            <div class="receipt-item-name">${it.name} <span class="text-muted">x${it.qty}</span></div>
-                            <div>${itemPrice.toLocaleString()}</div>
-                        </div>
-                    `;
-                });
-            } else {
-                itemsHtml = `<div class="text-center">ไม่มีรายละเอียดรายการ</div>`;
+                let itemsHtml = "";
+                let items = Array.isArray(data.items) ? data.items : [];
+                
+                if (items.length > 0) {
+                    items.forEach(it => {
+                        let itemPrice = Number(it.price) || 0;
+                        let itemName = it.name || "ไม่ระบุ";
+                        let itemQty = it.qty || 1;
+                        
+                        itemsHtml += `
+                            <div class="receipt-item">
+                                <div class="receipt-item-name">${itemName} <span class="text-muted">x${itemQty}</span></div>
+                                <div>${itemPrice.toLocaleString()}</div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    itemsHtml = `<div class="text-center text-muted small">ไม่มีรายละเอียดรายการ</div>`;
+                }
+
+                let tableNo = data.tableNo || "-";
+                let netTotalAmt = Number(data.netTotal) || 0;
+
+                let modalHtml = `
+                    <div class="receipt-header">
+                        <h4>ร้านชูใจ ชาบู</h4>
+                        <div class="small">สำเนาใบเสร็จรับเงิน / COPY RECEIPT</div>
+                        <div class="small">โต๊ะ: ${tableNo} | ${dateTimeFull}</div>
+                        <div class="small text-muted" style="font-size:11px;">Ref: ${docId}</div>
+                    </div>
+                    
+                    <div class="receipt-divider"></div>
+                    
+                    ${itemsHtml}
+                    
+                    <div class="receipt-divider"></div>
+                    
+                    <div class="d-flex justify-content-between fw-bold mt-2">
+                        <span>ยอดสุทธิ (Net Total)</span>
+                        <span>${netTotalAmt.toLocaleString()}</span>
+                    </div>
+                `;
+
+                document.getElementById('modalReceiptBody').innerHTML = modalHtml;
+                
+                // สั่งเปิด Pop-up Modal ของ Bootstrap
+                let myModal = new bootstrap.Modal(document.getElementById('receiptModal'));
+                myModal.show();
+                
+            } catch(e) {
+                console.error("Modal Error:", e);
+                alert("ไม่สามารถแสดงรายละเอียดได้: " + e.message);
             }
-
-            // โครงสร้างใบเสร็จแบบภาพที่สอง
-            let modalHtml = `
-                <div class="receipt-header">
-                    <h4>ร้านชูใจ ชาบู</h4>
-                    <div class="small">สำเนาใบเสร็จรับเงิน / COPY RECEIPT</div>
-                    <div class="small">โต๊ะ: ${data.tableNo} | ${dateTimeFull}</div>
-                    <div class="small text-muted">Ref: ${docId}</div>
-                </div>
-                
-                <div class="receipt-divider"></div>
-                
-                ${itemsHtml}
-                
-                <div class="receipt-divider"></div>
-                
-                <div class="d-flex justify-content-between fw-bold mt-2">
-                    <span>ยอดสุทธิ (Net Total)</span>
-                    <span>${(Number(data.netTotal) || 0).toLocaleString()}</span>
-                </div>
-            `;
-
-            document.getElementById('modalReceiptBody').innerHTML = modalHtml;
-            
-            // เรียกเปิด Modal ของ Bootstrap
-            let myModal = new bootstrap.Modal(document.getElementById('receiptModal'));
-            myModal.show();
         }
 
         // เริ่มการทำงาน
