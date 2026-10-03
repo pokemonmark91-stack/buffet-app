@@ -552,13 +552,25 @@
         let pts = parseInt(inp.value) || 0;
         totalAssignedPoints += pts;
         
-        // 🌟 เพิ่ม: เก็บข้อมูลสมาชิกที่จะได้แต้ม
+        // 🌟 เก็บข้อมูลสมาชิกที่จะได้แต้ม
         let uid = inp.getAttribute('data-uid');
         if (uid && pts > 0) {
-            // ดึงชื่อสมาชิก (สมมติว่าชื่ออยู่ในแท็กที่มี class .fw-bold ที่อยู่ใกล้เคียง)
-            let nameElem = inp.closest('.d-flex') ? inp.closest('.d-flex').querySelector('.fw-bold') : null;
+            let container = inp.closest('.d-flex');
+            
+            // ดึงชื่อสมาชิก
+            let nameElem = container ? container.querySelector('.fw-bold') : null;
             let memberName = nameElem ? nameElem.innerText : "สมาชิก";
-            memberPointsAssigned.push({ uid: uid, name: memberName, points: pts });
+
+            // 🌟 ดึงรูปลิงก์โปรไฟล์สมาชิกจากแท็ก img
+            let imgElem = container ? container.querySelector('img') : null;
+            let memberPic = imgElem ? imgElem.getAttribute('src') : "";
+
+            memberPointsAssigned.push({ 
+                uid: uid, 
+                name: memberName, 
+                pictureUrl: memberPic, // <-- เซฟลิงก์รูปลงฐานข้อมูลด้วย
+                points: pts 
+            });
         }
     });
     
@@ -593,7 +605,7 @@
         let discTypeVal = document.getElementById('discountType').value;
         let discText = discVal > 0 ? (discVal + " " + discTypeVal) : "ไม่มี";
 
-        // 🌟 เพิ่ม: ดึงข้อมูลรายการอาหารจากหน้าจอใบเสร็จฝั่งซ้าย
+        // 🌟 ดึงข้อมูลรายการอาหารจากหน้าจอใบเสร็จฝั่งซ้าย
         let orderedItemsDetails = [];
         let receiptListItems = document.querySelectorAll('#receiptItems li');
         receiptListItems.forEach(li => {
@@ -611,21 +623,21 @@
             }
         });
 
-        // 🌟 เพิ่ม: ดึงข้อมูลกะที่เปิดอยู่ (เพื่อดูว่าใครเก็บเงินบิลนี้)
+        // 🌟 ดึงข้อมูลกะที่เปิดอยู่
         let shiftId = localStorage.getItem('currentShiftId') || "ไม่มีข้อมูลกะ";
 
         const checkoutRef = db.collection("checkouts").doc();
         batch.set(checkoutRef, {
             tableNo: currentTableId,
-            total: totalBillAmount,
+            total: Math.round(totalBillAmount), // ปัดเศษป้องกันทศนิยมหลุดเข้า DB
             discount: discText,
-            netTotal: net,
+            netTotal: Math.round(net), // ปัดเศษ
             payments: paymentDetails,
-            totalReceived: totalReceived,
-            change: totalReceived - net,
-            items: orderedItemsDetails, // 🌟 เพิ่ม: ส่งรายการอาหารเข้า Firestore
-            membersRewarded: memberPointsAssigned, // 🌟 เพิ่ม: ส่งรายชื่อคนที่ได้แต้มเข้า Firestore
-            shiftId: shiftId, // 🌟 เพิ่ม: ส่ง ID กะ
+            totalReceived: Math.round(totalReceived), // ปัดเศษ
+            change: Math.round(totalReceived - net), // ปัดเศษ
+            items: orderedItemsDetails, 
+            membersRewarded: memberPointsAssigned, // <-- ชุดข้อมูลที่มีรูปภาพรวมอยู่ด้วย
+            shiftId: shiftId,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
 
