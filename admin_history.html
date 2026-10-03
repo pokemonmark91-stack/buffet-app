@@ -160,14 +160,24 @@
 
             let membersHtml = '';
             if (data.membersRewarded && data.membersRewarded.length > 0) {
-                membersHtml += `<div class="dashed-line"></div><div class="fw-bold mb-1">สมาชิกที่ได้รับแต้ม:</div>`;
+                membersHtml += `<div class="dashed-line"></div><div class="fw-bold mb-2">สมาชิกที่ได้รับแต้ม:</div>`;
                 data.membersRewarded.forEach(m => {
-                    membersHtml += `<div class="d-flex justify-content-between text-muted small">
-                        <span>- ${m.name}</span>
-                        <span>+${m.points} แต้ม</span>
-                    </div>`;
-                });
-            }
+               // ดึงชื่อ (รองรับหลายตัวแปรเผื่อไว้) ถ้าไม่มีให้ขึ้นว่า "สมาชิก"
+            let memName = m.name || m.displayName || 'สมาชิก';
+        
+                // ดึงรูปโปรไฟล์ ถ้าตอนชำระเงินไม่ได้เซฟรูปมา ให้ใช้รูปพื้นฐาน
+            let memPic = m.pictureUrl || m.picture || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
+
+            membersHtml += `
+            <div class="d-flex justify-content-between align-items-center mb-2 small">
+                <div class="d-flex align-items-center">
+                    <img src="${memPic}" width="28" height="28" class="rounded-circle me-2" style="object-fit: cover; border: 1px solid #ddd;">
+                    <span class="text-dark fw-semibold text-truncate" style="max-width: 150px;">${memName}</span>
+                </div>
+                <span class="text-success fw-bold">+${m.points} แต้ม</span>
+            </div>`;
+        });
+    }
 
             // --- ส่วนที่เพิ่มใหม่: จัดการรูปแบบการแสดงช่องทางการรับเงิน ---
             let paymentsHtml = '';
