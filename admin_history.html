@@ -117,7 +117,8 @@
                     tr.innerHTML = `
                         <td>${dateStr}</td>
                         <td><span class="badge bg-secondary">โต๊ะ ${data.tableNo}</span></td>
-                        <td class="text-success fw-bold">${(data.netTotal || 0).toLocaleString()} ฿</td>
+                        <!-- ใส่ Math.round ให้ยอดสุทธิในตาราง -->
+                        <td class="text-success fw-bold">${Math.round(data.netTotal || 0).toLocaleString()} ฿</td>
                         <td><small class="text-muted">${data.shiftId || '-'}</small></td>
                         <td>
                             <button class="btn btn-sm btn-info text-white" onclick="viewReceipt('${data.id}')">
@@ -148,7 +149,8 @@
                     itemsHtml += `
                         <div class="d-flex justify-content-between mb-1">
                             <span>${it.name} <small>x${it.qty}</small></span>
-                            <span>${(it.price || 0).toLocaleString()}</span>
+                            <!-- ใส่ Math.round ให้ราคารายการอาหาร -->
+                            <span>${Math.round(it.price || 0).toLocaleString()}</span>
                         </div>
                     `;
                 });
@@ -167,6 +169,26 @@
                 });
             }
 
+            // --- ส่วนที่เพิ่มใหม่: จัดการรูปแบบการแสดงช่องทางการรับเงิน ---
+            let paymentsHtml = '';
+            if (data.payments && data.payments.length > 0) {
+                data.payments.forEach(p => {
+                    paymentsHtml += `
+                        <div class="d-flex justify-content-between small text-muted">
+                            <span>รับเงินมา (${p.method}):</span>
+                            <span>${Math.round(p.amount || 0).toLocaleString()}</span>
+                        </div>
+                    `;
+                });
+            } else {
+                paymentsHtml = `
+                    <div class="d-flex justify-content-between small text-muted">
+                        <span>รับเงินมา:</span>
+                        <span>${Math.round(data.totalReceived || 0).toLocaleString()}</span>
+                    </div>
+                `;
+            }
+
             const modalBody = document.getElementById('receiptDetailsContent');
             modalBody.innerHTML = `
                 <div class="text-center mb-3">
@@ -180,9 +202,10 @@
                 ${itemsHtml}
                 <div class="dashed-line"></div>
                 
+                <!-- ครอบ Math.round() ในทุกบรรทัดตัวเลข -->
                 <div class="d-flex justify-content-between mb-1">
-                <span>รวมเป็นเงิน:</span>
-                <span>${Math.round(data.total || 0).toLocaleString()}</span>
+                    <span>รวมเป็นเงิน:</span>
+                    <span>${Math.round(data.total || 0).toLocaleString()}</span>
                 </div>
                 <div class="d-flex justify-content-between mb-1">
                     <span>ส่วนลด:</span>
@@ -190,17 +213,17 @@
                 </div>
                 <div class="d-flex justify-content-between fw-bold fs-6 mt-2">
                     <span>ยอดสุทธิ:</span>
-                    <span>${(data.netTotal || 0).toLocaleString()} บาท</span>
+                    <span>${Math.round(data.netTotal || 0).toLocaleString()} บาท</span>
                 </div>
                 
                 <div class="dashed-line"></div>
-                <div class="d-flex justify-content-between small text-muted">
-                    <span>รับเงินมา:</span>
-                    <span>${(data.totalReceived || 0).toLocaleString()}</span>
-                </div>
+                
+                <!-- นำตัวแปร paymentsHtml มาแสดงตรงนี้ -->
+                ${paymentsHtml}
+                
                 <div class="d-flex justify-content-between small text-muted">
                     <span>เงินทอน:</span>
-                    <span>${(data.change || 0).toLocaleString()}</span>
+                    <span>${Math.round(data.change || 0).toLocaleString()}</span>
                 </div>
                 ${membersHtml}
                 <div class="dashed-line"></div>
