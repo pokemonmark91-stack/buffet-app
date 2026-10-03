@@ -545,7 +545,7 @@
     let pointInputs = document.querySelectorAll('.point-input');
     let totalAssignedPoints = 0;
     
-    // 🌟 เพิ่ม: อาเรย์สำหรับเก็บข้อมูลว่าใครได้แต้มเท่าไหร่ เพื่อเอาไปโชว์ในบิลย้อนหลัง
+    // 🌟 อาเรย์สำหรับเก็บข้อมูลว่าใครได้แต้มเท่าไหร่ เพื่อเอาไปโชว์ในบิลย้อนหลัง
     let memberPointsAssigned = []; 
 
     pointInputs.forEach(inp => {
@@ -568,7 +568,7 @@
             memberPointsAssigned.push({ 
                 uid: uid, 
                 name: memberName, 
-                pictureUrl: memberPic, // <-- เซฟลิงก์รูปลงฐานข้อมูลด้วย
+                pictureUrl: memberPic, // เซฟลิงก์รูปลงฐานข้อมูลด้วย
                 points: pts 
             });
         }
@@ -623,36 +623,42 @@
             }
         });
 
+        // 🌟 จัดการ Document ID ของโต๊ะให้อ่านเฉพาะตัวเลข (ลบคำว่า "โต๊ะ" เผื่อไว้)
+        let cleanTableId = String(currentTableId).replace('โต๊ะ', '').trim();
+
         // 🌟 ดึงข้อมูลกะที่เปิดอยู่
         let shiftId = localStorage.getItem('currentShiftId') || "ไม่มีข้อมูลกะ";
 
         const checkoutRef = db.collection("checkouts").doc();
         batch.set(checkoutRef, {
-            tableNo: currentTableId,
-            total: Math.round(totalBillAmount), // ปัดเศษป้องกันทศนิยมหลุดเข้า DB
+            tableNo: cleanTableId, // ใช้รหัสโต๊ะที่คลีนแล้ว
+            total: Math.round(totalBillAmount),
             discount: discText,
-            netTotal: Math.round(net), // ปัดเศษ
+            netTotal: Math.round(net),
             payments: paymentDetails,
-            totalReceived: Math.round(totalReceived), // ปัดเศษ
-            change: Math.round(totalReceived - net), // ปัดเศษ
+            totalReceived: Math.round(totalReceived),
+            change: Math.round(totalReceived - net),
             items: orderedItemsDetails, 
-            membersRewarded: memberPointsAssigned, // <-- ชุดข้อมูลที่มีรูปภาพรวมอยู่ด้วย
+            membersRewarded: memberPointsAssigned,
             shiftId: shiftId,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        const ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
+        // 🌟 ลบออเดอร์ทั้งหมดของโต๊ะนี้โดยใช้ cleanTableId
+        const ordersSnap = await db.collection("tables").doc(cleanTableId).collection("orders").get();
         ordersSnap.forEach(doc => batch.delete(doc.ref));
 
-        const tableRef = db.collection("tables").doc(currentTableId);
-        batch.update(tableRef, {
+        // 🌟 อัปเดตสถานะโต๊ะกลับเป็น "ว่าง" โดยใช้ cleanTableId และใช้ merge: true เผื่อกรณีข้อมูลหาย
+        const tableRef = db.collection("tables").doc(cleanTableId);
+        batch.set(tableRef, {
             status: "ว่าง",
             activeMembers: [],
             adults: 0,
             children: 0,
             totalPeople: 0,
-            packagePrice: 0
-        });
+            packagePrice: 0,
+            orderCount: 0 // เพิ่มการเคลียร์ยอดออเดอร์เข้าไปด้วย
+        }, { merge: true });
 
         let inputs = document.querySelectorAll('.point-input');
         inputs.forEach(inp => {
