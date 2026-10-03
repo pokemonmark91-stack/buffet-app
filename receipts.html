@@ -4,14 +4,92 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ประวัติใบเสร็จของคุณ</title>
+    <!-- นำเข้า Bootstrap CSS และ JS (จำเป็นสำหรับ Modal) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .receipt-card { background: white; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 5px solid #0D8ABC; }
-        .dashed-line { border-bottom: 2px dashed #eee; margin: 15px 0; }
-        .item-row { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
-        .loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
+        body { 
+            background-color: #f4f6f9; 
+            font-family: 'Sarabun', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* แนะนำให้ใช้ฟอนต์ Sarabun จะเหมือนใบเสร็จจริงมากขึ้น */
+        }
+        
+        /* สไตล์ตารางหน้ารายการบิล (อ้างอิงจากภาพแรก) */
+        .history-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .table-custom {
+            width: 100%;
+            margin-bottom: 0;
+            font-size: 14px;
+        }
+        .table-custom th {
+            border-bottom: 2px solid #dee2e6;
+            color: #495057;
+            padding-bottom: 10px;
+            font-weight: 600;
+        }
+        .table-custom td {
+            padding: 12px 5px;
+            border-bottom: 1px solid #f1f3f5;
+            vertical-align: middle;
+        }
+        .table-custom tbody tr:hover {
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        .table-badge {
+            background-color: #6c757d;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .net-total-col {
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        /* สไตล์ Modal ใบเสร็จ (อ้างอิงจากภาพที่สอง) */
+        .modal-receipt-content {
+            font-family: 'Courier New', Courier, monospace; /* ใช้ฟอนต์แบบพิมพ์ดีดสำหรับใบเสร็จ */
+            background-color: white;
+            color: #333;
+        }
+        .receipt-header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .receipt-header h4 {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .receipt-divider {
+            border-top: 1px dashed #333;
+            margin: 10px 0;
+        }
+        .receipt-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .receipt-item-name {
+            flex-grow: 1;
+            padding-right: 10px;
+        }
+        
+        .loading-screen { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(255, 255, 255, 0.9); 
+            display: flex; justify-content: center; align-items: center; 
+            z-index: 9999; flex-direction: column; 
+        }
     </style>
 </head>
 <body class="container py-4">
@@ -21,10 +99,48 @@
         <p class="mt-3 text-muted">กำลังโหลดข้อมูลใบเสร็จ...</p>
     </div>
 
-    <h4 class="fw-bold mb-4 text-center">🧾 ประวัติใบเสร็จของคุณ</h4>
-    
-    <div id="receiptsContainer">
-        <!-- ใบเสร็จจะแสดงที่นี่ -->
+    <!-- ส่วนหัว (เหมือนภาพแรก) -->
+    <div class="bg-dark text-white p-3 rounded mb-3 d-flex align-items-center">
+        <h5 class="mb-0">🧾 บิลย้อนหลัง (Receipt History)</h5>
+    </div>
+
+    <!-- กล่องครอบตาราง -->
+    <div class="history-card">
+        <div class="table-responsive">
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th width="35%">วัน-เวลา</th>
+                        <th width="20%">โต๊ะ</th>
+                        <th width="25%">ยอดสุทธิ</th>
+                        <th width="20%" class="text-center">แต้ม</th>
+                    </tr>
+                </thead>
+                <tbody id="receiptsTableBody">
+                    <!-- ข้อมูลจะถูกแทรกที่นี่ -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal สำหรับแสดงรายละเอียดใบเสร็จ (เหมือนภาพที่สอง) -->
+    <div class="modal fade" id="receiptModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">รายละเอียดใบเสร็จ</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body modal-receipt-content" id="modalReceiptBody">
+                    <!-- เนื้อหาใบเสร็จจะแสดงที่นี่ -->
+                </div>
+                <div class="modal-footer border-0 pt-0 justify-content-center">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                    <!-- ปิดปุ่มพิมพ์ไว้ก่อน เพราะเป็นฝั่งลูกค้า -->
+                    <!-- <button type="button" class="btn btn-primary">🖨 พิมพ์บิลซ้ำ</button> -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Firebase JS SDK -->
@@ -32,7 +148,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script>
-        // --- Firebase Config ---
+        // --- Firebase Config (ใช้ชุดเดิมของคุณ) ---
         const firebaseConfig = {
             apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -45,8 +161,10 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- LIFF ID ---
         const LIFF_ID = "2011490016-qnih1RGR"; 
+        
+        // ตัวแปรเก็บข้อมูลบิลทั้งหมดไว้ใช้ตอนกดดูรายละเอียด
+        let allReceiptsData = {};
 
         async function initLiff() {
             try {
@@ -59,14 +177,14 @@
                 loadUserReceipts(profile.userId);
             } catch (err) {
                 console.error("LIFF Init Error:", err);
-                document.getElementById('receiptsContainer').innerHTML = `<div class="alert alert-danger text-center mt-3">ไม่สามารถเชื่อมต่อ LINE ได้</div>`;
+                document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger">ไม่สามารถเชื่อมต่อ LINE ได้</td></tr>`;
                 document.getElementById('loading').style.display = 'none';
             }
         }
 
         async function loadUserReceipts(userId) {
             try {
-                const container = document.getElementById('receiptsContainer');
+                const tbody = document.getElementById('receiptsTableBody');
                 
                 let querySnap = await db.collection("checkouts")
                     .orderBy("timestamp", "desc")
@@ -78,68 +196,116 @@
 
                 querySnap.forEach(doc => {
                     let data = doc.data();
+                    let docId = doc.id;
                     let membersData = data.membersRewarded || [];
                     
                     let userInBill = membersData.find(m => m.uid === userId);
 
                     if (userInBill) {
                         foundCount++;
+                        // เก็บข้อมูลไว้ใน Object เพื่อใช้แสดงใน Modal
+                        allReceiptsData[docId] = data;
+
                         let date = data.timestamp ? data.timestamp.toDate() : new Date();
-                        let dateStr = date.toLocaleDateString('th-TH') + ' ' + date.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
                         
-                        let itemsHtml = "";
-                        if (data.items && data.items.length > 0) {
-                            data.items.forEach(it => {
-                                let itemPrice = Number(it.price) || 0;
-                                itemsHtml += `<div class="item-row">
-                                    <span>${it.name} <span class="text-muted small">x${it.qty}</span></span>
-                                    <span>${itemPrice.toLocaleString()} บ.</span>
-                                </div>`;
-                            });
-                        } else {
-                            // ✅ แก้ไขปัญหา Syntax Error ตรงบรรทัดนี้แล้ว (ใช้ Backtick แทน)
-                            itemsHtml = `<div class="text-muted small text-center">ไม่มีรายละเอียดรายการ</div>`;
-                        }
-
-                        let pointsText = `<span class="badge bg-success">คุณได้รับแต้ม +${userInBill.points}</span>`;
+                        // ฟอร์แมตวันที่แบบภาพแรก: 2/10/2569 \n 21:19:24
+                        let d = date.getDate();
+                        let m = date.getMonth() + 1;
+                        let y = date.getFullYear() + 543; // ปี พ.ศ.
+                        let timeStr = date.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                        
                         let netTotalAmt = Number(data.netTotal) || 0;
+                        let points = userInBill.points || 0;
 
+                        // โครงสร้างแถวตารางแบบภาพแรก
                         html += `
-                            <div class="receipt-card p-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="fw-bold m-0">ร้านชูใจ ชาบู</h6>
-                                    <span class="text-muted small">${dateStr}</span>
-                                </div>
-                                <div class="text-muted small mb-2">โต๊ะ: ${data.tableNo}</div>
-                                
-                                <div class="dashed-line"></div>
-                                ${itemsHtml}
-                                <div class="dashed-line"></div>
-                                
-                                <div class="d-flex justify-content-between fw-bold mb-1">
-                                    <span>ยอดชำระสุทธิ:</span>
-                                    <span class="text-primary">${netTotalAmt.toLocaleString()} บาท</span>
-                                </div>
-                                <div class="text-end mt-2">
-                                    ${pointsText}
-                                </div>
-                            </div>
+                            <tr onclick="showReceiptDetail('${docId}')">
+                                <td>
+                                    <div>${d}/${m}/${y}</div>
+                                    <div class="text-muted small">${timeStr}</div>
+                                </td>
+                                <td><span class="table-badge">โต๊ะ ${data.tableNo}</span></td>
+                                <td class="net-total-col">
+                                    ${netTotalAmt.toLocaleString()}<br>
+                                    <small>฿</small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success">+${points}</span>
+                                </td>
+                            </tr>
                         `;
                     }
                 });
 
                 if (foundCount === 0) {
-                    html = `<div class="text-center text-muted p-5 bg-white rounded shadow-sm">คุณยังไม่มีประวัติใบเสร็จล่าสุด</div>`;
+                    html = `<tr><td colspan="4" class="text-center text-muted py-4">คุณยังไม่มีประวัติใบเสร็จล่าสุด</td></tr>`;
                 }
 
-                container.innerHTML = html;
+                tbody.innerHTML = html;
 
             } catch (err) {
                 console.error("Error loading receipts:", err);
-                document.getElementById('receiptsContainer').innerHTML = `<div class="alert alert-danger text-center mt-3">เกิดข้อผิดพลาดในการโหลดข้อมูล</div>`;
+                document.getElementById('receiptsTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>`;
             } finally {
                 document.getElementById('loading').style.display = 'none';
             }
+        }}
+
+        // ฟังก์ชันแสดง Modal เมื่อกดที่แถว
+        function showReceiptDetail(docId) {
+            let data = allReceiptsData[docId];
+            if (!data) return;
+
+            let date = data.timestamp ? data.timestamp.toDate() : new Date();
+            let d = date.getDate();
+            let m = date.getMonth() + 1;
+            let y = date.getFullYear() + 543;
+            let timeStr = date.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+            let dateTimeFull = `${d}/${m}/${y} ${timeStr}`;
+
+            // สร้างรายการอาหารแบบใบเสร็จ
+            let itemsHtml = "";
+            let items = data.items || [];
+            if (items.length > 0) {
+                items.forEach(it => {
+                    let itemPrice = Number(it.price) || 0;
+                    itemsHtml += `
+                        <div class="receipt-item">
+                            <div class="receipt-item-name">${it.name} <span class="text-muted">x${it.qty}</span></div>
+                            <div>${itemPrice.toLocaleString()}</div>
+                        </div>
+                    `;
+                });
+            } else {
+                itemsHtml = `<div class="text-center">ไม่มีรายละเอียดรายการ</div>`;
+            }
+
+            // โครงสร้างใบเสร็จแบบภาพที่สอง
+            let modalHtml = `
+                <div class="receipt-header">
+                    <h4>ร้านชูใจ ชาบู</h4>
+                    <div class="small">สำเนาใบเสร็จรับเงิน / COPY RECEIPT</div>
+                    <div class="small">โต๊ะ: ${data.tableNo} | ${dateTimeFull}</div>
+                    <div class="small text-muted">Ref: ${docId}</div>
+                </div>
+                
+                <div class="receipt-divider"></div>
+                
+                ${itemsHtml}
+                
+                <div class="receipt-divider"></div>
+                
+                <div class="d-flex justify-content-between fw-bold mt-2">
+                    <span>ยอดสุทธิ (Net Total)</span>
+                    <span>${(Number(data.netTotal) || 0).toLocaleString()}</span>
+                </div>
+            `;
+
+            document.getElementById('modalReceiptBody').innerHTML = modalHtml;
+            
+            // เรียกเปิด Modal ของ Bootstrap
+            let myModal = new bootstrap.Modal(document.getElementById('receiptModal'));
+            myModal.show();
         }
 
         // เริ่มการทำงาน
