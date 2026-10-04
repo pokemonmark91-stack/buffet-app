@@ -555,15 +555,26 @@
         // 🌟 เก็บข้อมูลสมาชิกที่จะได้แต้ม
         let uid = inp.getAttribute('data-uid');
         if (uid && pts > 0) {
-            let container = inp.closest('.d-flex');
-            
-            // ดึงชื่อสมาชิก
-            let nameElem = container ? container.querySelector('.fw-bold') : null;
-            let memberName = nameElem ? nameElem.innerText : "สมาชิก";
+            // ดึงข้อมูลจาก attribute ของ input ก่อน (ถ้ามี)
+            let memberName = inp.getAttribute('data-name') || "";
+            let memberPic = inp.getAttribute('data-pic') || "";
 
-            // 🌟 ดึงรูปลิงก์โปรไฟล์สมาชิกจากแท็ก img
-            let imgElem = container ? container.querySelector('img') : null;
-            let memberPic = imgElem ? imgElem.getAttribute('src') : "";
+            let container = inp.closest('.d-flex') || inp.closest('.row') || inp.closest('li') || inp.parentElement;
+            
+            // ดึงชื่อสมาชิกจากหน้าจอถ้ายังไม่มี
+            if (!memberName && container) {
+                let nameElem = container.querySelector('.fw-bold') || container.querySelector('.member-name');
+                if (nameElem) memberName = nameElem.innerText.trim();
+            }
+
+            // ดึงรูปลิงก์โปรไฟล์สมาชิกถ้ายังไม่มี
+            if (!memberPic && container) {
+                let imgElem = container.querySelector('img');
+                if (imgElem) memberPic = imgElem.getAttribute('src') || imgElem.src || "";
+            }
+
+            // Fallback ถ้ายังไม่มีชื่อ
+            if (!memberName) memberName = "สมาชิก";
 
             memberPointsAssigned.push({ 
                 uid: uid, 
@@ -629,6 +640,34 @@
         // 🌟 ดึงข้อมูลกะที่เปิดอยู่
         let shiftId = localStorage.getItem('currentShiftId') || "ไม่มีข้อมูลกะ";
 
+        // 🌟 ดึงข้อมูลสมาชิกที่เช็คอินอยู่ในโต๊ะมาสำรองไว้ เพื่อป้องกันชื่อ/รูปหลุด
+        let currentTableMembers = [];
+        try {
+            const currentTableDoc = await db.collection("tables").doc(cleanTableId).get();
+            if (currentTableDoc.exists && currentTableDoc.data().activeMembers) {
+                currentTableMembers = currentTableDoc.data().activeMembers;
+            }
+        } catch (err) {
+            console.warn("ไม่สามารถดึงข้อมูลสมาชิกร่วมโต๊ะสำรองได้:", err);
+        }
+
+        // 🌟 แมปรูปภาพและชื่อจริงจากสมาชิกร่วมโต๊ะ หากดึงจาก HTML หน้าจอได้ไม่สมบูรณ์
+        memberPointsAssigned = memberPointsAssigned.map(m => {
+            let foundInTable = currentTableMembers.find(tm => tm.uid === m.uid || tm.id === m.uid);
+            let finalName = (m.name && m.name !== "สมาชิก") ? m.name : (foundInTable ? (foundInTable.displayName || foundInTable.name || "สมาชิก") : "สมาชิก");
+            let finalPic = m.pictureUrl ? m.pictureUrl : (foundInTable ? (foundInTable.pictureUrl || foundInTable.photoURL || "") : "");
+            return {
+                ...m,
+                name: finalName,
+                pictureUrl: finalPic
+            };
+        });
+
+        // 🌟 เตรียมข้อมูลสมาชิกหลักสำหรับบันทึกลง Root Level
+        let firstMember = memberPointsAssigned.length > 0 ? memberPointsAssigned[0] : (currentTableMembers.length > 0 ? currentTableMembers[0] : null);
+        let primaryCustomerName = firstMember ? (firstMember.name || firstMember.displayName || "สมาชิก") : "สมาชิก";
+        let primaryPictureUrl = firstMember ? (firstMember.pictureUrl || firstMember.photoURL || "") : "";
+
         const checkoutRef = db.collection("checkouts").doc();
         batch.set(checkoutRef, {
             tableNo: cleanTableId, // ใช้รหัสโต๊ะที่คลีนแล้ว
@@ -640,6 +679,11 @@
             change: Math.round(totalReceived - net),
             items: orderedItemsDetails, 
             membersRewarded: memberPointsAssigned,
+            // 🌟 ฟิลด์ที่เพิ่มเข้ามาสำหรับแสดงรูปและชื่อฝั่งใบเสร็จลูกค้า
+            customerName: primaryCustomerName,
+            displayName: primaryCustomerName,
+            pictureUrl: primaryPictureUrl,
+            activeMembers: currentTableMembers,
             shiftId: shiftId,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
