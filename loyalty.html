@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>บัตรสะสมแต้ม</title>
+  <title>บัตรสะสมแต้ม - ร้านชูใจ</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -127,7 +127,7 @@
       margin: 0;
       font-size: 12px;
       color: #dcdde1;
-      line-height: 1.4;
+      line-height: 1.5;
     }
 
     /* Loading Spinner */
@@ -168,8 +168,8 @@
         </div>
       </div>
 
-      <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #2f3542;">บัตรสะสมแสตมป์</h3>
-      <p style="margin: 0 0 15px 0; font-size: 13px; color: #747d8c;">สะสมครบ 10 ดวง รับทันทีส่วนลดบุฟเฟต์!</p>
+      <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #2f3542;">บัตรสะสมแต้ม</h3>
+      <p style="margin: 0 0 15px 0; font-size: 13px; color: #747d8c;">สะสมครบ 10 แต้ม แลกรับส่วนลด 50 บาท!</p>
 
       <!-- ตารางแสตมป์ 10 ช่อง -->
       <div class="stamp-grid" id="stampGrid">
@@ -179,7 +179,10 @@
       <!-- สิทธิประโยชน์ / กติกา -->
       <div class="reward-banner">
         <h5><i class="fa-solid fa-gift"></i> เงื่อนไขการสะสมแต้ม</h5>
-        <p>• ทานบุฟเฟต์ทุก 1 ท่าน รับทันที 1 แสตมป์<br>• สะสมครบ 10 แสตมป์ แสดงหน้านี้กับพนักงานเพื่อรับส่วนลดในมื้อถัดไป</p>
+        <p>
+          • ทานบุฟเฟต์ทุก 100 บาท รับทันที 1 แต้ม<br>
+          • สะสมครบ 10 แต้ม สามารถกดใช้ส่วนลด 50 บาท ในหน้าป๊อปอัปสรุปยอดบิลขณะสั่งอาหารได้ทันที
+        </p>
       </div>
 
     </div>
@@ -204,7 +207,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // ⚠️ อย่าลืมใส่ LIFF ID ตัวใหม่สำหรับบัตรสะสมแต้ม
     const LIFF_ID = "2011490016-NxRgOFFn"; 
     let lineUID = "";
 
