@@ -140,24 +140,38 @@
     </div>
 
     <!-- Modal ป๊อบอัพแสดงสรุปยอดบิล -->
-    <div class="modal fade" id="billModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow" style="border-radius: 15px;">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold text-dark">🧾 สรุปยอดบิล</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<div class="modal fade" id="billModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow" style="border-radius: 15px;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-dark">🧾 สรุปยอดบิล</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- พื้นที่แสดงรายการอาหารและยอดรวม (โค้ดเดิม) -->
+                <div id="billArea">
+                    <div class="text-center my-3 text-muted">กำลังดึงข้อมูลบิล...</div>
                 </div>
-                <div class="modal-body">
-                    <div id="billArea">
-                        <div class="text-center my-3 text-muted">กำลังดึงข้อมูลบิล...</div>
-                    </div>
+
+                <!-- 🌟 ส่วนที่เพิ่มเข้ามาใหม่: กล่องแสดงแต้มและปุ่มใช้สิทธิ์ -->
+                <div id="pointRedeemSection" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 12px; text-align: center; border: 2px dashed #06C755;">
+                    <p style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">
+                        คุณมีแต้มสะสม <strong id="currentPointsTxt" style="color: #06C755; font-size: 18px;">0</strong> แต้ม
+                    </p>
+                    <button id="btnRedeemPoints" class="btn w-100 rounded-pill fw-bold" style="background: #ff9f43; color: white; box-shadow: 0 4px 10px rgba(255, 159, 67, 0.3);" onclick="applyPointDiscount()">
+                        🎁 ใช้ 10 แต้ม แลกส่วนลด 50 บาท
+                    </button>
+                    <!-- ข้อความแจ้งเตือนเมื่อใช้สิทธิ์แล้ว -->
+                    <p id="discountStatusTxt" style="margin: 10px 0 0 0; font-size: 12px; color: #e74c3c; display: none;"></p>
                 </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-secondary w-100 rounded-pill" data-bs-dismiss="modal">ปิด</button>
-                </div>
+
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary w-100 rounded-pill" data-bs-dismiss="modal">ปิด</button>
             </div>
         </div>
     </div>
+</div>
 
     <!-- Firebase JS SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -818,11 +832,97 @@
 
                     billArea.innerHTML = html;
 
+                    // 🌟 เพิ่มบรรทัดนี้เข้าไป เพื่อให้เช็คแต้มและแสดงปุ่มส่วนลดทุกครั้งที่ดึงบิล
+                    checkPointsForDiscount(); 
+
                 }, function(error) {
                     console.error("Error listening to customer bill:", error);
                     billArea.innerHTML = "<div class='text-center my-3 text-danger'>เกิดข้อผิดพลาด: " + error.message + "</div>";
                 });
         }
+
+                // ฟังก์ชันนี้สำหรับอัปเดตหน้าตาปุ่มใน Modal (เช่น ถ้าแต้มไม่ถึงให้ซ่อนปุ่ม หรือถ้ากดใช้ไปแล้วให้ปุ่มเป็นสีเขียว)
+async function checkPointsForDiscount() {
+    const redeemSection = document.getElementById('pointRedeemSection');
+    const currentPointsTxt = document.getElementById('currentPointsTxt');
+    const btnRedeem = document.getElementById('btnRedeemPoints');
+    const statusTxt = document.getElementById('discountStatusTxt');
+    
+    // อัปเดตตัวเลขแต้มให้ตรง (สมมติว่าคุณเก็บแต้มลูกค้าไว้ในตัวแปร userPoints)
+    currentPointsTxt.innerText = userPoints;
+
+    // ถ้าแต้มตั้งแต่ 10 ขึ้นไป ค่อยโชว์กล่องให้กดแลก
+    if (userPoints >= 10) {
+        redeemSection.style.display = 'block';
+        
+        // เช็คว่าโต๊ะนี้เคยกดขอส่วนลดไปแล้วหรือยัง (ดึงจาก Firebase)
+        const tableRef = doc(db, "tables", String(tableId));
+        const tableSnap = await getDoc(tableRef);
+        
+        if (tableSnap.exists()) {
+            const tData = tableSnap.data();
+            if (tData.pendingDiscount === 50) {
+                // ถ้ากดใช้ไปแล้ว ให้ปิดปุ่มและโชว์ว่าใช้แล้ว
+                btnRedeem.disabled = true;
+                btnRedeem.innerHTML = "✅ ใช้สิทธิ์ส่วนลด 50 บาทแล้ว";
+                btnRedeem.style.background = "#06C755";
+                statusTxt.style.display = 'block';
+                statusTxt.innerText = "*ระบบจะหักส่วนลด 50 บาท ตอนชำระเงินที่เคาน์เตอร์";
+            } else {
+                // ถ้ายืนยันใช้ได้ปกติ
+                btnRedeem.disabled = false;
+                btnRedeem.innerHTML = "🎁 ใช้ 10 แต้ม แลกส่วนลด 50 บาท";
+                btnRedeem.style.background = "#ff9f43";
+                statusTxt.style.display = 'none';
+            }
+        }
+    } else {
+        redeemSection.style.display = 'none'; // แต้มไม่ถึง ซ่อนกล่องไปเลย
+    }
+}
+
+// ฟังก์ชันเมื่อลูกค้ากดปุ่มใช้แต้ม
+async function applyPointDiscount() {
+    if (userPoints < 10) {
+        Swal.fire("แต้มไม่พอ", "คุณต้องมีอย่างน้อย 10 แต้มเพื่อแลกส่วนลดครับ", "warning");
+        return;
+    }
+
+    Swal.fire({
+        title: 'ยืนยันการใช้แต้ม?',
+        text: "ต้องการใช้ 10 แต้ม แลกส่วนลด 50 บาท ในบิลนี้ใช่หรือไม่?",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#06C755',
+        confirmButtonText: 'ยืนยันใช้สิทธิ์',
+        cancelButtonText: 'ยกเลิก'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            try {
+                Swal.fire({ title: 'กำลังบันทึกส่วนลด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                // 🌟 อัปเดตข้อมูลลง Firebase ว่าโต๊ะนี้มีการขอใช้ส่วนลด
+                const tableRef = doc(db, "tables", String(tableId)); 
+                await updateDoc(tableRef, {
+                    pendingDiscount: 50,       // ยอดส่วนลดที่จะให้แคชเชียร์หัก
+                    pendingPointsToDeduct: 10,  // แต้มที่จะถูกหักตอนจ่ายเงินเสร็จ
+                    redeemedByUID: lineUID     // เก็บว่าใครเป็นคนกดใช้แต้ม
+                });
+
+                Swal.fire('สำเร็จ!', 'รับส่วนลดเรียบร้อยครับ ระบบจะหักยอดในบิลตอนชำระเงิน', 'success');
+                
+                // โหลด UI ปุ่มในหน้าต่างบิลอีกครั้งเพื่ออัปเดตเป็นสีเขียว
+                checkPointsForDiscount();
+
+            } catch (error) {
+                console.error("Error applying discount:", error);
+                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถใช้แต้มได้ในขณะนี้ โปรดลองอีกครั้ง', 'error');
+            }
+        }
+    });
+}
+
+        
     </script>
 </body>
 </html>
