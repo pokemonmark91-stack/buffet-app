@@ -143,26 +143,31 @@
                 <span class="text-info fw-bold fs-5 ms-2"><i class="bi bi-person-circle"></i> เรย์</span>
             </div>
 
-            <!-- เพิ่มส่วนแสดงยอดเงินสดในกะปัจจุบัน -->
-            <div class="mb-3 p-2 bg-dark bg-opacity-50 rounded border border-secondary" id="cashSummaryBox" style="display: none;">
+            <!-- ส่วนแสดงยอดเงินสดในกะปัจจุบัน (กดเพื่อดูรายละเอียดได้) -->
+            <div class="mb-3 p-2 bg-dark bg-opacity-50 rounded border border-secondary" id="cashSummaryBox" style="display: none; cursor: pointer;" onclick="showCashFlowHistory()" title="คลิกเพื่อดูรายละเอียด">
                 <div class="d-flex justify-content-between align-items-center">
-                    <span class="text-white-50 small">💵 เงินสดสะสมในกะนี้:</span>
+                    <span class="text-white-50 small">💵 เงินสดสะสมในกะนี้ (คลิกดูรายละเอียด):</span>
                     <span id="expectedCashText" class="text-success fw-bold fs-5">0.00 ฿</span>
                 </div>
             </div>
             
-            <!-- ปุ่มควบคุมกะ (แยกเปิด/ปิด ชัดเจน) -->
+            <!-- ปุ่มควบคุมกะ -->
             <div class="d-flex flex-wrap gap-2" id="shiftActionButtons">
-                <!-- ปุ่มเปิดกะ (จะแสดงเฉพาะตอนยังไม่เปิดกะ) -->
+                <!-- ปุ่มเปิดกะ -->
                 <button id="btnOpenShift" class="btn btn-warning px-4 rounded-3 fw-bold text-dark" style="display: none;" onclick="openShiftPrompt()">
                     <i class="bi bi-play-circle-fill"></i> เปิดกะ
                 </button>
-                <!-- ปุ่มปิดกะ (จะแสดงเฉพาะตอนเปิดกะอยู่) -->
+                <!-- ปุ่มปิดกะ -->
                 <button id="btnCloseShift" class="btn btn-danger px-4 rounded-3" style="display: none;" onclick="closeShift()">
                     <i class="bi bi-power"></i> ปิดกะ
                 </button>
+                <!-- ปุ่มบันทึกเงินเข้า-ออก -->
                 <button id="btnCashFlow" class="btn btn-shift-action px-3" style="display: none;" onclick="addCashFlow()">
-                    <i class="bi bi-cash-coin text-success"></i> เงินเข้า-ออก
+                    <i class="bi bi-cash-coin text-success"></i> + บันทึกเงินเข้า-ออก
+                </button>
+                <!-- ปุ่มดูประวัติเงินเข้า-ออก -->
+                <button id="btnCashFlowHistory" class="btn btn-shift-action px-3" style="display: none;" onclick="showCashFlowHistory()">
+                    <i class="bi bi-list-check text-info"></i> รายละเอียดเงินเข้า-ออก
                 </button>
                 <a href="admin_history.html" class="btn btn-shift-action px-3">
                     <i class="bi bi-receipt text-warning"></i> บิลย้อนหลัง
@@ -262,7 +267,7 @@
     let unsubCashFlow = null;
     let unsubCheckouts = null;
 
-    // โค้ดป้องกันหน้าต่าง Modal แย่ง Focus จาก SweetAlert (ทำให้พิมพ์ข้อความได้)
+    // ป้องกันหน้าต่าง Modal แย่ง Focus จาก SweetAlert
     document.addEventListener('focusin', function (e) {
        if (e.target.closest && e.target.closest('.swal2-container')) {
            e.stopImmediatePropagation();
@@ -282,9 +287,9 @@
             const btnOpen = document.getElementById('btnOpenShift');
             const btnClose = document.getElementById('btnCloseShift');
             const btnCashFlow = document.getElementById('btnCashFlow');
+            const btnCashFlowHistory = document.getElementById('btnCashFlowHistory');
             const cashSummaryBox = document.getElementById('cashSummaryBox');
 
-            // ยกเลิก listener เก่าถ้ามี
             if (unsubCashFlow) unsubCashFlow();
             if (unsubCheckouts) unsubCheckouts();
 
@@ -293,16 +298,15 @@
                 currentShiftId = shiftDoc.id;
                 const shiftData = shiftDoc.data();
                 
-                // อัปเดตสถานะ UI เป็นเปิดกะ
                 badge.className = "badge bg-success rounded-pill px-3 py-1 fw-normal";
                 badge.innerText = `กำลังเปิดกะ (${currentShiftId.substring(0, 8)}...)`;
                 
                 btnOpen.style.display = 'none';
                 btnClose.style.display = 'inline-block';
                 btnCashFlow.style.display = 'inline-block';
+                if (btnCashFlowHistory) btnCashFlowHistory.style.display = 'inline-block';
                 cashSummaryBox.style.display = 'block';
 
-                // คำนวณยอดเงินสดในกะนี้แบบเรียลไทม์
                 calculateShiftCash(currentShiftId, shiftData.timestamp);
 
             } else {
@@ -310,28 +314,26 @@
                 badge.className = "badge bg-danger rounded-pill px-3 py-1 fw-normal";
                 badge.innerText = "ยังไม่เปิดกะ";
                 
-                // สลับปุ่มให้โชว์ปุ่มเปิดกะ
                 btnOpen.style.display = 'inline-block';
                 btnClose.style.display = 'none';
                 btnCashFlow.style.display = 'none';
+                if (btnCashFlowHistory) btnCashFlowHistory.style.display = 'none';
                 cashSummaryBox.style.display = 'none';
             }
         });
     }
 
-    // ฟังก์ชันคำนวณยอดเงินสดสะสมในกะ (จากบิลเงินสด + รายการเงินเข้า/ออก)
+    // คำนวณยอดเงินสดสะสมในกะ
     function calculateShiftCash(shiftId, shiftStartTime) {
         let cashFromCheckouts = 0;
         let cashFlowTotal = 0;
 
-        // 1. ดึงบิลเช็คเอาต์ที่เกิดขึ้นหลังจากเปิดกะนี้
         unsubCheckouts = db.collection("checkouts")
             .where("timestamp", ">=", shiftStartTime)
             .onSnapshot(checkoutSnap => {
                 cashFromCheckouts = 0;
                 checkoutSnap.forEach(doc => {
                     let data = doc.data();
-                    // ตรวจสอบช่องทางการชำระเงินว่าเป็นเงินสดหรือไม่
                     if (data.payments && Array.isArray(data.payments)) {
                         data.payments.forEach(p => {
                             if (p.method === 'เงินสด' || p.method === 'cash') {
@@ -339,14 +341,12 @@
                             }
                         });
                     } else if (data.totalReceived) {
-                        // รองรับบิลเก่าที่เก็บ totalReceived รวม
                         cashFromCheckouts += Number(data.totalReceived || 0) - Number(data.change || 0);
                     }
                 });
                 updateExpectedCashDisplay(cashFromCheckouts, cashFlowTotal);
             });
 
-        // 2. ดึงรายการเงินเข้า-ออก (Cash In / Cash Out) ของกะนี้
         unsubCashFlow = db.collection("cash_flows")
             .where("shiftId", "==", shiftId)
             .onSnapshot(flowSnap => {
@@ -400,7 +400,7 @@
         }
     }
 
-    // --- 2. ฟังก์ชันปิดกะ (SweetAlert2) ---
+    // --- 2. ฟังก์ชันปิดกะ ---
     async function closeShift() {
         if (!currentShiftId) {
             Swal.fire('แจ้งเตือน', 'ยังไม่มีกะที่เปิดอยู่ในระบบ', 'warning');
@@ -451,7 +451,7 @@
         }
     }
 
-    // --- 3. ฟังก์ชันบันทึกเงินเข้า-ออก (SweetAlert2) ---
+    // --- 3. ฟังก์ชันบันทึกเงินเข้า-ออก ---
     async function addCashFlow() {
         if (!currentShiftId) {
             Swal.fire('แจ้งเตือน', 'กรุณาเปิดกะก่อนบันทึกเงินเข้า-ออก', 'warning');
@@ -512,7 +512,122 @@
         }
     }
 
-    // --- 4. ระบบเปิดหน้าจัดการสมาชิกร่วมโต๊ะ ---
+    // --- 4. ฟังก์ชันแสดงรายละเอียดประวัติเงินเข้า-เงินออก ---
+    async function showCashFlowHistory() {
+        if (!currentShiftId) {
+            Swal.fire('แจ้งเตือน', 'กรุณาเปิดกะก่อนดูรายละเอียด', 'warning');
+            return;
+        }
+
+        try {
+            Swal.fire({
+                title: 'กำลังโหลดข้อมูล...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            const snap = await db.collection("cash_flows")
+                .where("shiftId", "==", currentShiftId)
+                .get();
+
+            let totalIn = 0;
+            let totalOut = 0;
+            let listHtml = '';
+
+            if (snap.empty) {
+                listHtml = `<div class="text-center py-4 text-muted">ยังไม่มีรายการเงินเข้า-ออก ในกะนี้</div>`;
+            } else {
+                let flows = [];
+                snap.forEach(doc => {
+                    flows.push({ id: doc.id, ...doc.data() });
+                });
+
+                // เรียงตามเวลาจากล่าสุดไปเก่าสุด
+                flows.sort((a, b) => {
+                    let tA = a.timestamp ? a.timestamp.toDate() : new Date(0);
+                    let tB = b.timestamp ? b.timestamp.toDate() : new Date(0);
+                    return tB - tA;
+                });
+
+                listHtml = '<div style="max-height: 320px; overflow-y: auto;" class="border rounded-3">';
+                flows.forEach(item => {
+                    let amt = Number(item.amount || 0);
+                    let isIn = item.type === 'in';
+                    if (isIn) totalIn += amt; else totalOut += amt;
+
+                    let timeStr = item.timestamp ? item.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '-';
+                    let badge = isIn 
+                        ? '<span class="badge bg-success-subtle text-success border border-success">เงินเข้า</span>' 
+                        : '<span class="badge bg-danger-subtle text-danger border border-danger">เงินออก</span>';
+                    let sign = isIn ? '+' : '-';
+                    let colorClass = isIn ? 'text-success' : 'text-danger';
+
+                    listHtml += `
+                        <div class="d-flex justify-content-between align-items-center p-2.5 border-bottom text-start" style="padding: 10px 12px; background: #fff;">
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    ${badge}
+                                    <span class="fw-bold text-dark" style="font-size: 0.95rem;">${item.note || 'ไม่ระบุเหตุผล'}</span>
+                                </div>
+                                <small class="text-muted"><i class="bi bi-clock"></i> ${timeStr} น.</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="fw-bold fs-6 ${colorClass}">${sign}${amt.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                listHtml += '</div>';
+            }
+
+            let netFlow = totalIn - totalOut;
+            let netSign = netFlow >= 0 ? '+' : '';
+            let netColor = netFlow >= 0 ? 'text-success' : 'text-danger';
+
+            Swal.fire({
+                html: `
+                    <div style="background-color: #0d6efd; color: white; padding: 15px; margin: -1.25em -1.25em 15px -1.25em; text-align: left; font-size: 1.2rem; font-weight: bold; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                        <span>📋 รายละเอียดเงินเข้า - เงินออก (กะปัจจุบัน)</span>
+                        <span style="cursor: pointer; font-size: 1.5rem;" onclick="Swal.close()">✕</span>
+                    </div>
+
+                    <div class="row g-2 mb-3 text-center">
+                        <div class="col-4">
+                            <div class="p-2 bg-success bg-opacity-10 rounded border border-success border-opacity-25">
+                                <small class="text-success d-block small">รวมเงินเข้า</small>
+                                <strong class="text-success">+${totalIn.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-danger bg-opacity-10 rounded border border-danger border-opacity-25">
+                                <small class="text-danger d-block small">รวมเงินออก</small>
+                                <strong class="text-danger">-${totalOut.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-primary bg-opacity-10 rounded border border-primary border-opacity-25">
+                                <small class="text-primary d-block small">คงเหลือสุทธิ</small>
+                                <strong class="${netColor}">${netSign}${netFlow.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    ${listHtml}
+                `,
+                width: '520px',
+                showConfirmButton: false,
+                showCancelButton: true,
+                cancelButtonText: 'ปิดหน้าต่าง',
+                cancelButtonColor: '#6c757d'
+            });
+
+        } catch (error) {
+            console.error("Error loading cash flow history:", error);
+            Swal.fire('ข้อผิดพลาด', 'ไม่สามารถดึงข้อมูลรายละเอียดได้: ' + error.message, 'error');
+        }
+    }
+
+    // --- 5. ระบบเปิดหน้าจัดการสมาชิกร่วมโต๊ะ ---
     async function openTableMembers() {
         if (!selectedTableId) return;
         if (modal) modal.hide();
@@ -582,7 +697,7 @@
         }
     }
 
-    // --- 5. ระบบผังโต๊ะ ---
+    // --- 6. ระบบผังโต๊ะ ---
     function listenToTables() {
         db.collection("tables").onSnapshot(snapshot => {
             const container = document.getElementById('tableContainer');
