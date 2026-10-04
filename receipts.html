@@ -276,18 +276,34 @@
                 if (data.membersRewarded && data.membersRewarded.length > 0) {
                     membersHtml += `<div class="dashed-line"></div><div class="fw-bold mb-2">สมาชิกที่ได้รับแต้ม:</div>`;
                     data.membersRewarded.forEach(m => {
-                        let memName = m.name || m.displayName || 'สมาชิก';
-                        let memPic = m.pictureUrl || m.picture || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
+                        // 🌟 ปรับปรุงการดึงชื่อให้ครอบคลุม หาจาก m ก่อน ถ้าไม่มีหาจาก data หลัก ถ้าไม่มีอีกใช้คำว่า 'สมาชิก'
+                        let memName = m.name || m.displayName || data.customerName || data.displayName || 'สมาชิก';
+                        
+                        // 🌟 ปรับปรุงการดึงรูปภาพ หาจาก m ก่อน ถ้าไม่มีหาจาก data หลัก ถ้าไม่มีใช้ Fallback Avatar
+                        let memPic = m.pictureUrl || m.picture || m.photoURL || data.pictureUrl || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'; 
 
                         membersHtml += `
                         <div class="d-flex justify-content-between align-items-center mb-2 small">
                             <div class="d-flex align-items-center">
-                                <img src="${memPic}" width="28" height="28" class="rounded-circle me-2" style="object-fit: cover; border: 1px solid #ddd;">
+                                <img src="${memPic}" width="28" height="28" class="rounded-circle me-2" style="object-fit: cover; border: 1px solid #ddd;" onerror="this.src='https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'">
                                 <span class="text-dark fw-semibold text-truncate" style="max-width: 150px;">${memName}</span>
                             </div>
                             <span class="text-success fw-bold">+${m.points} แต้ม</span>
                         </div>`;
                     });
+                } else if (data.customerName || data.pictureUrl) {
+                     // 🌟 กรณีไม่มีใน membersRewarded แต่มีข้อมูลใน Document Root
+                     let memName = data.customerName || data.displayName || 'สมาชิก';
+                     let memPic = data.pictureUrl || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png';
+                     
+                     membersHtml += `
+                        <div class="dashed-line"></div><div class="fw-bold mb-2">ข้อมูลสมาชิก:</div>
+                        <div class="d-flex justify-content-between align-items-center mb-2 small">
+                            <div class="d-flex align-items-center">
+                                <img src="${memPic}" width="28" height="28" class="rounded-circle me-2" style="object-fit: cover; border: 1px solid #ddd;" onerror="this.src='https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'">
+                                <span class="text-dark fw-semibold text-truncate" style="max-width: 150px;">${memName}</span>
+                            </div>
+                        </div>`;
                 }
 
                 // ช่องทางการรับเงิน
@@ -317,7 +333,7 @@
                         <h5 class="fw-bold mb-0">ก๋วยเตี๋ยวบุฟเฟ่ต์99</h5>
                         <small>สำเนาใบเสร็จรับเงิน / COPY RECEIPT</small><br>
                         <small>โต๊ะ: ${data.tableNo} | ${dateStr}</small><br>
-                        <small class="text-muted">Ref: ${data.id}</small>
+                        <small class="text-muted">Ref: ${data.id || docId}</small>
                     </div>
                     
                     <div class="dashed-line"></div>
