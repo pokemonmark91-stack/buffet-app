@@ -162,22 +162,35 @@
             if (data.membersRewarded && data.membersRewarded.length > 0) {
                 membersHtml += `<div class="dashed-line"></div><div class="fw-bold mb-2">สมาชิกที่ได้รับแต้ม:</div>`;
                 data.membersRewarded.forEach(m => {
-               // ดึงชื่อ (รองรับหลายตัวแปรเผื่อไว้) ถ้าไม่มีให้ขึ้นว่า "สมาชิก"
-            let memName = m.name || m.displayName || 'สมาชิก';
-        
-                // ดึงรูปโปรไฟล์ ถ้าตอนชำระเงินไม่ได้เซฟรูปมา ให้ใช้รูปพื้นฐาน
-            let memPic = m.pictureUrl || m.picture || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
+                    // 🌟 ปรับปรุงการดึงชื่อ ดึงจาก m ก่อน ถ้าไม่มีหาจาก data หลัก ถ้าไม่มีใช้ 'สมาชิก'
+                    let memName = m.name || m.displayName || data.customerName || data.displayName || 'สมาชิก';
+            
+                    // 🌟 ปรับปรุงการดึงรูปภาพ ดึงจาก m ก่อน ถ้าไม่มีหาจาก data หลัก ถ้าไม่มีใช้ Fallback Avatar
+                    let memPic = m.pictureUrl || m.picture || m.photoURL || data.pictureUrl || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'; 
 
-            membersHtml += `
-            <div class="d-flex justify-content-between align-items-center mb-2 small">
-                <div class="d-flex align-items-center">
-                    <img src="${memPic}" width="28" height="28" class="rounded-circle me-2" style="object-fit: cover; border: 1px solid #ddd;">
-                    <span class="text-dark fw-semibold text-truncate" style="max-width: 150px;">${memName}</span>
-                </div>
-                <span class="text-success fw-bold">+${m.points} แต้ม</span>
-            </div>`;
-        });
-    }
+                    membersHtml += `
+                    <div class="d-flex justify-content-between align-items-center mb-2 small">
+                        <div class="d-flex align-items-center">
+                            <img src="${memPic}" width="28" height="28" class="rounded-circle me-2" style="object-fit: cover; border: 1px solid #ddd;" onerror="this.src='https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'">
+                            <span class="text-dark fw-semibold text-truncate" style="max-width: 150px;">${memName}</span>
+                        </div>
+                        <span class="text-success fw-bold">+${m.points} แต้ม</span>
+                    </div>`;
+                });
+            } else if (data.customerName || data.pictureUrl) {
+                 // 🌟 กรณีไม่มีใครได้แต้ม แต่มีข้อมูลใน Document Root (คนเช็คอิน)
+                 let memName = data.customerName || data.displayName || 'สมาชิก';
+                 let memPic = data.pictureUrl || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png';
+                 
+                 membersHtml += `
+                    <div class="dashed-line"></div><div class="fw-bold mb-2">ข้อมูลสมาชิก:</div>
+                    <div class="d-flex justify-content-between align-items-center mb-2 small">
+                        <div class="d-flex align-items-center">
+                            <img src="${memPic}" width="28" height="28" class="rounded-circle me-2" style="object-fit: cover; border: 1px solid #ddd;" onerror="this.src='https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'">
+                            <span class="text-dark fw-semibold text-truncate" style="max-width: 150px;">${memName}</span>
+                        </div>
+                    </div>`;
+            }
 
             // --- ส่วนที่เพิ่มใหม่: จัดการรูปแบบการแสดงช่องทางการรับเงิน ---
             let paymentsHtml = '';
