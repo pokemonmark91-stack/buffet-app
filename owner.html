@@ -431,13 +431,53 @@
         }
 
         function convertFileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-            });
-        }
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            
+            img.onload = () => {
+                // กำหนดขนาดความกว้าง/สูง สูงสุด (แก้ตัวเลขได้ตามต้องการ)
+                const MAX_WIDTH = 800;
+                const MAX_HEIGHT = 800;
+                let width = img.width;
+                let height = img.height;
+
+                // คำนวณสัดส่วนรูปภาพใหม่ไม่ให้เกิน MAX_WIDTH / MAX_HEIGHT
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height = Math.round(height * (MAX_WIDTH / width));
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width = Math.round(width * (MAX_HEIGHT / height));
+                        height = MAX_HEIGHT;
+                    }
+                }
+
+                // สร้าง Canvas เพื่อวาดรูปใหม่ที่ย่อขนาดแล้ว
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // แปลงรูปจาก Canvas กลับเป็น Base64 
+                // กำหนดให้เป็น 'image/jpeg' และตั้งค่าคุณภาพที่ 0.7 (70%) เพื่อลดขนาดไฟล์
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                resolve(compressedBase64);
+            };
+            
+            img.onerror = error => reject(error);
+        };
+        
+        reader.onerror = error => reject(error);
+    });
+}
 
         async function addMenu() {
             let name = document.getElementById('menuName').value.trim();
