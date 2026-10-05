@@ -300,7 +300,7 @@
         let dbMenuCategories = {}; // 👈 เพิ่มการเก็บ Category จากฐานข้อมูล Master
 
         try {
-            const menuSnap = await db.collection("menus").get();
+            const menuSnap = await db.collection("menu").get();
             if (!menuSnap.empty) {
                 menuSnap.forEach(doc => {
                     let data = doc.data();
