@@ -33,10 +33,10 @@
 <body class="container py-4">
 
     <!-- Header (ซ่อนเวลาพิมพ์) -->
-    <div class="d-flex justify-content-between align-items-center mb-4 no-print flex-wrap gap-2">
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
         <button onclick="goBack()" class="btn btn-outline-secondary fw-bold">◀ ย้อนกลับไปโต๊ะ</button>
         <h3 class="fw-bold m-0 text-dark">💳 ชำระเงิน โต๊ะ <span id="displayTableNo" class="text-primary">-</span></h3>
-        <div></div>
+        <div style="width: 100px;"></div>
     </div>
 
     <div class="row g-4">
@@ -100,7 +100,7 @@
             <div class="card payment-card shadow-sm p-4">
                 
                 <!-- 1. ส่วนลด -->
-                <h6 class="fw-bold text-dark mb-3">💡 ส่วนลดเพิ่ม</h6>
+                <h6 class="fw-bold text-dark mb-3">💡 ส่วนลด</h6>
                 <div class="row g-2 mb-4">
                     <div class="col-6">
                         <input type="number" id="discountVal" class="form-control" value="0" min="0" oninput="calculateNetTotal()" placeholder="ใส่ยอดลด">
@@ -119,14 +119,16 @@
                     <span id="netTotalTxt" class="fw-bold m-0 text-success" style="font-size: 28px;">0 บาท</span>
                 </div>
 
-                <!-- 3. ช่องทางการชำระเงิน -->
+                <!-- 3. ช่องทางการชำระเงิน (รองรับแบ่งจ่ายหลายช่องทาง) -->
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="fw-bold text-dark m-0">💰 ช่องทางการชำระเงิน</h6>
                     <button type="button" onclick="addPaymentRow()" class="btn btn-sm btn-primary fw-bold">+ เพิ่มช่องชำระเงิน</button>
                 </div>
 
                 <!-- พื้นที่แสดงแถวช่องทางการชำระเงิน -->
-                <div id="paymentRowsContainer" class="mb-3"></div>
+                <div id="paymentRowsContainer" class="mb-3">
+                    <!-- แถวจะถูกเพิ่มด้วย JavaScript อัตโนมัติ -->
+                </div>
 
                 <!-- สรุปผลการรับเงิน / เงินทอน / เงินขาด -->
                 <div class="p-3 bg-light rounded border mb-4">
@@ -178,8 +180,7 @@
         const currentTableId = urlParams.get('table');
         let totalBillAmount = 0;
         let totalEarnedPoints = 0;
-
-        // ตัวแปรสำหรับรับค่าจากการแลกแต้มของลูกค้า
+        
         let pendingDiscountAmount = 0;
         let pendingPointsToDeduct = 0;
         let redeemedByUID = "";
@@ -323,13 +324,8 @@
                     }
                 }
 
-                // A. ดึงข้อมูลโต๊ะ
-                const cleanTableId = String(currentTableId).replace('โต๊ะ', '').trim();
-                let tableDoc = await db.collection("tables").doc(currentTableId).get();
-                if (!tableDoc.exists) {
-                    tableDoc = await db.collection("tables").doc(cleanTableId).get();
-                }
-
+                // A. ดึงข้อมูลโต๊ะ (เพื่อนำมาคิดค่าหัวบุฟเฟต์)
+                const tableDoc = await db.collection("tables").doc(currentTableId).get();
                 let activeMembers = [];
                 
                 if (tableDoc.exists) {
@@ -339,7 +335,6 @@
                     const children = parseInt(tableData.children) || 0;
                     const pkgPrice = parseFloat(tableData.packagePrice) || 0;
 
-                    // ดึงข้อมูลส่วนลดจากการแลกแต้ม
                     pendingDiscountAmount = parseFloat(tableData.pendingDiscount) || 0;
                     pendingPointsToDeduct = parseInt(tableData.pendingPointsToDeduct) || 0;
                     redeemedByUID = tableData.redeemedByUID || "";
@@ -351,7 +346,7 @@
                             showConfirmButton: false, timer: 5000
                         });
                     }
-
+                         
                     if (adults > 0 && pkgPrice > 0) addOrUpdateGroupItem("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice, "head");
                     if (children > 0) {
                         const childPrice = parseFloat(tableData.childPackagePrice || tableData.childPrice) || (pkgPrice / 2);
@@ -363,14 +358,8 @@
                 let ordersSnap;
                 try {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
-                    if (ordersSnap.empty && cleanTableId !== currentTableId) {
-                        ordersSnap = await db.collection("tables").doc(cleanTableId).collection("orders").orderBy("timestamp").get();
-                    }
                 } catch (e) {
                     ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
-                    if (ordersSnap.empty && cleanTableId !== currentTableId) {
-                        ordersSnap = await db.collection("tables").doc(cleanTableId).collection("orders").get();
-                    }
                 }
 
                 if (!ordersSnap.empty) {
@@ -516,7 +505,6 @@
             if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
             else discountAmount = discVal;
 
-            // นำส่วนลดจากแต้มมารวมด้วย
             discountAmount += pendingDiscountAmount;
 
             net = totalBillAmount - discountAmount;
@@ -527,7 +515,7 @@
             if (discountAmount > 0) {
                 discRow.style.display = 'flex';
                 let txt = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
-                if (pendingDiscountAmount > 0) txt += " (รวมส่วนลดแต้ม)";
+                if (pendingDiscountAmount > 0) txt += " (รวมแลกแต้ม)";
                 document.getElementById('discountTxt').innerText = txt;
             } else {
                 discRow.style.display = 'none';
@@ -535,7 +523,7 @@
 
             document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
             document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
-            document.getElementById('netTotalTxt').dataset.net = net;
+            document.getElementById('netTotalTxt').dataset.net = net; 
             
             calculateSplitPayment();
         }
@@ -630,9 +618,6 @@
                 let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
                 let discTypeVal = document.getElementById('discountType').value;
                 let discText = discVal > 0 ? (discVal + " " + discTypeVal) : "ไม่มี";
-                if (pendingDiscountAmount > 0) {
-                    discText += ` (รวมส่วนลดแต้ม ${pendingDiscountAmount} บ.)`;
-                }
 
                 let orderedItemsDetails = [];
                 let receiptListItems = document.querySelectorAll('#receiptItems li');
@@ -656,10 +641,7 @@
 
                 let currentTableMembers = [];
                 try {
-                    let currentTableDoc = await db.collection("tables").doc(cleanTableId).get();
-                    if (!currentTableDoc.exists) {
-                        currentTableDoc = await db.collection("tables").doc(currentTableId).get();
-                    }
+                    const currentTableDoc = await db.collection("tables").doc(cleanTableId).get();
                     if (currentTableDoc.exists && currentTableDoc.data().activeMembers) {
                         currentTableMembers = currentTableDoc.data().activeMembers;
                     }
@@ -701,11 +683,9 @@
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                // ลบรายการออเดอร์ในโต๊ะ
                 const ordersSnap = await db.collection("tables").doc(cleanTableId).collection("orders").get();
                 ordersSnap.forEach(doc => batch.delete(doc.ref));
 
-                // เคลียร์สถานะโต๊ะกลับเป็น "ว่าง" พร้อมลบฟิลด์แลกแต้ม
                 const tableRef = db.collection("tables").doc(cleanTableId);
                 batch.set(tableRef, {
                     status: "ว่าง",
@@ -723,7 +703,6 @@
                     redeemedByUID: firebase.firestore.FieldValue.delete()
                 }, { merge: true });
 
-                // คำนวณแจกแต้มใหม่ + หักแต้มที่แลก
                 let pointAdjustments = {};
 
                 let inputs = document.querySelectorAll('.point-input');
