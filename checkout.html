@@ -180,6 +180,11 @@
         const currentTableId = urlParams.get('table');
         let totalBillAmount = 0;
         let totalEarnedPoints = 0;
+        
+        // 🌟 1. เพิ่มตัวแปร 3 ตัวนี้เพื่อรับค่าจากการแลกแต้ม
+        let pendingDiscountAmount = 0;
+        let pendingPointsToDeduct = 0;
+        let redeemedByUID = "";
 
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
 
@@ -334,6 +339,27 @@
                     const children = parseInt(tableData.children) || 0;
                     const pkgPrice = parseFloat(tableData.packagePrice) || 0;
 
+                     if (tableDoc.exists) {
+                    const tableData = tableDoc.data();
+                    activeMembers = tableData.activeMembers || [];
+                    const adults = parseInt(tableData.adults) || 0;
+                    const children = parseInt(tableData.children) || 0;
+                    const pkgPrice = parseFloat(tableData.packagePrice) || 0;
+
+                    // 🌟 2. เพิ่มโค้ดดึงข้อมูลส่วนลดที่ลูกค้ากดไว้
+                    pendingDiscountAmount = parseFloat(tableData.pendingDiscount) || 0;
+                    pendingPointsToDeduct = parseInt(tableData.pendingPointsToDeduct) || 0;
+                    redeemedByUID = tableData.redeemedByUID || "";
+
+                    // แจ้งเตือนพนักงานให้รู้ว่าโต๊ะนี้มีส่วนลดจากแต้ม
+                    if (pendingDiscountAmount > 0) {
+                        Swal.fire({
+                            toast: true, position: 'top-end', icon: 'info',
+                            title: `ลูกค้าใช้แต้มแลกส่วนลด ${pendingDiscountAmount} บาท!`,
+                            showConfirmButton: false, timer: 5000
+                        });
+                    }
+                         
                     if (adults > 0 && pkgPrice > 0) addOrUpdateGroupItem("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice, "head");
                     if (children > 0) {
                         const childPrice = parseFloat(tableData.childPackagePrice || tableData.childPrice) || (pkgPrice / 2);
@@ -487,34 +513,38 @@
         }
 
         function calculateNetTotal() {
-    let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-    let discType = document.getElementById('discountType').value;
-    let net = totalBillAmount;
-    let discountAmount = 0;
+            let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
+            let discType = document.getElementById('discountType').value;
+            let net = totalBillAmount;
+            let discountAmount = 0;
 
-    if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
-    else discountAmount = discVal;
+            if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
+            else discountAmount = discVal;
 
-    net = totalBillAmount - discountAmount;
-    net = net < 0 ? 0 : net;
+            // นำส่วนลดจากแต้มมารวมด้วย
+            discountAmount += pendingDiscountAmount;
 
-    // 🌟 แก้ไขตรงนี้: ปัดเศษ net ให้เป็นจำนวนเต็มลงตัวทันที
-    net = Math.round(net);
+            net = totalBillAmount - discountAmount;
+            net = net < 0 ? 0 : net;
+            net = Math.round(net);
 
-    let discRow = document.getElementById('discountRow');
-    if (discountAmount > 0) {
-        discRow.style.display = 'flex';
-        document.getElementById('discountTxt').innerText = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
-    } else {
-        discRow.style.display = 'none';
-    }
+            let discRow = document.getElementById('discountRow');
+            if (discountAmount > 0) {
+                discRow.style.display = 'flex';
+                // ปรับข้อความให้รู้ว่ารวมหักแต้มแล้ว (ถ้ามี)
+                let txt = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
+                if (pendingDiscountAmount > 0) txt += " (รวมแลกแต้ม)";
+                document.getElementById('discountTxt').innerText = txt;
+            } else {
+                discRow.style.display = 'none';
+            }
 
-    document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
-    document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
-    document.getElementById('netTotalTxt').dataset.net = net; // ตอนนี้ค่าใน dataset.net จะเป็นจำนวนเต็มลงตัวแล้ว (เช่น 717)
-    
-    calculateSplitPayment();
-}
+            document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
+            document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
+            document.getElementById('netTotalTxt').dataset.net = net; 
+            
+            calculateSplitPayment();
+        }
 
         // คำนวณผลรวมจากการแบ่งจ่ายหลายช่องทาง
         function calculateSplitPayment() {
@@ -692,7 +722,7 @@
         const ordersSnap = await db.collection("tables").doc(cleanTableId).collection("orders").get();
         ordersSnap.forEach(doc => batch.delete(doc.ref));
 
-        // 🌟 อัปเดตสถานะโต๊ะกลับเป็น "ว่าง" โดยใช้ cleanTableId และใช้ merge: true เผื่อกรณีข้อมูลหาย
+                // 🌟 4.1 เพิ่มบรรทัดเคลียร์ส่วนลดตอนเซ็ตโต๊ะเป็น "ว่าง"
         const tableRef = db.collection("tables").doc(cleanTableId);
         batch.set(tableRef, {
             status: "ว่าง",
@@ -701,25 +731,42 @@
             children: 0,
             totalPeople: 0,
             packagePrice: 0,
-            orderCount: 0, // เพิ่มการเคลียร์ยอดออเดอร์เข้าไปด้วย
-            
-            // 🌟🌟🌟 เพิ่มการเคลียร์ฟิลด์จำนวนคนที่อาจจะตกหล่นตรงนี้ครับ! 🌟🌟🌟
+            orderCount: 0, 
             pax: 0,
             customerCount: 0,
-            peopleCount: 0 
+            peopleCount: 0,
+            // เคลียร์ฟิลด์แลกแต้มทิ้ง
+            pendingDiscount: firebase.firestore.FieldValue.delete(),
+            pendingPointsToDeduct: firebase.firestore.FieldValue.delete(),
+            redeemedByUID: firebase.firestore.FieldValue.delete()
         }, { merge: true });
 
+
+        // 🌟 4.2 แทนที่ลูปแจกแต้มเดิมด้วยโค้ดนี้ (จะคำนวณบวกแต้มและหักแต้มให้จบในรอบเดียว)
+        let pointAdjustments = {};
+
+        // ก. รวมแต้มที่ได้จากการกินบิลนี้
         let inputs = document.querySelectorAll('.point-input');
         inputs.forEach(inp => {
             let uid = inp.getAttribute('data-uid');
             let pts = parseInt(inp.value) || 0;
-            if (uid && pts > 0) {
-                const memberRef = db.collection("members").doc(uid);
-                batch.set(memberRef, { points: firebase.firestore.FieldValue.increment(pts) }, { merge: true });
-            }
+            if (uid && pts > 0) pointAdjustments[uid] = (pointAdjustments[uid] || 0) + pts;
         });
 
-        await batch.commit();
+        // ข. หักแต้มที่ลูกค้ากดใช้สิทธิ์
+        if (pendingPointsToDeduct > 0 && redeemedByUID) {
+            pointAdjustments[redeemedByUID] = (pointAdjustments[redeemedByUID] || 0) - pendingPointsToDeduct;
+        }
+
+        // ค. บันทึกลงฐานข้อมูล
+        for (let uid in pointAdjustments) {
+            if (pointAdjustments[uid] !== 0) {
+                const memberRef = db.collection("members").doc(uid);
+                batch.set(memberRef, { points: firebase.firestore.FieldValue.increment(pointAdjustments[uid]) }, { merge: true });
+            }
+        }
+
+        await batch.commit(); // (บรรทัดเดิมของคุณ)
 
         Swal.fire({
             title: "ชำระเงินสำเร็จ!",
