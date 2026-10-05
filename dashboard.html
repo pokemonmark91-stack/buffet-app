@@ -373,32 +373,61 @@
     }
 
     // --- ฟังก์ชันเปิดกะใหม่ ---
-    async function openShiftPrompt() {
-        const { value: staffName } = await Swal.fire({
-            title: '🟢 เปิดกะการทำงาน',
-            input: 'text',
-            inputLabel: 'ชื่อพนักงานผู้เปิดกะ:',
-            inputValue: 'เรย์',
-            showCancelButton: true,
-            confirmButtonText: 'ยืนยันเปิดกะ',
-            cancelButtonText: 'ยกเลิก',
-            confirmButtonColor: '#198754'
-        });
+async function openShiftPrompt() {
+    const { value: formValues } = await Swal.fire({
+        title: '🟢 เปิดกะการทำงาน',
+        html: `
+            <div class="text-start">
+                <label class="form-label fw-bold">ชื่อพนักงานผู้เปิดกะ:</label>
+                <input id="swal-staffName" class="swal2-input m-0 mb-3 w-100" value="เรย์" placeholder="กรอกชื่อพนักงาน">
+                
+                <label class="form-label fw-bold">ยอดเงินทอนเริ่มต้น (บาท):</label>
+                <input id="swal-startingCash" type="number" min="0" class="swal2-input m-0 w-100" placeholder="0" value="0">
+            </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'ยืนยันเปิดกะ',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#198754',
+        preConfirm: () => {
+            const staffName = document.getElementById('swal-staffName').value.trim();
+            const startingCash = parseFloat(document.getElementById('swal-startingCash').value) || 0;
 
-        if (staffName) {
-            try {
-                const newShiftRef = db.collection("shifts").doc();
-                await newShiftRef.set({
-                    status: 'open',
-                    staffName: staffName,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                Swal.fire({ icon: 'success', title: 'เปิดกะสำเร็จ', timer: 1500, showConfirmButton: false });
-            } catch (error) {
-                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเปิดกะได้: ' + error.message, 'error');
+            if (!staffName) {
+                Swal.showValidationMessage('กรุณากรอกชื่อพนักงานผู้เปิดกะ');
+                return false;
             }
+
+            return {
+                staffName: staffName,
+                startingCash: startingCash
+            };
+        }
+    });
+
+    if (formValues) {
+        try {
+            const newShiftRef = db.collection("shifts").doc();
+            await newShiftRef.set({
+                status: 'open',
+                staffName: formValues.staffName,
+                startingCash: formValues.startingCash, // 🟢 เพิ่มการบันทึกยอดเงินทอนเริ่มต้น
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            Swal.fire({ 
+                icon: 'success', 
+                title: 'เปิดกะสำเร็จ', 
+                text: `พนักงาน: ${formValues.staffName} | เงินทอนเริ่มต้น: ${formValues.startingCash.toLocaleString()} บาท`,
+                timer: 2000, 
+                showConfirmButton: false 
+            });
+        } catch (error) {
+            Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเปิดกะได้: ' + error.message, 'error');
         }
     }
+}
 
     // --- 2. ฟังก์ชันปิดกะ ---
     async function closeShift() {
