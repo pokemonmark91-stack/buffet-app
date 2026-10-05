@@ -497,36 +497,47 @@
         }
 
         function calculateNetTotal() {
-            let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-            let discType = document.getElementById('discountType').value;
-            let net = totalBillAmount;
-            let discountAmount = 0;
+    let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
+    let discType = document.getElementById('discountType').value;
+    let net = totalBillAmount;
+    let discountAmount = 0;
 
-            if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
-            else discountAmount = discVal;
+    if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
+    else discountAmount = discVal;
 
-            discountAmount += pendingDiscountAmount;
+    discountAmount += pendingDiscountAmount;
 
-            net = totalBillAmount - discountAmount;
-            net = net < 0 ? 0 : net;
-            net = Math.round(net);
+    net = totalBillAmount - discountAmount;
+    net = net < 0 ? 0 : net;
+    net = Math.round(net);
 
-            let discRow = document.getElementById('discountRow');
-            if (discountAmount > 0) {
-                discRow.style.display = 'flex';
-                let txt = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
-                if (pendingDiscountAmount > 0) txt += " (รวมแลกแต้ม)";
-                document.getElementById('discountTxt').innerText = txt;
-            } else {
-                discRow.style.display = 'none';
-            }
+    let discRow = document.getElementById('discountRow');
+    if (discountAmount > 0) {
+        discRow.style.display = 'flex';
+        let txt = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
+        if (pendingDiscountAmount > 0) txt += " (รวมแลกแต้ม)";
+        document.getElementById('discountTxt').innerText = txt;
+    } else {
+        discRow.style.display = 'none';
+    }
 
-            document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
-            document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
-            document.getElementById('netTotalTxt').dataset.net = net; 
-            
-            calculateSplitPayment();
-        }
+    document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
+    document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
+    document.getElementById('netTotalTxt').dataset.net = net; 
+
+    // 👇 [เพิ่มโค้ดส่วนนี้เข้าไปครับ] คำนวณแต้มจากยอดสุทธิหลังหักส่วนลด (ทุกๆ 159 บาท หรือ 100 บาท ตามสูตรของคุณ)
+    // ถ้าใช้สูตรทุก 100 บาท ให้เปลี่ยน 159 เป็น 100 ครับ
+    totalEarnedPoints = Math.floor(net / 100); 
+    document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
+
+    // อัปเดตรายชื่อสมาชิกในโต๊ะให้รีเซ็ตแต้มตามยอดสุทธิใหม่ทันที
+    if (typeof tableDocData !== 'undefined' && tableDocData.activeMembers) {
+        renderMembersList(tableDocData.activeMembers, totalEarnedPoints);
+    }
+    // ----------------------------------------------------
+    
+    calculateSplitPayment();
+}
 
         function calculateSplitPayment() {
             let net = parseFloat(document.getElementById('netTotalTxt').dataset.net) || 0;
