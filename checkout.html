@@ -296,11 +296,11 @@
         totalBillAmount = 0;
         let groupedItemsMap = {};
 
+        // 1. โหลดราคาจาก Master Menu ใน Firebase (Collection: menu)
         let dbMenuPrices = {};
         let dbMenuCategories = {}; 
 
         try {
-            // 📌 แก้ไขจาก "menus" เป็น "menu" (ไม่มี s) ให้ตรงกับ Firebase
             const menuSnap = await db.collection("menu").get();
             if (!menuSnap.empty) {
                 menuSnap.forEach(doc => {
@@ -309,30 +309,41 @@
                     let mPrice = parseFloat(data.price || data.amount) || 0;
                     let mCategory = (data.category || data.type || "").trim();
                     
-                    if (mName) {
+                    if (mName && mPrice > 0) {
                         dbMenuPrices[mName] = mPrice;
                         dbMenuCategories[mName] = mCategory;
                     }
                 });
+                console.log("✅ โหลดราคา Master สำเร็จ:", dbMenuPrices);
             }
         } catch (err) {
-            console.warn("ไม่สามารถดึงข้อมูล menu master ได้:", err);
+            console.warn("❌ โหลดราคา Master ไม่สำเร็จ:", err);
         }
 
-        function addOrUpdateGroupItem(name, qty, fixedAmt, type) {
+        // ฟังก์ชันช่วยจัดกลุ่มสินค้าที่ชื่อเหมือนกัน
+        function addOrUpdateGroupItem(name, qty, unitPrice, fixedAmt, type) {
             name = name.trim().replace(/^[,\-\+\s]+/, '');
             if (!name) return;
 
+            // ถ้ามีราคาต่อหน่วยจาก Master ส่งมา ให้ยึดราคานั้นเลย
+            let finalUnitPrice = unitPrice > 0 ? unitPrice : (fixedAmt / qty || 0);
+            
             let key = name + "_" + type;
             if (groupedItemsMap[key]) {
                 groupedItemsMap[key].qty += qty;
-                if (fixedAmt > 0) groupedItemsMap[key].fixedAmt += fixedAmt;
+                groupedItemsMap[key].totalAmt += (finalUnitPrice * qty);
             } else {
-                groupedItemsMap[key] = { name: name, qty: qty, fixedAmt: fixedAmt, type: type };
+                groupedItemsMap[key] = { 
+                    name: name, 
+                    qty: qty, 
+                    totalAmt: (finalUnitPrice * qty), 
+                    type: type,
+                    unitPrice: finalUnitPrice // เก็บราคาต่อหน่วยไว้ด้วย
+                };
             }
         }
 
-        // A. ดึงข้อมูลโต๊ะ
+        // A. ดึงข้อมูลโต๊ะ (ผู้ใหญ่, เด็ก, ส่วนลด)
         const tableDoc = await db.collection("tables").doc(currentTableId).get();
         let activeMembers = [];
         
@@ -355,14 +366,18 @@
                 });
             }
                  
-            if (adults > 0 && pkgPrice > 0) addOrUpdateGroupItem("บุฟเฟต์ผู้ใหญ่", adults, adults * pkgPrice, "head");
+            if (adults > 0 && pkgPrice > 0) {
+                addOrUpdateGroupItem("บุฟเฟต์ผู้ใหญ่", adults, pkgPrice, adults * pkgPrice, "head");
+            }
             if (children > 0) {
                 const childPrice = parseFloat(tableData.childPackagePrice || tableData.childPrice) || (pkgPrice / 2);
-                if (childPrice > 0) addOrUpdateGroupItem("บุฟเฟต์เด็ก", children, children * childPrice, "head");
+                if (childPrice > 0) {
+                    addOrUpdateGroupItem("บุฟเฟต์เด็ก", children, childPrice, children * childPrice, "head");
+                }
             }
         }
 
-        // B. ดึงข้อมูลออเดอร์
+        // B. ดึงข้อมูลออเดอร์ทั้งหมด
         let ordersSnap;
         try {
             ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
@@ -378,21 +393,24 @@
                 let details = item.details || "";
                 let category = item.category || item.type || ""; 
 
+                // ข้ามรายการที่เป็นแค่ log เปิดโต๊ะ
                 if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ") ||
                     title.includes("เพิ่มลูกค้า") || details.includes("เพิ่มลูกค้า") ||
                     title.includes("เพิ่มผู้ใหญ่") || title.includes("เพิ่มเด็ก")) {
                     return; 
                 }
 
+                // จัดการเตา/ซุป
                 if (title.includes("เตา") || details.includes("เตา") || details.includes("ซุป") || category.includes("เตา")) {
                     let name = details ? "สั่งเตา (" + details + ")" : title;
-                    addOrUpdateGroupItem(name, 1, orderAmt, "stove");
+                    addOrUpdateGroupItem(name, 1, orderAmt, orderAmt, "stove");
                     return;
                 }
 
                 let textToParse = details || title;
                 textToParse = textToParse.replace(/^สั่งอาหาร\s*[\(\-]?.*?[\)\-]?\s*/, '').trim();
 
+                // หั่นรายการอาหาร เช่น "น้ำเลม่อน x1 โออิชิ x1"
                 let regex = /([^\d\s][^xX×\n\r,]*?)\s*[xX×]\s*(\d+)/g;
                 let match;
                 let parsedItems = [];
@@ -403,10 +421,12 @@
                     if (itemName) parsedItems.push({ name: itemName, qty: itemQty });
                 }
 
+                // ถ้าไม่มีตัว x ให้ถือว่าเป็น 1 รายการ
                 if (parsedItems.length === 0 && textToParse) {
                     parsedItems.push({ name: textToParse, qty: 1 });
                 }
 
+                // โยนเข้าตะกร้าทีละรายการ
                 parsedItems.forEach(it => {
                     let menuCategoryInDb = dbMenuCategories[it.name] || "";
                     let isDrink = (
@@ -419,48 +439,41 @@
                     );
 
                     let type = isDrink ? "drink" : "food";
-                    let fixedAmt = (parsedItems.length === 1 && orderAmt > 0) ? orderAmt : 0;
-                    addOrUpdateGroupItem(it.name, it.qty, fixedAmt, type);
+                    
+                    // หากราคาต่อหน่วย
+                    let unitPriceFromDB = dbMenuPrices[it.name] || 0;
+                    if (unitPriceFromDB === 0 && typeof defaultDrinkPrices !== "undefined") {
+                        unitPriceFromDB = defaultDrinkPrices[it.name] || 0;
+                    }
+
+                    // ถ้าใน 1 ออเดอร์สั่งของอย่างเดียว ให้เอา orderAmt มาใช้เป็นราคาสำรอง
+                    let fallbackFixedAmt = (parsedItems.length === 1 && orderAmt > 0) ? orderAmt : 0;
+                    
+                    addOrUpdateGroupItem(it.name, it.qty, unitPriceFromDB, fallbackFixedAmt, type);
                 });
             });
         }
 
-        // C. คำนวณราคาสินค้า
-        let itemsList = Object.values(groupedItemsMap).map(item => {
-            let unitPrice = 0;
-            if (item.type === "head" || item.type === "stove") return { ...item, amt: item.fixedAmt };
-
-            // 1. ดึงราคาจากฐานข้อมูล menu
-            if (dbMenuPrices[item.name] !== undefined && dbMenuPrices[item.name] > 0) {
-                unitPrice = dbMenuPrices[item.name];
-            } 
-            // 2. ดึงราคาสำรองจาก defaultDrinkPrices (ถ้ามี)
-            else if (typeof defaultDrinkPrices !== "undefined" && defaultDrinkPrices[item.name] !== undefined) {
-                unitPrice = defaultDrinkPrices[item.name];
-            } 
-            // 3. ยึดราคาเดิมจากออเดอร์
-            else if (item.fixedAmt > 0) {
-                unitPrice = item.fixedAmt / item.qty;
-            }
-
-            let calculatedAmt = (unitPrice > 0) ? (unitPrice * item.qty) : item.fixedAmt;
-            return { ...item, amt: calculatedAmt };
-        });
+        // C. เตรียมแสดงผล
+        let itemsList = Object.values(groupedItemsMap);
 
         let headItems = itemsList.filter(i => i.type === 'head');
         let stoveItems = itemsList.filter(i => i.type === 'stove');
         let drinkItems = itemsList.filter(i => i.type === 'drink');
         let foodItems = itemsList.filter(i => i.type === 'food');
 
-        drinkItems.sort((a, b) => b.amt - a.amt);
+        // เรียงลำดับให้สวยงาม
+        drinkItems.sort((a, b) => b.totalAmt - a.totalAmt);
         foodItems.sort((a, b) => b.qty - a.qty);
 
         let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
-
         let html = "";
+        
         finalOrderedItems.forEach(item => {
-            totalBillAmount += item.amt;
-            let priceText = item.amt > 0 ? Math.round(item.amt).toLocaleString() + " บ." : "0 บ.";
+            // บวกยอดรวมทั้งหมด
+            totalBillAmount += item.totalAmt;
+            
+            let priceText = item.totalAmt > 0 ? Math.round(item.totalAmt).toLocaleString() + " บ." : "0 บ.";
             
             html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
                         "<div>" +
