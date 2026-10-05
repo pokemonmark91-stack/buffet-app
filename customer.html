@@ -178,6 +178,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- 🌟 เพิ่มบรรทัดนี้ เพื่อให้ป๊อปอัปยืนยันการแลกแต้มทำงานได้ -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
         const firebaseConfig = {
@@ -848,30 +851,39 @@ async function checkPointsForDiscount() {
     const btnRedeem = document.getElementById('btnRedeemPoints');
     const statusTxt = document.getElementById('discountStatusTxt');
     
-    if (!redeemSection) return; // ป้องกัน Error ถ้าหา HTML ไม่เจอ
+    if (!redeemSection) return;
 
-    // เช็คว่ามีตัวแปร userPoints หรือยัง ถ้ายังไม่มีให้เป็น 0
-    let points = (typeof userPoints !== 'undefined') ? userPoints : 0;
-    
+    // 🌟 ดึงแต้มจาก Firebase โดยใช้ userUid ที่มีอยู่ในระบบของคุณอยู่แล้ว
+    let points = 0;
+    if (userUid) {
+        try {
+            const userDoc = await db.collection("members").doc(userUid).get();
+            if (userDoc.exists) {
+                points = userDoc.data().points || 0;
+                window.userPoints = points; // เก็บแต้มไว้ใช้ตอนกดปุ่ม
+            }
+        } catch (e) {
+            console.error("Error fetching points:", e);
+        }
+    }
+
     currentPointsTxt.innerText = points;
+    
+    // บังคับให้โชว์กล่องแลกแต้มเสมอ
+    redeemSection.style.display = 'block';
 
-    // ถ้าแต้มตั้งแต่ 10 ขึ้นไป ค่อยโชว์กล่องให้กดแลก
+    // ถ้าแต้มตั้งแต่ 10 ขึ้นไป
     if (points >= 10) {
-        redeemSection.style.display = 'block';
-        
-        // ใช้ syntax Firebase V8 ให้ตรงกับเว็บของคุณ และใช้ tableNo
         db.collection("tables").doc(String(tableNo)).get().then((tableSnap) => {
             if (tableSnap.exists) {
                 const tData = tableSnap.data();
                 if (tData.pendingDiscount === 50) {
-                    // ถ้ากดใช้ไปแล้ว ให้ปิดปุ่มและโชว์ว่าใช้แล้ว
                     btnRedeem.disabled = true;
                     btnRedeem.innerHTML = "✅ ใช้สิทธิ์ส่วนลด 50 บาทแล้ว";
                     btnRedeem.style.background = "#06C755";
                     statusTxt.style.display = 'block';
                     statusTxt.innerText = "*ระบบจะหักส่วนลด 50 บาท ตอนชำระเงินที่เคาน์เตอร์";
                 } else {
-                    // ถ้ายืนยันใช้ได้ปกติ
                     btnRedeem.disabled = false;
                     btnRedeem.innerHTML = "🎁 ใช้ 10 แต้ม แลกส่วนลด 50 บาท";
                     btnRedeem.style.background = "#ff9f43";
@@ -883,13 +895,17 @@ async function checkPointsForDiscount() {
         });
         
     } else {
-        redeemSection.style.display = 'none'; // แต้มไม่ถึง ซ่อนกล่องไปเลย
+        // ถ้าแต้มไม่ถึง 10 ให้ล็อคปุ่มไว้ และบอกว่าขาดอีกกี่แต้ม
+        btnRedeem.disabled = true;
+        btnRedeem.innerHTML = `🔒 แต้มไม่พอ (ขาดอีก ${10 - points} แต้ม)`;
+        btnRedeem.style.background = "#b2bec3";
+        statusTxt.style.display = 'none';
     }
 }
 
-// 2. ฟังก์ชันเมื่อลูกค้ากดปุ่มใช้แต้ม (แก้ไขเป็น V8 แล้วเช่นกัน)
+// 2. ฟังก์ชันเมื่อลูกค้ากดปุ่มใช้แต้ม
 async function applyPointDiscount() {
-    let points = (typeof userPoints !== 'undefined') ? userPoints : 0;
+    let points = window.userPoints || 0;
     
     if (points < 10) {
         Swal.fire("แต้มไม่พอ", "คุณต้องมีอย่างน้อย 10 แต้มเพื่อแลกส่วนลดครับ", "warning");
@@ -908,14 +924,14 @@ async function applyPointDiscount() {
         if (result.isConfirmed) {
             Swal.fire({ title: 'กำลังบันทึกส่วนลด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-            // ใช้ syntax Firebase V8 ในการอัปเดตข้อมูล
+            // อัปเดตข้อมูลลงโต๊ะ (เปลี่ยน UID เป็น userUid ตามระบบของคุณ)
             db.collection("tables").doc(String(tableNo)).update({
                 pendingDiscount: 50,       
                 pendingPointsToDeduct: 10,  
-                redeemedByUID: (typeof lineUID !== 'undefined') ? lineUID : ""
+                redeemedByUID: userUid || "" 
             }).then(() => {
                 Swal.fire('สำเร็จ!', 'รับส่วนลดเรียบร้อยครับ ระบบจะหักยอดในบิลตอนชำระเงิน', 'success');
-                checkPointsForDiscount(); // รีเฟรชปุ่ม
+                checkPointsForDiscount(); // รีเฟรชปุ่มใหม่
             }).catch((error) => {
                 console.error("Error applying discount:", error);
                 Swal.fire('ข้อผิดพลาด', 'ไม่สามารถใช้แต้มได้ในขณะนี้ โปรดลองอีกครั้ง', 'error');
@@ -923,7 +939,6 @@ async function applyPointDiscount() {
         }
     });
 }
-
         
     </script>
 </body>
