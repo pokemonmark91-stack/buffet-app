@@ -297,9 +297,10 @@
         let groupedItemsMap = {};
 
         let dbMenuPrices = {};
-        let dbMenuCategories = {}; // 👈 เพิ่มการเก็บ Category จากฐานข้อมูล Master
+        let dbMenuCategories = {}; 
 
         try {
+            // 📌 แก้ไขจาก "menus" เป็น "menu" (ไม่มี s) ให้ตรงกับ Firebase
             const menuSnap = await db.collection("menu").get();
             if (!menuSnap.empty) {
                 menuSnap.forEach(doc => {
@@ -310,12 +311,12 @@
                     
                     if (mName) {
                         dbMenuPrices[mName] = mPrice;
-                        dbMenuCategories[mName] = mCategory; // บันทึกหมวดหมู่ของเมนู
+                        dbMenuCategories[mName] = mCategory;
                     }
                 });
             }
         } catch (err) {
-            console.warn("ไม่สามารถดึงข้อมูล menus master ได้:", err);
+            console.warn("ไม่สามารถดึงข้อมูล menu master ได้:", err);
         }
 
         function addOrUpdateGroupItem(name, qty, fixedAmt, type) {
@@ -346,7 +347,7 @@
             pendingPointsToDeduct = parseInt(tableData.pendingPointsToDeduct) || 0;
             redeemedByUID = tableData.redeemedByUID || "";
 
-            if (pendingDiscountAmount > 0) {
+            if (pendingDiscountAmount > 0 && typeof Swal !== "undefined") {
                 Swal.fire({
                     toast: true, position: 'top-end', icon: 'info',
                     title: `ลูกค้าใช้แต้มแลกส่วนลด ${pendingDiscountAmount} บาท!`,
@@ -407,7 +408,6 @@
                 }
 
                 parsedItems.forEach(it => {
-                    // 👇 ตรวจสอบว่าอยู่ในหมวดเครื่องดื่มหรือไม่ (เช็คทั้งจาก Order และ Category ในฐานข้อมูล Master)
                     let menuCategoryInDb = dbMenuCategories[it.name] || "";
                     let isDrink = (
                         category === "เครื่องดื่ม" || 
@@ -415,7 +415,7 @@
                         category.includes("น้ำ") || 
                         menuCategoryInDb.includes("เครื่องดื่ม") || 
                         menuCategoryInDb.includes("Drink") ||
-                        drinkKeywords.some(kw => details.includes(kw) || title.includes(kw) || it.name.includes(kw))
+                        (typeof drinkKeywords !== "undefined" && drinkKeywords.some(kw => details.includes(kw) || title.includes(kw) || it.name.includes(kw)))
                     );
 
                     let type = isDrink ? "drink" : "food";
@@ -425,20 +425,20 @@
             });
         }
 
-        // C. คำนวณราคาสินค้าแต่ละรายการ
+        // C. คำนวณราคาสินค้า
         let itemsList = Object.values(groupedItemsMap).map(item => {
             let unitPrice = 0;
             if (item.type === "head" || item.type === "stove") return { ...item, amt: item.fixedAmt };
 
-            // 1. ดึงราคาจากฐานข้อมูล menus
+            // 1. ดึงราคาจากฐานข้อมูล menu
             if (dbMenuPrices[item.name] !== undefined && dbMenuPrices[item.name] > 0) {
                 unitPrice = dbMenuPrices[item.name];
             } 
-            // 2. ดึงราคาสำรองจาก defaultDrinkPrices
-            else if (defaultDrinkPrices[item.name] !== undefined) {
+            // 2. ดึงราคาสำรองจาก defaultDrinkPrices (ถ้ามี)
+            else if (typeof defaultDrinkPrices !== "undefined" && defaultDrinkPrices[item.name] !== undefined) {
                 unitPrice = defaultDrinkPrices[item.name];
             } 
-            // 3. ยึดราคาเดิมจากออเดอร์ (ถ้ามี)
+            // 3. ยึดราคาเดิมจากออเดอร์
             else if (item.fixedAmt > 0) {
                 unitPrice = item.fixedAmt / item.qty;
             }
@@ -481,15 +481,16 @@
         totalEarnedPoints = Math.floor(totalBillAmount / 100);
         document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
         
-        renderMembersList(activeMembers, totalEarnedPoints);
-        calculateNetTotal();
+        if (typeof renderMembersList === "function") renderMembersList(activeMembers, totalEarnedPoints);
+        if (typeof calculateNetTotal === "function") calculateNetTotal();
 
     } catch (error) {
         console.error("Error loading bill:", error);
-        Swal.fire("ข้อผิดพลาด", "ไม่สามารถดึงข้อมูลบิลได้: " + error.message, "error");
+        if (typeof Swal !== "undefined") {
+            Swal.fire("ข้อผิดพลาด", "ไม่สามารถดึงข้อมูลบิลได้: " + error.message, "error");
+        }
     }
 }
-
         function renderMembersList(members, totalPoints) {
             let container = document.getElementById('membersList');
             if (!members || members.length === 0) {
