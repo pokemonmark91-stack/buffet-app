@@ -324,46 +324,57 @@
     }
 
     // คำนวณยอดเงินสดสะสมในกะ
-    function calculateShiftCash(shiftId, shiftStartTime) {
-        let cashFromCheckouts = 0;
-        let cashFlowTotal = 0;
+function calculateShiftCash(shiftId, shiftStartTime) {
+    let cashFromCheckouts = 0;
+    let cashFlowTotal = 0;
+    let startingCash = 0; // 🟢 เพิ่มตัวแปรเก็บเงินทอนเริ่มต้น
 
-        unsubCheckouts = db.collection("checkouts")
-            .where("timestamp", ">=", shiftStartTime)
-            .onSnapshot(checkoutSnap => {
-                cashFromCheckouts = 0;
-                checkoutSnap.forEach(doc => {
-                    let data = doc.data();
-                    if (data.payments && Array.isArray(data.payments)) {
-                        data.payments.forEach(p => {
-                            if (p.method === 'เงินสด' || p.method === 'cash') {
-                                cashFromCheckouts += Number(p.amount || 0);
-                            }
-                        });
-                    } else if (data.totalReceived) {
-                        cashFromCheckouts += Number(data.totalReceived || 0) - Number(data.change || 0);
-                    }
-                });
-                updateExpectedCashDisplay(cashFromCheckouts, cashFlowTotal);
+    // 🟢 1. ไปดึงยอดเงินทอนเริ่มต้นจากกะปัจจุบันมาก่อน
+    db.collection("shifts").doc(shiftId).get().then(doc => {
+        if (doc.exists) {
+            startingCash = Number(doc.data().startingCash || 0);
+            // อัปเดตหน้าจอทันทีที่ได้ยอดเงินทอนมา
+            updateExpectedCashDisplay(cashFromCheckouts + startingCash, cashFlowTotal);
+        }
+    });
+
+    unsubCheckouts = db.collection("checkouts")
+        .where("timestamp", ">=", shiftStartTime)
+        .onSnapshot(checkoutSnap => {
+            cashFromCheckouts = 0;
+            checkoutSnap.forEach(doc => {
+                let data = doc.data();
+                if (data.payments && Array.isArray(data.payments)) {
+                    data.payments.forEach(p => {
+                        if (p.method === 'เงินสด' || p.method === 'cash') {
+                            cashFromCheckouts += Number(p.amount || 0);
+                        }
+                    });
+                } else if (data.totalReceived) {
+                    cashFromCheckouts += Number(data.totalReceived || 0) - Number(data.change || 0);
+                }
             });
+            // 🟢 2. เอาเงินทอนเริ่มต้นไปบวกรวมกับยอดขาย
+            updateExpectedCashDisplay(cashFromCheckouts + startingCash, cashFlowTotal);
+        });
 
-        unsubCashFlow = db.collection("cash_flows")
-            .where("shiftId", "==", shiftId)
-            .onSnapshot(flowSnap => {
-                cashFlowTotal = 0;
-                flowSnap.forEach(doc => {
-                    let data = doc.data();
-                    let amt = Number(data.amount || 0);
-                    if (data.type === 'in') {
-                        cashFlowTotal += amt;
-                    } else if (data.type === 'out') {
-                        cashFlowTotal -= amt;
-                    }
-                });
-                updateExpectedCashDisplay(cashFromCheckouts, cashFlowTotal);
+    unsubCashFlow = db.collection("cash_flows")
+        .where("shiftId", "==", shiftId)
+        .onSnapshot(flowSnap => {
+            cashFlowTotal = 0;
+            flowSnap.forEach(doc => {
+                let data = doc.data();
+                let amt = Number(data.amount || 0);
+                if (data.type === 'in') {
+                    cashFlowTotal += amt;
+                } else if (data.type === 'out') {
+                    cashFlowTotal -= amt;
+                }
             });
-    }
-
+            // 🟢 3. เอาเงินทอนเริ่มต้นไปบวกรวมด้วยทุกครั้งที่มีการอัปเดต
+            updateExpectedCashDisplay(cashFromCheckouts + startingCash, cashFlowTotal);
+        });
+}
     function updateExpectedCashDisplay(checkoutCash, flowCash) {
         let totalExpected = checkoutCash + flowCash;
         const textEl = document.getElementById('expectedCashText');
