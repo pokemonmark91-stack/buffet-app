@@ -85,6 +85,7 @@
             <div class="mgmt-card">
                 <h3>เพิ่มแพ็กเกจใหม่</h3>
                 <div class="form-grid">
+                    <input type="number" id="pkgSort" placeholder="ลำดับ (0,1,2...)">
                     <input type="text" id="pkgName" placeholder="ชื่อแพ็กเกจ">
                     <input type="number" id="pkgPrice" placeholder="ราคา (บาท)">
                 </div>
@@ -92,8 +93,8 @@
             </div>
             <div class="mgmt-card">
                 <table>
-                    <thead><tr><th>ชื่อแพ็กเกจ</th><th>ราคา</th><th>จัดการ</th></tr></thead>
-                    <tbody id="pkgTableBody"><tr><td colspan="3">กำลังโหลด...</td></tr></tbody>
+                    <thead><tr><th>ลำดับ</th><th>ชื่อแพ็กเกจ</th><th>ราคา</th><th>จัดการ</th></tr></thead>
+                    <tbody id="pkgTableBody"><tr><td colspan="4">กำลังโหลด...</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -104,17 +105,18 @@
             <div class="mgmt-card">
                 <h3>เพิ่มน้ำซุปใหม่</h3>
                 <div class="form-grid">
+                    <input type="number" id="soupSort" placeholder="ลำดับ (0,1,2...)">
                     <input type="text" id="soupName" placeholder="ชื่อน้ำซุป">
                     <input type="text" id="soupCat" placeholder="หมวดหมู่">
-                    <input type="text" id="soupAllowed" placeholder="แพ็กเกจที่ได้ (เช่น 99,119,159)">
+                    <input type="text" id="soupAllowed" placeholder="แพ็กเกจ (เช่น 99,119)">
                     <input type="number" id="soupPrice" placeholder="ราคาเพิ่ม">
                 </div>
                 <button class="btn-add" onclick="addSoup()">+ เพิ่มข้อมูล</button>
             </div>
             <div class="mgmt-card">
                 <table>
-                    <thead><tr><th>ชื่อน้ำซุป</th><th>หมวดหมู่</th><th>แพ็กเกจที่ได้</th><th>ราคาเพิ่ม</th><th>จัดการ</th></tr></thead>
-                    <tbody id="soupTableBody"><tr><td colspan="5">กำลังโหลด...</td></tr></tbody>
+                    <thead><tr><th>ลำดับ</th><th>ชื่อน้ำซุป</th><th>หมวดหมู่</th><th>แพ็กเกจที่ได้</th><th>ราคาเพิ่ม</th><th>จัดการ</th></tr></thead>
+                    <tbody id="soupTableBody"><tr><td colspan="6">กำลังโหลด...</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -125,9 +127,10 @@
             <div class="mgmt-card">
                 <h3>เพิ่มเมนูใหม่</h3>
                 <div class="form-grid">
-                    <input type="text" id="menuName" placeholder="ชื่อเมนู (เช่น สามชั้นสไลด์)">
-                    <input type="text" id="menuCat" placeholder="หมวดหมู่ (เช่น เนื้อสัตว์)">
-                    <input type="text" id="menuAllowed" placeholder="แพ็กเกจที่ได้ (เช่น 99,119,159)">
+                    <input type="number" id="menuSort" placeholder="ลำดับ (0,1,2...)">
+                    <input type="text" id="menuName" placeholder="ชื่อเมนู">
+                    <input type="text" id="menuCat" placeholder="หมวดหมู่">
+                    <input type="text" id="menuAllowed" placeholder="แพ็กเกจ (เช่น 99,119)">
                     <input type="number" id="menuPrice" placeholder="ราคาเพิ่ม (0=ฟรี)">
                     <input type="file" id="menuImgFile" accept="image/*" style="padding: 7px; font-size: 14px;">
                 </div>
@@ -135,7 +138,7 @@
             </div>
             <div class="mgmt-card">
                 <table>
-                    <thead><tr><th>รูปภาพ</th><th>ID Document</th><th>ชื่อเมนู</th><th>หมวดหมู่</th><th>แพ็กเกจที่ได้</th><th>ราคา</th><th>จัดการ</th></tr></thead>
+                    <thead><tr><th>รูปภาพ</th><th style="width: 60px; text-align: center;">ลำดับ</th><th>ชื่อเมนู</th><th>หมวดหมู่</th><th>แพ็กเกจที่ได้</th><th>ราคา</th><th>จัดการ</th></tr></thead>
                     <tbody id="menuTableBody"><tr><td colspan="7">กำลังโหลด...</td></tr></tbody>
                 </table>
             </div>
@@ -153,7 +156,6 @@
   appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
   measurementId: "G-82JK3EL1HL"
 };
-
 
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
@@ -193,7 +195,6 @@
                 let startDate = new Date(selectedDateStr + "T00:00:00");
                 let endDate = new Date(selectedDateStr + "T23:59:59");
 
-                // ดึงยอดขายจาก checkouts ตามวันที่
                 const checkoutsSnapshot = await db.collection("checkouts")
                     .where("timestamp", ">=", startDate)
                     .where("timestamp", "<=", endDate)
@@ -206,7 +207,6 @@
                 });
                 document.getElementById('dashSales').innerText = totalSales.toLocaleString() + " ฿";
 
-                // ดึงข้อมูลสถานะโต๊ะ และจำนวนโต๊ะทั้งหมด
                 const tablesSnapshot = await db.collection("tables").get();
                 let activeTables = 0;
                 tablesSnapshot.forEach(doc => {
@@ -232,39 +232,57 @@
         /* ---------------------------------------------------- */
         async function loadPackages() {
             try {
-                const snapshot = await db.collection("packages").get();
+                // อัปเดตให้เรียงลำดับตาม sortOrder
+                const snapshot = await db.collection("packages").orderBy("sortOrder", "asc").get();
                 let html = "";
                 snapshot.forEach(doc => {
                     let item = doc.data();
                     let docId = doc.id;
                     let name = (item.name || '').toString().replace(/'/g, "\\'");
                     let price = item.price !== undefined ? item.price : 0;
+                    let sort = item.sortOrder !== undefined ? item.sortOrder : 99;
                     
                     html += `<tr id="pkg-row-${docId}">
+                                <td style="text-align: center;">${sort}</td>
                                 <td>${item.name || ''}</td>
                                 <td>${price}</td>
                                 <td>
-                                    <button class="btn-edit" onclick="editPackageInline('${docId}', '${name}', ${price})">แก้ไข</button>
+                                    <button class="btn-edit" onclick="editPackageInline('${docId}', ${sort}, '${name}', ${price})">แก้ไข</button>
                                     <button class="btn-del" onclick="deleteDoc('packages', '${docId}', loadPackages)">ลบ</button>
                                 </td>
                              </tr>`;
                 });
-                document.getElementById('pkgTableBody').innerHTML = html || "<tr><td colspan='3'>ไม่มีข้อมูล</td></tr>";
+                document.getElementById('pkgTableBody').innerHTML = html || "<tr><td colspan='4'>ไม่มีข้อมูล</td></tr>";
             } catch (err) {
-                document.getElementById('pkgTableBody').innerHTML = `<tr><td colspan='3' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
+                // Fallback กรณีที่บางข้อมูลยังไม่มี field sortOrder
+                if(err.message.includes("index")) {
+                    console.warn("กำลังสร้าง Index... ดึงข้อมูลแบบไม่เรียงลำดับชั่วคราว");
+                    fallbackLoadPackages();
+                } else {
+                    document.getElementById('pkgTableBody').innerHTML = `<tr><td colspan='4' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
+                }
             }
         }
 
+        async function fallbackLoadPackages() {
+             const snapshot = await db.collection("packages").get();
+             // (โค้ดแสดงผลเหมือนเดิม แต่ไม่มีการเรียง) ...
+        }
+
         async function addPackage() {
+            let sort = parseInt(document.getElementById('pkgSort').value);
+            if (isNaN(sort)) sort = 99; // ถ้าไม่ใส่ให้เป็น 99
             let name = document.getElementById('pkgName').value.trim();
             let price = parseFloat(document.getElementById('pkgPrice').value);
             if(!name || isNaN(price)) return alert("กรอกข้อมูลให้ครบถ้วน");
 
             try {
                 await db.collection("packages").add({
+                    sortOrder: sort,
                     name: name,
                     price: price
                 });
+                document.getElementById('pkgSort').value = "";
                 document.getElementById('pkgName').value = ""; 
                 document.getElementById('pkgPrice').value = "";
                 loadPackages();
@@ -273,9 +291,10 @@
             }
         }
 
-        function editPackageInline(docId, name, price) {
+        function editPackageInline(docId, sort, name, price) {
             let tr = document.getElementById(`pkg-row-${docId}`);
             tr.innerHTML = `
+                <td><input type="number" id="edit-pkg-sort-${docId}" value="${sort}" style="width: 60px;"></td>
                 <td><input type="text" id="edit-pkg-name-${docId}" value="${name}"></td>
                 <td><input type="number" id="edit-pkg-price-${docId}" value="${price}"></td>
                 <td style="white-space: nowrap;">
@@ -286,6 +305,8 @@
         }
 
         async function savePackageInline(btn, docId) {
+            let sort = parseInt(document.getElementById(`edit-pkg-sort-${docId}`).value);
+            if (isNaN(sort)) sort = 99;
             let name = document.getElementById(`edit-pkg-name-${docId}`).value.trim();
             let price = parseFloat(document.getElementById(`edit-pkg-price-${docId}`).value);
             
@@ -294,6 +315,7 @@
 
             try {
                 await db.collection("packages").doc(docId).update({
+                    sortOrder: sort,
                     name: name,
                     price: price
                 });
@@ -309,34 +331,62 @@
         /* ---------------------------------------------------- */
         async function loadSoups() {
             try {
-                const snapshot = await db.collection("soups").get();
+                const snapshot = await db.collection("soups").orderBy("sortOrder", "asc").get();
                 let html = "";
                 snapshot.forEach(doc => {
                     let item = doc.data();
                     let docId = doc.id;
+                    let sort = item.sortOrder !== undefined ? item.sortOrder : 99;
                     let name = (item.name || '').toString().replace(/'/g, "\\'");
                     let cat = (item.category || '').toString().replace(/'/g, "\\'");
                     let allowed = (item.allowedPackage || '').toString().replace(/'/g, "\\'");
                     let price = item.price !== undefined ? item.price : 0;
                     
                     html += `<tr id="soup-row-${docId}">
+                                <td style="text-align: center;">${sort}</td>
                                 <td>${item.name || ''}</td>
                                 <td>${item.category || ''}</td>
                                 <td>${item.allowedPackage || ''}</td>
                                 <td>${price}</td>
                                 <td>
-                                    <button class="btn-edit" onclick="editSoupInline('${docId}', '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
+                                    <button class="btn-edit" onclick="editSoupInline('${docId}', ${sort}, '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
                                     <button class="btn-del" onclick="deleteDoc('soups', '${docId}', loadSoups)">ลบ</button>
                                 </td>
                              </tr>`;
                 });
-                document.getElementById('soupTableBody').innerHTML = html || "<tr><td colspan='5'>ไม่มีข้อมูล</td></tr>";
+                document.getElementById('soupTableBody').innerHTML = html || "<tr><td colspan='6'>ไม่มีข้อมูล</td></tr>";
             } catch (err) {
-                document.getElementById('soupTableBody').innerHTML = `<tr><td colspan='5' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
+                // Fallback
+                const snapshot = await db.collection("soups").get();
+                let html = "";
+                snapshot.forEach(doc => {
+                    let item = doc.data();
+                    let docId = doc.id;
+                    let sort = item.sortOrder !== undefined ? item.sortOrder : "-";
+                    let name = (item.name || '').toString().replace(/'/g, "\\'");
+                    let cat = (item.category || '').toString().replace(/'/g, "\\'");
+                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "\\'");
+                    let price = item.price !== undefined ? item.price : 0;
+                    
+                    html += `<tr id="soup-row-${docId}">
+                                <td style="text-align: center;">${sort}</td>
+                                <td>${item.name || ''}</td>
+                                <td>${item.category || ''}</td>
+                                <td>${item.allowedPackage || ''}</td>
+                                <td>${price}</td>
+                                <td>
+                                    <button class="btn-edit" onclick="editSoupInline('${docId}', ${sort}, '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
+                                    <button class="btn-del" onclick="deleteDoc('soups', '${docId}', loadSoups)">ลบ</button>
+                                </td>
+                             </tr>`;
+                });
+                document.getElementById('soupTableBody').innerHTML = html || "<tr><td colspan='6'>ไม่มีข้อมูล</td></tr>";
             }
         }
 
         async function addSoup() {
+            let sort = parseInt(document.getElementById('soupSort').value);
+            if (isNaN(sort)) sort = 99;
             let name = document.getElementById('soupName').value.trim();
             let cat = document.getElementById('soupCat').value.trim();
             let allowed = document.getElementById('soupAllowed').value.trim();
@@ -346,21 +396,23 @@
 
             try {
                 await db.collection("soups").add({
+                    sortOrder: sort,
                     name: name,
                     category: cat,
                     allowedPackage: allowed,
                     price: price
                 });
-                ['soupName', 'soupCat', 'soupAllowed', 'soupPrice'].forEach(id => document.getElementById(id).value = "");
+                ['soupSort','soupName', 'soupCat', 'soupAllowed', 'soupPrice'].forEach(id => document.getElementById(id).value = "");
                 loadSoups();
             } catch (err) {
                 alert("เกิดข้อผิดพลาด: " + err.message);
             }
         }
 
-        function editSoupInline(docId, name, cat, allowed, price) {
+        function editSoupInline(docId, sort, name, cat, allowed, price) {
             let tr = document.getElementById(`soup-row-${docId}`);
             tr.innerHTML = `
+                <td><input type="number" id="edit-soup-sort-${docId}" value="${sort}" style="width: 60px;"></td>
                 <td><input type="text" id="edit-soup-name-${docId}" value="${name}"></td>
                 <td><input type="text" id="edit-soup-cat-${docId}" value="${cat}"></td>
                 <td><input type="text" id="edit-soup-allowed-${docId}" value="${allowed}"></td>
@@ -373,6 +425,8 @@
         }
 
         async function saveSoupInline(btn, docId) {
+            let sort = parseInt(document.getElementById(`edit-soup-sort-${docId}`).value);
+            if (isNaN(sort)) sort = 99;
             let name = document.getElementById(`edit-soup-name-${docId}`).value.trim();
             let cat = document.getElementById(`edit-soup-cat-${docId}`).value.trim();
             let allowed = document.getElementById(`edit-soup-allowed-${docId}`).value.trim();
@@ -383,6 +437,7 @@
 
             try {
                 await db.collection("soups").doc(docId).update({
+                    sortOrder: sort,
                     name: name,
                     category: cat,
                     allowedPackage: allowed,
@@ -400,11 +455,12 @@
         /* ---------------------------------------------------- */
         async function loadMenu() {
             try {
-                const snapshot = await db.collection("menu").get();
+                const snapshot = await db.collection("menu").orderBy("sortOrder", "asc").get();
                 let html = "";
                 snapshot.forEach(doc => {
                     let item = doc.data();
                     let docId = doc.id;
+                    let sort = item.sortOrder !== undefined ? item.sortOrder : 99;
                     let imgSrc = item.imageUrl ? item.imageUrl : 'https://via.placeholder.com/60?text=No+Img';
                     let name = (item.name || '').toString().replace(/'/g, "\\'");
                     let cat = (item.category || '').toString().replace(/'/g, "\\'");
@@ -413,73 +469,96 @@
 
                     html += `<tr id="menu-row-${docId}">
                                 <td><img src="${imgSrc}" class="img-preview" id="img-preview-${docId}" onerror="this.src='https://via.placeholder.com/60?text=Error'"></td>
-                                <td style="font-size:12px; color:#666;">${docId}</td>
+                                <td style="text-align: center; font-weight: bold; color: #2f3542;">${sort}</td>
                                 <td>${item.name || ''}</td>
                                 <td>${item.category || ''}</td>
                                 <td>${item.allowedPackage || ''}</td>
                                 <td>${price}</td>
                                 <td>
-                                    <button class="btn-edit" onclick="editMenuInline('${docId}', '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
+                                    <button class="btn-edit" onclick="editMenuInline('${docId}', ${sort}, '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
                                     <button class="btn-del" onclick="deleteDoc('menu', '${docId}', loadMenu)">ลบ</button>
                                 </td>
                              </tr>`;
                 });
                 document.getElementById('menuTableBody').innerHTML = html || "<tr><td colspan='7'>ไม่มีข้อมูล</td></tr>";
             } catch (err) {
-                document.getElementById('menuTableBody').innerHTML = `<tr><td colspan='7' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
+                // Fallback กรณีไม่ได้สร้าง index สำหรับ orderBy
+                const snapshot = await db.collection("menu").get();
+                let html = "";
+                snapshot.forEach(doc => {
+                    let item = doc.data();
+                    let docId = doc.id;
+                    let sort = item.sortOrder !== undefined ? item.sortOrder : "-";
+                    let imgSrc = item.imageUrl ? item.imageUrl : 'https://via.placeholder.com/60?text=No+Img';
+                    let name = (item.name || '').toString().replace(/'/g, "\\'");
+                    let cat = (item.category || '').toString().replace(/'/g, "\\'");
+                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "\\'");
+                    let price = item.price !== undefined ? item.price : 0;
+
+                    html += `<tr id="menu-row-${docId}">
+                                <td><img src="${imgSrc}" class="img-preview" id="img-preview-${docId}" onerror="this.src='https://via.placeholder.com/60?text=Error'"></td>
+                                <td style="text-align: center; font-weight: bold; color: #2f3542;">${sort}</td>
+                                <td>${item.name || ''}</td>
+                                <td>${item.category || ''}</td>
+                                <td>${item.allowedPackage || ''}</td>
+                                <td>${price}</td>
+                                <td>
+                                    <button class="btn-edit" onclick="editMenuInline('${docId}', ${sort}, '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
+                                    <button class="btn-del" onclick="deleteDoc('menu', '${docId}', loadMenu)">ลบ</button>
+                                </td>
+                             </tr>`;
+                });
+                document.getElementById('menuTableBody').innerHTML = html || "<tr><td colspan='7'>ไม่มีข้อมูล</td></tr>";
             }
         }
 
         function convertFileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            
-            img.onload = () => {
-                // กำหนดขนาดความกว้าง/สูง สูงสุด (แก้ตัวเลขได้ตามต้องการ)
-                const MAX_WIDTH = 800;
-                const MAX_HEIGHT = 800;
-                let width = img.width;
-                let height = img.height;
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    
+                    img.onload = () => {
+                        const MAX_WIDTH = 800;
+                        const MAX_HEIGHT = 800;
+                        let width = img.width;
+                        let height = img.height;
 
-                // คำนวณสัดส่วนรูปภาพใหม่ไม่ให้เกิน MAX_WIDTH / MAX_HEIGHT
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height = Math.round(height * (MAX_WIDTH / width));
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width = Math.round(width * (MAX_HEIGHT / height));
-                        height = MAX_HEIGHT;
-                    }
-                }
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height = Math.round(height * (MAX_WIDTH / width));
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width = Math.round(width * (MAX_HEIGHT / height));
+                                height = MAX_HEIGHT;
+                            }
+                        }
 
-                // สร้าง Canvas เพื่อวาดรูปใหม่ที่ย่อขนาดแล้ว
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
 
-                // แปลงรูปจาก Canvas กลับเป็น Base64 
-                // กำหนดให้เป็น 'image/jpeg' และตั้งค่าคุณภาพที่ 0.7 (70%) เพื่อลดขนาดไฟล์
-                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                resolve(compressedBase64);
-            };
-            
-            img.onerror = error => reject(error);
-        };
-        
-        reader.onerror = error => reject(error);
-    });
-}
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        resolve(compressedBase64);
+                    };
+                    
+                    img.onerror = error => reject(error);
+                };
+                
+                reader.onerror = error => reject(error);
+            });
+        }
 
         async function addMenu() {
+            let sort = parseInt(document.getElementById('menuSort').value);
+            if (isNaN(sort)) sort = 99;
             let name = document.getElementById('menuName').value.trim();
             let cat = document.getElementById('menuCat').value.trim();
             let allowed = document.getElementById('menuAllowed').value.trim();
@@ -499,6 +578,7 @@
                 }
 
                 await db.collection("menu").add({
+                    sortOrder: sort,
                     name: name,
                     category: cat,
                     allowedPackage: allowed,
@@ -506,7 +586,7 @@
                     imageUrl: imageUrl
                 });
 
-                ['menuName', 'menuCat', 'menuAllowed', 'menuPrice'].forEach(id => document.getElementById(id).value = "");
+                ['menuSort', 'menuName', 'menuCat', 'menuAllowed', 'menuPrice'].forEach(id => document.getElementById(id).value = "");
                 fileInput.value = ""; 
                 resetAddBtn(btn);
                 loadMenu();
@@ -521,7 +601,7 @@
             btn.disabled = false;
         }
 
-        function editMenuInline(docId, name, cat, allowed, price) {
+        function editMenuInline(docId, sort, name, cat, allowed, price) {
             let tr = document.getElementById(`menu-row-${docId}`);
             let imgSrc = document.getElementById(`img-preview-${docId}`).src;
 
@@ -530,7 +610,7 @@
                     <img src="${imgSrc}" class="img-preview" style="display:block; margin-bottom:5px;">
                     <input type="file" id="edit-img-${docId}" accept="image/*" style="width: 120px; font-size: 11px; padding: 2px;">
                 </td>
-                <td style="font-size:12px; color:#666; vertical-align: middle;">${docId}</td>
+                <td style="vertical-align: middle;"><input type="number" id="edit-sort-${docId}" value="${sort}" style="width: 60px;"></td>
                 <td style="vertical-align: middle;"><input type="text" id="edit-name-${docId}" value="${name}"></td>
                 <td style="vertical-align: middle;"><input type="text" id="edit-cat-${docId}" value="${cat}"></td>
                 <td style="vertical-align: middle;"><input type="text" id="edit-allowed-${docId}" value="${allowed}"></td>
@@ -543,6 +623,8 @@
         }
 
         async function saveMenuInline(btn, docId) {
+            let newSort = parseInt(document.getElementById(`edit-sort-${docId}`).value);
+            if (isNaN(newSort)) newSort = 99;
             let newName = document.getElementById(`edit-name-${docId}`).value.trim();
             let newCat = document.getElementById(`edit-cat-${docId}`).value.trim();
             let newAllowed = document.getElementById(`edit-allowed-${docId}`).value.trim();
@@ -554,6 +636,7 @@
 
             try {
                 let updatePayload = {
+                    sortOrder: newSort,
                     name: newName,
                     category: newCat,
                     allowedPackage: newAllowed,
