@@ -172,48 +172,71 @@
         }
 
         async function loadDropdowns() {
-            try {
-                // Packages
-                const pSnap = await db.collection("packages").get();
-                let pHtml = "";
-                pSnap.forEach(doc => {
-                    let p = doc.data();
-                    pHtml += '<option value="' + p.price + '">' + p.name + ' (' + p.price + ' บ.)</option>';
-                });
-                document.getElementById('pkg').innerHTML = pHtml;
+    try {
+        // Packages
+        const pSnap = await db.collection("packages").get();
+        let pItems = [];
+        pSnap.forEach(doc => {
+            let p = doc.data();
+            p.sortOrder = p.sortOrder !== undefined ? Number(p.sortOrder) : 99;
+            pItems.push(p);
+        });
+        // จัดเรียงแพ็กเกจ
+        pItems.sort((a, b) => a.sortOrder - b.sortOrder);
+        let pHtml = "";
+        pItems.forEach(p => {
+            pHtml += '<option value="' + p.price + '">' + p.name + ' (' + p.price + ' บ.)</option>';
+        });
+        document.getElementById('pkg').innerHTML = pHtml;
 
-                // Soups
-                const sSnap = await db.collection("soups").get();
-                let sHtml = "";
-                sSnap.forEach(doc => {
-                    let s = doc.data();
-                    let pText = s.price > 0 ? ' (+' + s.price + ')' : '';
-                    sHtml += '<option value="' + s.name + '|' + s.price + '">' + s.name + pText + '</option>';
-                });
-                document.getElementById('soup1').innerHTML = sHtml;
-                document.getElementById('soup2').innerHTML = sHtml;
+        // Soups
+        const sSnap = await db.collection("soups").get();
+        let sItems = [];
+        sSnap.forEach(doc => {
+            let s = doc.data();
+            s.sortOrder = s.sortOrder !== undefined ? Number(s.sortOrder) : 99;
+            sItems.push(s);
+        });
+        // จัดเรียงน้ำซุป
+        sItems.sort((a, b) => a.sortOrder - b.sortOrder);
+        let sHtml = "";
+        sItems.forEach(s => {
+            let pText = s.price > 0 ? ' (+' + s.price + ')' : '';
+            sHtml += '<option value="' + s.name + '|' + s.price + '">' + s.name + pText + '</option>';
+        });
+        document.getElementById('soup1').innerHTML = sHtml;
+        document.getElementById('soup2').innerHTML = sHtml;
 
-                // Menus
-                const mSnap = await db.collection("menu").get();
-                globalMenus = [];
-                mSnap.forEach(doc => {
-                    let data = doc.data();
-                    globalMenus.push({
-                        id: doc.id,
-                        name: data.name,
-                        price: parseFloat(data.price) || 0,
-                        category: data.category || "อื่นๆ",
-                        allowed: data.allowedPackage || data.allowed || ""
-                    });
-                });
+        // Menus
+        const mSnap = await db.collection("menu").get();
+        let mItems = [];
+        mSnap.forEach(doc => {
+            let data = doc.data();
+            data.id = doc.id;
+            data.sortOrder = data.sortOrder !== undefined ? Number(data.sortOrder) : 99;
+            mItems.push(data);
+        });
+        // จัดเรียงเมนูอาหาร
+        mItems.sort((a, b) => a.sortOrder - b.sortOrder);
+        
+        globalMenus = [];
+        mItems.forEach(data => {
+            globalMenus.push({
+                id: data.id,
+                name: data.name,
+                price: parseFloat(data.price) || 0,
+                category: data.category || "อื่นๆ",
+                allowed: data.allowedPackage || data.allowed || ""
+            });
+        });
 
-                // ✅ เพิ่มบรรทัดนี้: โหลดเมนูเสร็จปุ๊บ ให้วาดรายการอาหารขึ้นหน้าจอทันที
-                prepareMenuCategories();
+        // ✅ เพิ่มบรรทัดนี้: โหลดเมนูเสร็จปุ๊บ ให้วาดรายการอาหารขึ้นหน้าจอทันที
+        prepareMenuCategories();
 
-            } catch (e) {
-                console.error("Load Data Error:", e);
-            }
-        }
+    } catch (e) {
+        console.error("Load Data Error:", e);
+    }
+}
         
         function initTableListener() {
             const tableRef = db.collection("tables").doc(String(currentTableId));
