@@ -506,63 +506,68 @@
         }
 
         async function loadMenu() {
-            const menuGrid = document.getElementById('menuGrid');
-            try {
-                const snapshot = await db.collection("menu").get(); 
-                
-                if (snapshot.empty) {
-                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการเมนูในระบบ</div>";
-                    return;
-                }
-
-                allMenuItems = [];
-                let categoriesSet = new Set();
-
-                snapshot.forEach(doc => {
-                    let item = doc.data();
-                    item.id = doc.id;
-                    
-                    let itemPkg = item.allowedPackage || item.package || item.packageName || item.packages || item.tier || item.priceTier || item.pkg || "";
-
-                    let itemMinPrice = 0;
-                    if (itemPkg !== "" && itemPkg !== null && itemPkg !== undefined) {
-                        let matches = String(itemPkg).match(/\d+/g);
-                        if (matches && matches.length > 0) {
-                            itemMinPrice = Math.min(...matches.map(m => parseInt(m)));
-                        }
-                    }
-
-                    let isMatch = true;
-
-                    if (itemMinPrice > 0) {
-                        if (tablePrice > 0) {
-                            isMatch = (tablePrice >= itemMinPrice); 
-                        } else {
-                            isMatch = false; 
-                        }
-                    }
-
-                    if (isMatch) {
-                        allMenuItems.push(item);
-                        if (item.category) {
-                            categoriesSet.add(item.category);
-                        }
-                    }
-                });
-
-                if (allMenuItems.length === 0) {
-                    menuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ " + (currentPackage || tablePrice || "") + "</div>";
-                    return;
-                }
-
-                renderCategories(Array.from(categoriesSet));
-                renderMenu();
-
-            } catch (error) {
-                console.error("Error loading menu:", error);
-                menuGrid.innerHTML = "<div class='text-danger w-100 text-center'>เกิดข้อผิดพลาดในการโหลดเมนู: " + error.message + "</div>";
-            }
+    Const menuGrid = document.getElementById('menuGrid');
+    Try {
+        Const snapshot = await db.collection("menu").get(); 
+        
+        If (snapshot.empty) {
+            MenuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการเมนูในระบบ</div>";
+            Return;
         }
+
+        AllMenuItems = [];
+        Let categoriesSet = new Set();
+
+        Snapshot.forEach(doc => {
+            Let item = doc.data();
+            Item.id = doc.id;
+            // 🟢 เพิ่มแปลงค่า sortOrder ให้เป็นตัวเลข (ถ้าไม่มีใส่ 99)
+            Item.sortOrder = item.sortOrder !== undefined ? Number(item.sortOrder) : 99;
+            
+            Let itemPkg = item.allowedPackage || item.package || item.packageName || item.packages || item.tier || item.priceTier || item.pkg || "";
+
+            Let itemMinPrice = 0;
+            If (itemPkg !== "" && itemPkg !== null && itemPkg !== undefined) {
+                Let matches = String(itemPkg).match(/\d+/g);
+                If (matches && matches.length > 0) {
+                    ItemMinPrice = Math.min(...matches.map(m => parseInt(m)));
+                }
+            }
+
+            Let isMatch = true;
+
+            If (itemMinPrice > 0) {
+                If (tablePrice > 0) {
+                    IsMatch = (tablePrice >= itemMinPrice); 
+                } else {
+                    IsMatch = false; 
+                }
+            }
+
+            If (isMatch) {
+                AllMenuItems.push(item);
+                If (item.category) {
+                    CategoriesSet.add(item.category);
+                }
+            }
+        });
+
+        If (allMenuItems.length === 0) {
+            MenuGrid.innerHTML = "<div class='alert alert-warning w-100 text-center'>ไม่มีรายการอาหารสำหรับแพ็กเกจ " + (currentPackage || tablePrice || "") + "</div>";
+            Return;
+        }
+
+        // 🟢 เพิ่มบรรทัดนี้: จัดเรียงรายการอาหารทั้งหมดตาม sortOrder จากน้อยไปมาก
+        AllMenuItems.sort((a, b) => a.sortOrder - b.sortOrder);
+
+        RenderCategories(Array.from(categoriesSet));
+        RenderMenu();
+
+    } catch (error) {
+        Console.error("Error loading menu:", error);
+        MenuGrid.innerHTML = "<div class='text-danger w-100 text-center'>เกิดข้อผิดพลาดในการโหลดเมนู: " + error.message + "</div>";
+    }
+}
 
         function renderCategories(categories) {
             const container = document.getElementById('categoryContainer');
