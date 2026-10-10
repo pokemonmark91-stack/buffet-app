@@ -1,1 +1,745 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Owner Dashboard</title>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background: #f0f2f5; margin: 0; padding: 0; color: #333; }
+        .sidebar { width: 250px; background: #2f3542; color: white; position: fixed; height: 100vh; padding-top: 20px; z-index: 100; }
+        .sidebar h2 { text-align: center; margin-bottom: 30px; color: #ff4757; }
+        .nav-btn { display: block; width: 100%; padding: 15px 20px; border: none; background: none; color: white; text-align: left; font-size: 16px; cursor: pointer; transition: 0.3s; border-left: 4px solid transparent; }
+        .nav-btn:hover, .nav-btn.active { background: #57606f; border-left: 4px solid #ff4757; }
+        
+        .main-content { margin-left: 250px; padding: 20px; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .card-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+        .card h3 { margin: 0 0 10px 0; color: #747d8c; font-size: 15px; }
+        .card p { margin: 0; font-size: 26px; font-weight: bold; color: #2f3542; }
+
+        .mgmt-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; overflow-x: auto; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        input[type="text"], input[type="number"], input[type="date"], input[type="file"] { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; width: 100%; box-sizing: border-box;}
+        
+        button.btn-add { background: #2ed573; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button.btn-del { background: #ff4757; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;}
+        button.btn-edit { background: #1e90ff; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; margin-right: 5px;}
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 500px; }
+        th, td { border: 1px solid #dfe4ea; padding: 10px 12px; text-align: left; font-size: 14px; }
+        th { background: #f1f2f6; }
+        .img-preview { width: 60px; height: 60px; object-fit: cover; border-radius: 5px; background: #eee;}
+        
+        .date-filter { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: inline-block; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .pkg-breakdown-list { list-style: none; padding: 0; margin: 5px 0 0 0; text-align: left; font-size: 14px; color: #2f3542; }
+        .pkg-breakdown-list li { padding: 4px 0; border-bottom: 1px dashed #f1f2f6; display: flex; justify-content: space-between; }
+
+        @media (max-width: 768px) {
+            .sidebar { width: 100%; height: auto; position: relative; display: flex; overflow-x: auto; white-space: nowrap; padding-bottom: 10px; }
+            .sidebar h2 { display: none; }
+            .nav-btn { display: inline-block; width: auto; border-left: none; border-bottom: 4px solid transparent; }
+            .nav-btn:hover, .nav-btn.active { border-left: none; border-bottom: 4px solid #ff4757; }
+            .main-content { margin-left: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>🧑‍💼 ระบบเจ้าของร้าน</h2>
+        <button class="nav-btn active" onclick="switchTab('tab-dashboard', this)">📊 ภาพรวม (Dashboard)</button>
+        <button class="nav-btn" onclick="switchTab('tab-packages', this)">🏷️ จัดการ Packages</button>
+        <button class="nav-btn" onclick="switchTab('tab-soups', this)">🍲 จัดการ Soups</button>
+        <button class="nav-btn" onclick="switchTab('tab-menu', this)">🥩 จัดการ Menu</button>
+    </div>
+
+    <div class="main-content">
+        <!-- Tab 1: Dashboard -->
+        <div id="tab-dashboard" class="tab-content active">
+            <h2>ภาพรวมประจำวัน</h2>
+            
+            <div class="date-filter">
+                <label for="dashDate"><b>เลือกวันที่ต้องการดู:</b> </label>
+                <input type="date" id="dashDate" onchange="loadDashboard()">
+            </div>
+            
+            <!-- Cards สรุปการเงิน -->
+            <div class="card-container">
+                <div class="card">
+                    <h3>ยอดขายรวม</h3>
+                    <p id="dashSales" style="color: #2ed573;">0 ฿</p>
+                </div>
+                <div class="card">
+                    <h3>รับเงินสด</h3>
+                    <p id="dashCash" style="color: #1e90ff;">0 ฿</p>
+                </div>
+                <div class="card">
+                    <h3>รับเงินโอน</h3>
+                    <p id="dashTransfer" style="color: #3742fa;">0 ฿</p>
+                </div>
+                <div class="card">
+                    <h3>จ่ายออกไปรวม</h3>
+                    <p id="dashExpenseTotal" style="color: #ff4757;">0 ฿</p>
+                </div>
+                <div class="card">
+                    <h3>เงินสดสุทธิ (เงินสด - จ่ายออก)</h3>
+                    <p id="dashNetCash" style="color: #2ed573;">0 ฿</p>
+                </div>
+            </div>
+
+            <!-- Cards สรุปสถิติร้าน & แยกรายราคาแพ็กเกจ -->
+            <div class="card-container">
+                <div class="card">
+                    <h3>ลูกค้าทั้งหมด</h3>
+                    <p id="dashPeople" style="color: #ff4757;">0 คน</p>
+                </div>
+                <div class="card" style="grid-column: span 2;">
+                    <h3>👥 จำนวนลูกค้า (แยกตามแพ็กเกจ)</h3>
+                    <ul id="dashPkgBreakdown" class="pkg-breakdown-list">
+                        <li><span>ไม่มีข้อมูล</span> <b>0 คน</b></li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>โต๊ะที่เช็คบิล</h3>
+                    <p id="dashTablesCount">0 โต๊ะ</p>
+                </div>
+                <div class="card">
+                    <h3>หม้อ/เตาที่ใช้งาน</h3>
+                    <p id="dashStoves">0 เตา</p>
+                </div>
+            </div>
+
+            <!-- ส่วนบันทึกรายจ่าย -->
+            <div class="mgmt-card">
+                <h3>💸 บันทึกรายจ่ายประจำวัน</h3>
+                <div class="form-grid">
+                    <input type="text" id="expDesc" placeholder="รายการจ่าย (เช่น ค่าแก๊ส, ซื้อน้ำแข็ง)">
+                    <input type="number" id="expAmount" placeholder="จำนวนเงิน (บาท)">
+                </div>
+                <button class="btn-add" onclick="addExpense()" style="background: #ffa502;">+ บันทึกรายจ่าย</button>
+                
+                <table style="margin-top: 15px;">
+                    <thead><tr><th>รายการจ่าย</th><th>จำนวนเงิน</th><th>เวลา</th><th>จัดการ</th></tr></thead>
+                    <tbody id="expenseTableBody"><tr><td colspan="4">ไม่มีรายจ่ายวันนี้</td></tr></tbody>
+                </table>
+            </div>
+
+            <!-- ตารางสรุปน้ำซุป (มีราคา & ยอดรวม) -->
+            <div class="mgmt-card">
+                <h3>🍲 สรุปน้ำซุปที่ออกวันนี้</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ชื่อน้ำซุป</th>
+                            <th>จำนวน (หม้อ/ชุด)</th>
+                            <th>ราคาต่อหน่วย</th>
+                            <th>ยอดรวม (บาท)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="soupSummaryBody"><tr><td colspan="4">ไม่มีข้อมูลน้ำซุป</td></tr></tbody>
+                </table>
+            </div>
+
+            <!-- ตารางสรุปรายการอาหาร & เครื่องดื่ม (มีราคา & ยอดรวม) -->
+            <div class="mgmt-card">
+                <h3>🥩 สรุปรายการอาหาร & เครื่องดื่มที่ออกวันนี้</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ชื่อเมนู</th>
+                            <th>หมวดหมู่</th>
+                            <th>จำนวนที่ออก</th>
+                            <th>ราคาต่อหน่วย</th>
+                            <th>ยอดรวม (บาท)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="menuSummaryBody"><tr><td colspan="5">ไม่มีข้อมูลการสั่งอาหาร</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab 2: Packages -->
+        <div id="tab-packages" class="tab-content">
+            <h2>จัดการแพ็กเกจ (Packages)</h2>
+            <div class="mgmt-card">
+                <h3>เพิ่มแพ็กเกจใหม่</h3>
+                <div class="form-grid">
+                    <input type="number" id="pkgSort" placeholder="ลำดับ (0,1,2...)">
+                    <input type="text" id="pkgName" placeholder="ชื่อแพ็กเกจ">
+                    <input type="number" id="pkgPrice" placeholder="ราคา (บาท)">
+                </div>
+                <button class="btn-add" onclick="addPackage()">+ เพิ่มข้อมูล</button>
+            </div>
+            <div class="mgmt-card">
+                <table>
+                    <thead><tr><th>ลำดับ</th><th>ชื่อแพ็กเกจ</th><th>ราคา</th><th>จัดการ</th></tr></thead>
+                    <tbody id="pkgTableBody"><tr><td colspan="4">กำลังโหลด...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab 3: Soups -->
+        <div id="tab-soups" class="tab-content">
+            <h2>จัดการน้ำซุป (Soups)</h2>
+            <div class="mgmt-card">
+                <h3>เพิ่มน้ำซุปใหม่</h3>
+                <div class="form-grid">
+                    <input type="number" id="soupSort" placeholder="ลำดับ (0,1,2...)">
+                    <input type="text" id="soupName" placeholder="ชื่อน้ำซุป">
+                    <input type="text" id="soupCat" placeholder="หมวดหมู่">
+                    <input type="text" id="soupAllowed" placeholder="แพ็กเกจ (เช่น 99,119)">
+                    <input type="number" id="soupPrice" placeholder="ราคาเพิ่ม">
+                </div>
+                <button class="btn-add" onclick="addSoup()">+ เพิ่มข้อมูล</button>
+            </div>
+            <div class="mgmt-card">
+                <table>
+                    <thead><tr><th>ลำดับ</th><th>ชื่อน้ำซุป</th><th>หมวดหมู่</th><th>แพ็กเกจที่ได้</th><th>ราคาเพิ่ม</th><th>จัดการ</th></tr></thead>
+                    <tbody id="soupTableBody"><tr><td colspan="6">กำลังโหลด...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab 4: Menu -->
+        <div id="tab-menu" class="tab-content">
+            <h2>จัดการเมนูอาหาร (Menu)</h2>
+            <div class="mgmt-card">
+                <h3>เพิ่มเมนูใหม่</h3>
+                <div class="form-grid">
+                    <input type="number" id="menuSort" placeholder="ลำดับ (0,1,2...)">
+                    <input type="text" id="menuName" placeholder="ชื่อเมนู">
+                    <input type="text" id="menuCat" placeholder="หมวดหมู่">
+                    <input type="text" id="menuAllowed" placeholder="แพ็กเกจ (เช่น 99,119)">
+                    <input type="number" id="menuPrice" placeholder="ราคาเพิ่ม (0=ฟรี)">
+                    <input type="file" id="menuImgFile" accept="image/*" style="padding: 7px; font-size: 14px;">
+                </div>
+                <button class="btn-add" id="menuAddBtn" onclick="addMenu()">+ เพิ่มข้อมูล</button>
+            </div>
+            <div class="mgmt-card">
+                <table>
+                    <thead><tr><th>รูปภาพ</th><th style="width: 60px; text-align: center;">ลำดับ</th><th>ชื่อเมนู</th><th>หมวดหมู่</th><th>แพ็กเกจที่ได้</th><th>ราคา</th><th>จัดการ</th></tr></thead>
+                    <tbody id="menuTableBody"><tr><td colspan="7">กำลังโหลด...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+            authDomain: "buffet-system-9b165.firebaseapp.com",
+            projectId: "buffet-system-9b165",
+            storageBucket: "buffet-system-9b165.firebasestorage.app",
+            messagingSenderId: "144497251618",
+            appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+            measurementId: "G-82JK3EL1HL"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        let today = new Date();
+        today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+        document.getElementById('dashDate').value = today.toISOString().split('T')[0];
+
+        window.onload = function() { loadDashboard(); };
+
+        function switchTab(tabId, btnElement) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            btnElement.classList.add('active');
+
+            if(tabId === 'tab-dashboard') loadDashboard();
+            if(tabId === 'tab-packages') loadPackages();
+            if(tabId === 'tab-soups') loadSoups();
+            if(tabId === 'tab-menu') loadMenu();
+        }
+
+        /* ---------------------------------------------------- */
+        /* --- 1. DASHBOARD & SUMMARY SYSTEM ------------------ */
+        /* ---------------------------------------------------- */
+        async function loadDashboard() {
+            let selectedDateStr = document.getElementById('dashDate').value;
+            if (!selectedDateStr) return;
+
+            try {
+                let startDate = new Date(selectedDateStr + "T00:00:00");
+                let endDate = new Date(selectedDateStr + "T23:59:59");
+
+                // ดึงข้อมูลราคาน้ำซุปจาก Firestore (soups collection) มาเก็บไว้เทียบราคา
+                const soupsSnap = await db.collection("soups").get();
+                let soupPricesMap = {};
+                soupsSnap.forEach(doc => {
+                    let s = doc.data();
+                    if (s.name) soupPricesMap[s.name] = parseFloat(s.price || 0);
+                });
+
+                // ดึงข้อมูล Checkouts (บิลที่คิดเงินแล้วในวันนี้)
+                const checkoutsSnapshot = await db.collection("checkouts")
+                    .where("timestamp", ">=", startDate)
+                    .where("timestamp", "<=", endDate)
+                    .get();
+
+                let totalSales = 0, cashSales = 0, transferSales = 0, totalPeople = 0, totalTables = checkoutsSnapshot.size, totalStoves = 0;
+                let soupMap = {}, itemMap = {}, pkgPeopleMap = {};
+
+                checkoutsSnapshot.forEach(doc => {
+                    let data = doc.data();
+                    let amount = parseFloat(data.netTotal || data.total || 0);
+                    totalSales += amount;
+
+                    let method = String(data.paymentMethod || data.payType || "").toLowerCase();
+                    if (method.includes("สด") || method.includes("cash")) {
+                        cashSales += amount;
+                    } else if (method.includes("โอน") || method.includes("qr") || method.includes("transfer")) {
+                        transferSales += amount;
+                    } else {
+                        cashSales += amount;
+                    }
+
+                    let pCount = parseInt(data.customerCount || data.people || data.pax || 1);
+                    totalPeople += pCount;
+
+                    // แยกจำนวนคนตามแพ็กเกจราคา
+                    let pkgName = data.packageName || data.package || (data.packagePrice ? data.packagePrice + ' บ.' : "ไม่ระบุแพ็กเกจ");
+                    pkgPeopleMap[pkgName] = (pkgPeopleMap[pkgName] || 0) + pCount;
+
+                    totalStoves += parseInt(data.stoveCount || data.pots || 1);
+
+                    // รวบรวมน้ำซุป
+                    let s1 = data.soup1 || data.selectedSoup1;
+                    let s2 = data.soup2 || data.selectedScore2 || data.selectedSoup2;
+                    if (s1) {
+                        let sPrice = soupPricesMap[s1] !== undefined ? soupPricesMap[s1] : 0;
+                        if (!soupMap[s1]) soupMap[s1] = { count: 0, price: sPrice, total: 0 };
+                        soupMap[s1].count += 1;
+                        soupMap[s1].total += sPrice;
+                    }
+                    if (s2) {
+                        let sPrice = soupPricesMap[s2] !== undefined ? soupPricesMap[s2] : 0;
+                        if (!soupMap[s2]) soupMap[s2] = { count: 0, price: sPrice, total: 0 };
+                        soupMap[s2].count += 1;
+                        soupMap[s2].total += sPrice;
+                    }
+
+                    // รวบรวมอาหาร & เครื่องดื่ม
+                    if (data.items && Array.isArray(data.items)) {
+                        data.items.forEach(it => {
+                            let name = it.name || "ไม่ระบุชื่อ";
+                            let qty = parseInt(it.quantity || it.qty || 1);
+                            let price = parseFloat(it.price || 0);
+                            let cat = it.category || "อาหาร/เครื่องดื่ม";
+                            
+                            if (!itemMap[name]) {
+                                itemMap[name] = { qty: 0, price: price, total: 0, category: cat };
+                            }
+                            itemMap[name].qty += qty;
+                            itemMap[name].total += (price * qty);
+                        });
+                    }
+                });
+
+                // ดึงข้อมูลรายจ่าย
+                const expenseSnapshot = await db.collection("expenses")
+                    .where("timestamp", ">=", startDate)
+                    .where("timestamp", "<=", endDate)
+                    .get();
+
+                let totalExpense = 0, expHtml = "";
+                expenseSnapshot.forEach(doc => {
+                    let ed = doc.data();
+                    let amt = parseFloat(ed.amount || 0);
+                    totalExpense += amt;
+                    let timeStr = ed.timestamp && ed.timestamp.toDate ? ed.timestamp.toDate().toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : '';
+
+                    expHtml += `<tr>
+                                    <td>${ed.description || ''}</td>
+                                    <td style="color: #ff4757; font-weight: bold;">${amt.toLocaleString()} ฿</td>
+                                    <td>${timeStr}</td>
+                                    <td><button class="btn-del" onclick="deleteExpense('${doc.id}')">ลบ</button></td>
+                                 </tr>`;
+                });
+                document.getElementById('expenseTableBody').innerHTML = expHtml || "<tr><td colspan='4'>ไม่มีรายจ่ายวันนี้</td></tr>";
+
+                // คำนวณเงินสดสุทธิ
+                let netCash = cashSales - totalExpense;
+
+                document.getElementById('dashSales').innerText = totalSales.toLocaleString() + " ฿";
+                document.getElementById('dashCash').innerText = cashSales.toLocaleString() + " ฿";
+                document.getElementById('dashTransfer').innerText = transferSales.toLocaleString() + " ฿";
+                document.getElementById('dashExpenseTotal').innerText = totalExpense.toLocaleString() + " ฿";
+                document.getElementById('dashNetCash').innerText = netCash.toLocaleString() + " ฿";
+
+                document.getElementById('dashPeople').innerText = totalPeople + " คน";
+                document.getElementById('dashTablesCount').innerText = totalTables + " โต๊ะ";
+                document.getElementById('dashStoves').innerText = totalStoves + " เตา";
+
+                // เรนเดอร์แยกคนตามแพ็กเกจ
+                let pkgBreakdownHtml = "";
+                for (let [pName, pCount] of Object.entries(pkgPeopleMap)) {
+                    pkgBreakdownHtml += `<li><span>แพ็กเกจ <b>${pName}</b></span><b style="color:#ff4757;">${pCount} คน</b></li>`;
+                }
+                document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
+
+                // เรนเดอร์ตารางสรุปน้ำซุป (ใส่ราคา & ยอดรวม)
+                let soupHtml = "";
+                for (let [soupName, info] of Object.entries(soupMap)) {
+                    soupHtml += `<tr>
+                                    <td>${soupName}</td>
+                                    <td style="font-weight: bold;">${info.count} หม้อ/ชุด</td>
+                                    <td>${info.price.toLocaleString()} ฿</td>
+                                    <td style="font-weight: bold; color: #2ed573;">${info.total.toLocaleString()} ฿</td>
+                                 </tr>`;
+                }
+                document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
+
+                // เรนเดอร์ตารางสรุปอาหาร & เครื่องดื่ม (ใส่ราคา & ยอดรวม)
+                let menuHtml = "";
+                for (let [menuName, info] of Object.entries(itemMap)) {
+                    menuHtml += `<tr>
+                                    <td>${menuName}</td>
+                                    <td>${info.category}</td>
+                                    <td style="font-weight: bold;">${info.qty} รายการ</td>
+                                    <td>${info.price.toLocaleString()} ฿</td>
+                                    <td style="font-weight: bold; color: #2ed573;">${info.total.toLocaleString()} ฿</td>
+                                 </tr>`;
+                }
+                document.getElementById('menuSummaryBody').innerHTML = menuHtml || "<tr><td colspan='5'>ไม่มีข้อมูลการสั่งอาหารวันนี้</td></tr>";
+
+            } catch (err) { console.error("Dashboard error:", err); }
+        }
+
+        async function addExpense() {
+            let desc = document.getElementById('expDesc').value.trim();
+            let amount = parseFloat(document.getElementById('expAmount').value);
+            if (!desc || isNaN(amount) || amount <= 0) return alert("กรุณากรอกข้อมูลให้ถูกต้อง");
+
+            try {
+                await db.collection("expenses").add({
+                    description: desc,
+                    amount: amount,
+                    timestamp: new Date()
+                });
+                document.getElementById('expDesc').value = "";
+                document.getElementById('expAmount').value = "";
+                loadDashboard();
+            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+        }
+
+        async function deleteExpense(docId) {
+            if (confirm("ยืนยันการลบรายจ่ายนี้?")) {
+                try {
+                    await db.collection("expenses").doc(docId).delete();
+                    loadDashboard();
+                } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+            }
+        }
+
+        /* ---------------------------------------------------- */
+        /* --- 2. PACKAGES MANAGEMENT -------------------------- */
+        /* ---------------------------------------------------- */
+        async function loadPackages() {
+            try {
+                const snapshot = await db.collection("packages").get();
+                let items = [];
+                snapshot.forEach(doc => {
+                    let data = doc.data();
+                    data._docId = doc.id;
+                    data.sortOrder = data.sortOrder !== undefined ? Number(data.sortOrder) : 99;
+                    items.push(data);
+                });
+                items.sort((a, b) => a.sortOrder - b.sortOrder);
+
+                let html = "";
+                items.forEach(item => {
+                    let docId = item._docId;
+                    let name = (item.name || '').toString().replace(/'/g, "\\'");
+                    let price = item.price !== undefined ? item.price : 0;
+                    let sort = item.sortOrder;
+                    
+                    html += `<tr id="pkg-row-${docId}">
+                                <td style="text-align: center;">${sort}</td>
+                                <td>${item.name || ''}</td>
+                                <td>${price}</td>
+                                <td>
+                                    <button class="btn-edit" onclick="editPackageInline('${docId}', ${sort}, '${name}', ${price})">แก้ไข</button>
+                                    <button class="btn-del" onclick="deleteDoc('packages', '${docId}', loadPackages)">ลบ</button>
+                                </td>
+                             </tr>`;
+                });
+                document.getElementById('pkgTableBody').innerHTML = html || "<tr><td colspan='4'>ไม่มีข้อมูล</td></tr>";
+            } catch (err) { document.getElementById('pkgTableBody').innerHTML = `<tr><td colspan='4' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`; }
+        }
+
+        async function addPackage() {
+            let sort = parseInt(document.getElementById('pkgSort').value) || 99;
+            let name = document.getElementById('pkgName').value.trim();
+            let price = parseFloat(document.getElementById('pkgPrice').value);
+            if(!name || isNaN(price)) return alert("กรอกข้อมูลให้ครบถ้วน");
+
+            try {
+                await db.collection("packages").add({ sortOrder: sort, name: name, price: price });
+                document.getElementById('pkgSort').value = ""; document.getElementById('pkgName').value = ""; document.getElementById('pkgPrice').value = "";
+                loadPackages();
+            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+        }
+
+        function editPackageInline(docId, sort, name, price) {
+            let tr = document.getElementById(`pkg-row-${docId}`);
+            tr.innerHTML = `
+                <td><input type="number" id="edit-pkg-sort-${docId}" value="${sort}" style="width: 60px;"></td>
+                <td><input type="text" id="edit-pkg-name-${docId}" value="${name}"></td>
+                <td><input type="number" id="edit-pkg-price-${docId}" value="${price}"></td>
+                <td style="white-space: nowrap;">
+                    <button class="btn-add" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;" onclick="savePackageInline(this, '${docId}')">บันทึก</button>
+                    <button class="btn-del" onclick="loadPackages()">ยกเลิก</button>
+                </td>
+            `;
+        }
+
+        async function savePackageInline(btn, docId) {
+            let sort = parseInt(document.getElementById(`edit-pkg-sort-${docId}`).value) || 99;
+            let name = document.getElementById(`edit-pkg-name-${docId}`).value.trim();
+            let price = parseFloat(document.getElementById(`edit-pkg-price-${docId}`).value);
+            btn.innerText = "⏳..."; btn.disabled = true;
+            try {
+                await db.collection("packages").doc(docId).update({ sortOrder: sort, name: name, price: price });
+                loadPackages();
+            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); loadPackages(); }
+        }
+
+        /* ---------------------------------------------------- */
+        /* --- 3. SOUPS MANAGEMENT ----------------------------- */
+        /* ---------------------------------------------------- */
+        async function loadSoups() {
+            try {
+                const snapshot = await db.collection("soups").get();
+                let items = [];
+                snapshot.forEach(doc => {
+                    let data = doc.data();
+                    data._docId = doc.id;
+                    data.sortOrder = data.sortOrder !== undefined ? Number(data.sortOrder) : 99;
+                    items.push(data);
+                });
+                items.sort((a, b) => a.sortOrder - b.sortOrder);
+
+                let html = "";
+                items.forEach(item => {
+                    let docId = item._docId;
+                    let sort = item.sortOrder;
+                    let name = (item.name || '').toString().replace(/'/g, "\\'");
+                    let cat = (item.category || '').toString().replace(/'/g, "\\'");
+                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "\\'");
+                    let price = item.price !== undefined ? item.price : 0;
+                    
+                    html += `<tr id="soup-row-${docId}">
+                                <td style="text-align: center;">${sort}</td>
+                                <td>${item.name || ''}</td>
+                                <td>${item.category || ''}</td>
+                                <td>${item.allowedPackage || ''}</td>
+                                <td>${price}</td>
+                                <td>
+                                    <button class="btn-edit" onclick="editSoupInline('${docId}', ${sort}, '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
+                                    <button class="btn-del" onclick="deleteDoc('soups', '${docId}', loadSoups)">ลบ</button>
+                                </td>
+                             </tr>`;
+                });
+                document.getElementById('soupTableBody').innerHTML = html || "<tr><td colspan='6'>ไม่มีข้อมูล</td></tr>";
+            } catch (err) { document.getElementById('soupTableBody').innerHTML = `<tr><td colspan='6' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`; }
+        }
+
+        async function addSoup() {
+            let sort = parseInt(document.getElementById('soupSort').value) || 99;
+            let name = document.getElementById('soupName').value.trim();
+            let cat = document.getElementById('soupCat').value.trim();
+            let allowed = document.getElementById('soupAllowed').value.trim();
+            let price = parseFloat(document.getElementById('soupPrice').value) || 0;
+            if(!name || !allowed) return alert("กรอกชื่อและแพ็กเกจให้ครบถ้วน");
+
+            try {
+                await db.collection("soups").add({ sortOrder: sort, name: name, category: cat, allowedPackage: allowed, price: price });
+                ['soupSort','soupName', 'soupCat', 'soupAllowed', 'soupPrice'].forEach(id => document.getElementById(id).value = "");
+                loadSoups();
+            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
+        }
+
+        function editSoupInline(docId, sort, name, cat, allowed, price) {
+            let tr = document.getElementById(`soup-row-${docId}`);
+            tr.innerHTML = `
+                <td><input type="number" id="edit-soup-sort-${docId}" value="${sort}" style="width: 60px;"></td>
+                <td><input type="text" id="edit-soup-name-${docId}" value="${name}"></td>
+                <td><input type="text" id="edit-soup-cat-${docId}" value="${cat}"></td>
+                <td><input type="text" id="edit-soup-allowed-${docId}" value="${allowed}"></td>
+                <td><input type="number" id="edit-soup-price-${docId}" value="${price}" style="width: 80px;"></td>
+                <td style="white-space: nowrap;">
+                    <button class="btn-add" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;" onclick="saveSoupInline(this, '${docId}')">บันทึก</button>
+                    <button class="btn-del" onclick="loadSoups()">ยกเลิก</button>
+                </td>
+            `;
+        }
+
+        async function saveSoupInline(btn, docId) {
+            let sort = parseInt(document.getElementById(`edit-soup-sort-${docId}`).value) || 99;
+            let name = document.getElementById(`edit-soup-name-${docId}`).value.trim();
+            let cat = document.getElementById(`edit-soup-cat-${docId}`).value.trim();
+            let allowed = document.getElementById(`edit-soup-allowed-${docId}`).value.trim();
+            let price = parseFloat(document.getElementById(`edit-soup-price-${docId}`).value) || 0;
+            btn.innerText = "⏳..."; btn.disabled = true;
+            try {
+                await db.collection("soups").doc(docId).update({ sortOrder: sort, name: name, category: cat, allowedPackage: allowed, price: price });
+                loadSoups();
+            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); loadSoups(); }
+        }
+
+        /* ---------------------------------------------------- */
+        /* --- 4. MENU MANAGEMENT ------------------------------ */
+        /* ---------------------------------------------------- */
+        async function loadMenu() {
+            try {
+                const snapshot = await db.collection("menu").get();
+                let items = [];
+                snapshot.forEach(doc => {
+                    let data = doc.data();
+                    data._docId = doc.id;
+                    data.sortOrder = data.sortOrder !== undefined ? Number(data.sortOrder) : 99;
+                    items.push(data);
+                });
+                items.sort((a, b) => a.sortOrder - b.sortOrder);
+
+                let html = "";
+                items.forEach(item => {
+                    let docId = item._docId;
+                    let sort = item.sortOrder;
+                    let imgSrc = item.imageUrl ? item.imageUrl : 'https://via.placeholder.com/60?text=No+Img';
+                    let name = (item.name || '').toString().replace(/'/g, "\\'");
+                    let cat = (item.category || '').toString().replace(/'/g, "\\'");
+                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "\\'");
+                    let price = item.price !== undefined ? item.price : 0;
+
+                    html += `<tr id="menu-row-${docId}">
+                                <td><img src="${imgSrc}" class="img-preview" id="img-preview-${docId}" onerror="this.src='https://via.placeholder.com/60?text=Error'"></td>
+                                <td style="text-align: center; font-weight: bold; color: #2f3542;">${sort}</td>
+                                <td>${item.name || ''}</td>
+                                <td>${item.category || ''}</td>
+                                <td>${item.allowedPackage || ''}</td>
+                                <td>${price}</td>
+                                <td>
+                                    <button class="btn-edit" onclick="editMenuInline('${docId}', ${sort}, '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
+                                    <button class="btn-del" onclick="deleteDoc('menu', '${docId}', loadMenu)">ลบ</button>
+                                </td>
+                             </tr>`;
+                });
+                document.getElementById('menuTableBody').innerHTML = html || "<tr><td colspan='7'>ไม่มีข้อมูล</td></tr>";
+            } catch (err) { document.getElementById('menuTableBody').innerHTML = `<tr><td colspan='7' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`; }
+        }
+
+        function convertFileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const MAX_WIDTH = 800, MAX_HEIGHT = 800;
+                        let width = img.width, height = img.height;
+                        if (width > height) {
+                            if (width > MAX_WIDTH) { height = Math.round(height * (MAX_WIDTH / width)); width = MAX_WIDTH; }
+                        } else {
+                            if (height > MAX_HEIGHT) { width = Math.round(width * (MAX_HEIGHT / height)); height = MAX_HEIGHT; }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.7));
+                    };
+                    img.onerror = error => reject(error);
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        async function addMenu() {
+            let sort = parseInt(document.getElementById('menuSort').value) || 99;
+            let name = document.getElementById('menuName').value.trim();
+            let cat = document.getElementById('menuCat').value.trim();
+            let allowed = document.getElementById('menuAllowed').value.trim();
+            let price = parseFloat(document.getElementById('menuPrice').value) || 0;
+            let fileInput = document.getElementById('menuImgFile');
+            let btn = document.getElementById('menuAddBtn');
+            
+            if(!name || !allowed) return alert("กรอกชื่อเมนูและแพ็กเกจให้ครบถ้วน");
+
+            btn.innerText = "⏳ กำลังบันทึก..."; btn.disabled = true;
+            try {
+                let imageUrl = "";
+                if (fileInput.files.length > 0) {
+                    imageUrl = await convertFileToBase64(fileInput.files[0]);
+                }
+                await db.collection("menu").add({ sortOrder: sort, name: name, category: cat, allowedPackage: allowed, price: price, imageUrl: imageUrl });
+                ['menuSort', 'menuName', 'menuCat', 'menuAllowed', 'menuPrice'].forEach(id => document.getElementById(id).value = "");
+                fileInput.value = ""; btn.innerText = "+ เพิ่มข้อมูล"; btn.disabled = false;
+                loadMenu();
+            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); btn.innerText = "+ เพิ่มข้อมูล"; btn.disabled = false; }
+        }
+
+        function editMenuInline(docId, sort, name, cat, allowed, price) {
+            let tr = document.getElementById(`menu-row-${docId}`);
+            let imgSrc = document.getElementById(`img-preview-${docId}`).src;
+            tr.innerHTML = `
+                <td>
+                    <img src="${imgSrc}" class="img-preview" style="display:block; margin-bottom:5px;">
+                    <input type="file" id="edit-img-${docId}" accept="image/*" style="width: 120px; font-size: 11px; padding: 2px;">
+                </td>
+                <td style="vertical-align: middle;"><input type="number" id="edit-sort-${docId}" value="${sort}" style="width: 60px;"></td>
+                <td style="vertical-align: middle;"><input type="text" id="edit-name-${docId}" value="${name}"></td>
+                <td style="vertical-align: middle;"><input type="text" id="edit-cat-${docId}" value="${cat}"></td>
+                <td style="vertical-align: middle;"><input type="text" id="edit-allowed-${docId}" value="${allowed}"></td>
+                <td style="vertical-align: middle;"><input type="number" id="edit-price-${docId}" value="${price}" style="width: 80px;"></td>
+                <td style="vertical-align: middle; white-space: nowrap;">
+                    <button class="btn-add" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;" onclick="saveMenuInline(this, '${docId}')">บันทึก</button>
+                    <button class="btn-del" onclick="loadMenu()">ยกเลิก</button>
+                </td>
+            `;
+        }
+
+        async function saveMenuInline(btn, docId) {
+            let newSort = parseInt(document.getElementById(`edit-sort-${docId}`).value) || 99;
+            let newName = document.getElementById(`edit-name-${docId}`).value.trim();
+            let newCat = document.getElementById(`edit-cat-${docId}`).value.trim();
+            let newAllowed = document.getElementById(`edit-allowed-${docId}`).value.trim();
+            let newPrice = parseFloat(document.getElementById(`edit-price-${docId}`).value) || 0;
+            let fileInput = document.getElementById(`edit-img-${docId}`);
+            btn.innerText = "⏳..."; btn.disabled = true;
+            try {
+                let updatePayload = { sortOrder: newSort, name: newName, category: newCat, allowedPackage: newAllowed, price: newPrice };
+                if (fileInput.files.length > 0) {
+                    updatePayload.imageUrl = await convertFileToBase64(fileInput.files[0]);
+                }
+                await db.collection("menu").doc(docId).update(updatePayload);
+                loadMenu();
+            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); loadMenu(); }
+        }
+
+        async function deleteDoc(collectionName, docId, reloadFunction) {
+            if(confirm(`ยืนยันการลบข้อมูลนี้ใช่หรือไม่?`)) {
+                try {
+                    await db.collection(collectionName).doc(docId).delete();
+                    reloadFunction();
+                } catch (err) { alert("เกิดข้อผิดพลาดในการลบ: " + err.message); }
+            }
+        }
+    </script>
+</body>
+</html>
