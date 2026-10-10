@@ -276,7 +276,18 @@
                 let startDate = new Date(selectedDateStr + "T00:00:00");
                 let endDate = new Date(selectedDateStr + "T23:59:59");
 
-                // ดึงข้อมูลราคาน้ำซุปจาก Firestore (soups collection) มาเก็บไว้เทียบราคา
+                // 1. โหลดข้อมูลยอดเปิดกะของวันนี้
+                const shiftDoc = await db.collection("daily_shifts").doc(selectedDateStr).get();
+                let openShiftVal = 0;
+                if (shiftDoc.exists) {
+                    openShiftVal = parseFloat(shiftDoc.data().openAmount || 0);
+                    document.getElementById('openShiftAmount').value = openShiftVal;
+                } else {
+                    document.getElementById('openShiftAmount').value = "";
+                }
+                document.getElementById('dashOpenShift').innerText = openShiftVal.toLocaleString() + " ฿";
+
+                // ดึงราคาน้ำซุป
                 const soupsSnap = await db.collection("soups").get();
                 let soupPricesMap = {};
                 soupsSnap.forEach(doc => {
@@ -284,7 +295,7 @@
                     if (s.name) soupPricesMap[s.name] = parseFloat(s.price || 0);
                 });
 
-                // ดึงข้อมูล Checkouts (บิลที่คิดเงินแล้วในวันนี้)
+                // ดึงข้อมูล Checkouts
                 const checkoutsSnapshot = await db.collection("checkouts")
                     .where("timestamp", ">=", startDate)
                     .where("timestamp", "<=", endDate)
@@ -298,27 +309,42 @@
                     let amount = parseFloat(data.netTotal || data.total || 0);
                     totalSales += amount;
 
-                    let method = String(data.paymentMethod || data.payType || "").toLowerCase();
-                    if (method.includes("สด") || method.includes("cash")) {
-                        cashSales += amount;
-                    } else if (method.includes("โอน") || method.includes("qr") || method.includes("transfer")) {
-                        transferSales += amount;
+                    // ✅ รองรับการอ่านแยกเงินสด / เงินโอนจาก payments array ที่บันทึกมา
+                    let cashAmount = 0;
+                    let transferAmount = 0;
+                    if (data.payments && Array.isArray(data.payments)) {
+                        data.payments.forEach(p => {
+                            let m = String(p.method || "").toLowerCase();
+                            let amt = parseFloat(p.amount || 0);
+                            if (m.includes("สด") || m.includes("cash")) {
+                                cashAmount += amt;
+                            } else {
+                                transferAmount += amt; // เงินโอน, บัตรเครดิต, ฯลฯ
+                            }
+                        });
                     } else {
-                        cashSales += amount;
+                        let method = String(data.paymentMethod || data.payType || "").toLowerCase();
+                        if (method.includes("สด") || method.includes("cash")) {
+                            cashSales += amount;
+                        } else {
+                            transferSales += amount;
+                        }
                     }
+                    cashSales += cashAmount;
+                    transferSales += transferAmount;
 
-                    let pCount = parseInt(data.customerCount || data.people || data.pax || 1);
+                    // ✅ ดึงจำนวนคนและแพ็กเกจที่ถูกต้อง
+                    let pCount = parseInt(data.customerCount || data.totalPeople || data.adults + data.children || 1);
                     totalPeople += pCount;
 
-                    // แยกจำนวนคนตามแพ็กเกจราคา
-                    let pkgName = data.packageName || data.package || (data.packagePrice ? data.packagePrice + ' บ.' : "ไม่ระบุแพ็กเกจ");
+                    let pkgName = data.packageName || data.package || (data.packagePrice ? data.packagePrice : "ไม่ระบุ");
                     pkgPeopleMap[pkgName] = (pkgPeopleMap[pkgName] || 0) + pCount;
 
                     totalStoves += parseInt(data.stoveCount || data.pots || 1);
 
-                    // รวบรวมน้ำซุป
+                    // น้ำซุป
                     let s1 = data.soup1 || data.selectedSoup1;
-                    let s2 = data.soup2 || data.selectedScore2 || data.selectedSoup2;
+                    let s2 = data.soup2 || data.selectedSoup2;
                     if (s1) {
                         let sPrice = soupPricesMap[s1] !== undefined ? soupPricesMap[s1] : 0;
                         if (!soupMap[s1]) soupMap[s1] = { count: 0, price: sPrice, total: 0 };
@@ -332,7 +358,7 @@
                         soupMap[s2].total += sPrice;
                     }
 
-                    // รวบรวมอาหาร & เครื่องดื่ม
+                    // รายการอาหาร
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(it => {
                             let name = it.name || "ไม่ระบุชื่อ";
@@ -349,7 +375,7 @@
                     }
                 });
 
-                // ดึงข้อมูลรายจ่าย
+                // รายจ่าย
                 const expenseSnapshot = await db.collection("expenses")
                     .where("timestamp", ">=", startDate)
                     .where("timestamp", "<=", endDate)
@@ -371,27 +397,23 @@
                 });
                 document.getElementById('expenseTableBody').innerHTML = expHtml || "<tr><td colspan='4'>ไม่มีรายจ่ายวันนี้</td></tr>";
 
-                // คำนวณเงินสดสุทธิ
-                let netCash = cashSales - totalExpense;
-
                 document.getElementById('dashSales').innerText = totalSales.toLocaleString() + " ฿";
                 document.getElementById('dashCash').innerText = cashSales.toLocaleString() + " ฿";
                 document.getElementById('dashTransfer').innerText = transferSales.toLocaleString() + " ฿";
                 document.getElementById('dashExpenseTotal').innerText = totalExpense.toLocaleString() + " ฿";
-                document.getElementById('dashNetCash').innerText = netCash.toLocaleString() + " ฿";
 
                 document.getElementById('dashPeople').innerText = totalPeople + " คน";
                 document.getElementById('dashTablesCount').innerText = totalTables + " โต๊ะ";
                 document.getElementById('dashStoves').innerText = totalStoves + " เตา";
 
-                // เรนเดอร์แยกคนตามแพ็กเกจ
+                // แสดงสรุปแพ็กเกจ (เช่น 99, 119, 159)
                 let pkgBreakdownHtml = "";
                 for (let [pName, pCount] of Object.entries(pkgPeopleMap)) {
-                    pkgBreakdownHtml += `<li><span>แพ็กเกจ <b>${pName}</b></span><b style="color:#ff4757;">${pCount} คน</b></li>`;
+                    pkgBreakdownHtml += `<li><span>แพ็กเกจ <b>${pName} บาท</b></span><b style="color:#ff4757;">${pCount} คน</b></li>`;
                 }
                 document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
 
-                // เรนเดอร์ตารางสรุปน้ำซุป (ใส่ราคา & ยอดรวม)
+                // สรุปน้ำซุป
                 let soupHtml = "";
                 for (let [soupName, info] of Object.entries(soupMap)) {
                     soupHtml += `<tr>
@@ -403,7 +425,7 @@
                 }
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
 
-                // เรนเดอร์ตารางสรุปอาหาร & เครื่องดื่ม (ใส่ราคา & ยอดรวม)
+                // สรุปอาหาร
                 let menuHtml = "";
                 for (let [menuName, info] of Object.entries(itemMap)) {
                     menuHtml += `<tr>
@@ -418,7 +440,7 @@
 
             } catch (err) { console.error("Dashboard error:", err); }
         }
-
+        
         async function addExpense() {
             let desc = document.getElementById('expDesc').value.trim();
             let amount = parseFloat(document.getElementById('expAmount').value);
