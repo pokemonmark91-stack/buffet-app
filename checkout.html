@@ -692,13 +692,23 @@
                 let shiftId = localStorage.getItem('currentShiftId') || "ไม่มีข้อมูลกะ";
 
                 let currentTableMembers = [];
+                let tableAdults = 0;
+                let tableChildren = 0;
+                let tableTotalPeople = 0;
+                let tablePackagePrice = 0;
+
                 try {
                     const currentTableDoc = await db.collection("tables").doc(cleanTableId).get();
-                    if (currentTableDoc.exists && currentTableDoc.data().activeMembers) {
-                        currentTableMembers = currentTableDoc.data().activeMembers;
+                    if (currentTableDoc.exists) {
+                        let tData = currentTableDoc.data();
+                        currentTableMembers = tData.activeMembers || [];
+                        tableAdults = parseInt(tData.adults) || 0;
+                        tableChildren = parseInt(tData.children) || 0;
+                        tableTotalPeople = parseInt(tData.totalPeople) || (tableAdults + tableChildren);
+                        tablePackagePrice = parseFloat(tData.packagePrice) || 0;
                     }
                 } catch (err) {
-                    console.warn("ไม่สามารถดึงข้อมูลสมาชิกร่วมโต๊ะสำรองได้:", err);
+                    console.warn("ไม่สามารถดึงข้อมูลโต๊ะเพิ่มเติมได้:", err);
                 }
 
                 memberPointsAssigned = memberPointsAssigned.map(m => {
@@ -731,6 +741,13 @@
                     displayName: primaryCustomerName,
                     pictureUrl: primaryPictureUrl,
                     activeMembers: currentTableMembers,
+                    // ✅ เพิ่มข้อมูลจำนวนคนและแพ็กเกจส่งให้ Dashboard
+                    adults: tableAdults,
+                    children: tableChildren,
+                    customerCount: tableTotalPeople,
+                    totalPeople: tableTotalPeople,
+                    packagePrice: tablePackagePrice,
+                    packageName: tablePackagePrice ? String(tablePackagePrice) : "ไม่ระบุ",
                     shiftId: shiftId,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
