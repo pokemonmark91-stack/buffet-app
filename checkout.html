@@ -454,7 +454,7 @@
             });
         }
 
-        // C. เตรียมแสดงผล
+                // C. เตรียมแสดงผล
         let itemsList = Object.values(groupedItemsMap);
 
         let headItems = itemsList.filter(i => i.type === 'head');
@@ -462,11 +462,14 @@
         let drinkItems = itemsList.filter(i => i.type === 'drink');
         let foodItems = itemsList.filter(i => i.type === 'food');
 
-        // เรียงลำดับจากจำนวนมากไปน้อย (b.qty - a.qty) ทั้งเครื่องดื่มและอาหาร
-        drinkItems.sort((a, b) => b.qty - a.qty);
-        foodItems.sort((a, b) => b.qty - a.qty);
+        // เรียงลำดับเครื่องดื่ม: เรียงตาม "ราคา" ก่อน (มากไปน้อย) ถ้าเท่ากันเรียงตาม "จำนวน" (มากไปน้อย)
+        drinkItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
+
+        // เรียงลำดับอาหารที่เหลือ: เรียงตาม "ราคา" ก่อน (มากไปน้อย) ถ้าเท่ากันเรียงตาม "จำนวน" (มากไปน้อย)
+        foodItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
 
         let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
+
         let html = "";
         
         finalOrderedItems.forEach(item => {
