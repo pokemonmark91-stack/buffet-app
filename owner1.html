@@ -67,7 +67,7 @@
             
             <div class="date-filter">
                 <label for="dashDate"><b>เลือกวันที่ต้องการดู:</b> </label>
-                <input type="date" id="dashDate" onchange="board()">
+                <input type="date" id="dashDate" onchange="loadDashboard()">
             </div>
             
             <!-- Cards สรุปการเงิน -->
@@ -133,7 +133,7 @@
                 </table>
             </div>
 
-                        <!-- ตารางสรุปน้ำซุป -->
+            <!-- ตารางสรุปน้ำซุป -->
             <div class="mgmt-card">
                 <h3>🍲 สรุปน้ำซุปที่ออกวันนี้</h3>
                 <table>
@@ -148,7 +148,6 @@
                     <tbody id="soupSummaryBody"><tr><td colspan="4">ไม่มีข้อมูลน้ำซุป</td></tr></tbody>
                 </table>
             </div>
-
 
             <!-- ตารางสรุปรายการอาหาร & เครื่องดื่ม -->
             <div class="mgmt-card">
@@ -252,9 +251,14 @@
 
         let today = new Date();
         today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
-        document.getElementById('dashDate').value = today.toISOString().split('T')[0];
-
-        window.onload = function() { board(); };
+        
+        window.onload = function() {
+            let dateInput = document.getElementById('dashDate');
+            if (dateInput && !dateInput.value) {
+                dateInput.value = today.toISOString().split('T')[0];
+            }
+            loadDashboard();
+        };
 
         function switchTab(tabId, btnElement) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
@@ -262,7 +266,7 @@
             document.getElementById(tabId).classList.add('active');
             btnElement.classList.add('active');
 
-            if(tabId === 'tab-dashboard') board();
+            if(tabId === 'tab-dashboard') loadDashboard();
             if(tabId === 'tab-packages') loadPackages();
             if(tabId === 'tab-soups') loadSoups();
             if(tabId === 'tab-menu') loadMenu();
@@ -354,7 +358,7 @@
                 const checkoutsSnapshot = await db.collection("checkouts").get();
 
                 let totalSales = 0, transferSales = 0, totalPeople = 0, totalTables = 0, totalStoves = 0;
-                let soupAggMap = {}; 
+                let soupAggMap = {}; // สำหรับรวมยอดน้ำซุปแยก หม้อ / เตา
                 let itemMap = {}, pkgPeopleMap = {};
                 let packageSummaryMap = {}; 
 
@@ -467,7 +471,7 @@
                 }
                 document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
 
-                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป
+                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม) เรียงจากมากไปน้อย
                 let soupSummaryList = Object.keys(soupAggMap).map(sName => ({
                     name: sName,
                     pot: soupAggMap[sName].pot,
@@ -487,7 +491,7 @@
                 });
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
 
-                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม
+                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (เรียงตามราคา มากไปน้อย แล้วตามด้วยจำนวน มากไปน้อย)
                 let itemsList = Object.values(itemMap);
                 let drinkItems = itemsList.filter(i => i.type === 'drink');
                 let foodItems = itemsList.filter(i => i.type === 'food');
