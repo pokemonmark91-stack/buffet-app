@@ -298,7 +298,7 @@
                 document.getElementById('dashOpenShift').innerText = openShiftVal.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ฿";
                 document.getElementById('dashCloseShift').innerText = closeShiftVal > 0 ? (closeShiftVal.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ฿") : "-";
 
-                // 2. ดึงรายการ "เงินเข้า-ออก" จาก collection 'cash_flows' ตามกะในวันนี้
+                // 2. ดึงรายการ "เงินเข้า-ออก" จาก collection 'cash_flows'
                 let totalExpense = 0;
                 let cashFlowIn = 0;
                 let cashFlowOut = 0;
@@ -347,7 +347,7 @@
                 // 4. ดึงข้อมูล Checkouts (ยอดขายประจำวัน)
                 const checkoutsSnapshot = await db.collection("checkouts").get();
 
-                let totalSales = 0, cashSales = 0, transferSales = 0, totalPeople = 0, totalTables = 0, totalStoves = 0;
+                let totalSales = 0, transferSales = 0, totalPeople = 0, totalTables = 0, totalStoves = 0;
                 let soupMap = {}, itemMap = {}, pkgPeopleMap = {};
 
                 checkoutsSnapshot.forEach(doc => {
@@ -363,21 +363,17 @@
                     let amount = parseFloat(data.netTotal || data.total || 0);
                     totalSales += amount;
 
-                    // แยกประเภทการชำระเงิน (เงินสด / เงินโอน)
-                    let cashAmount = 0, transferAmount = 0;
+                    // คำนวณยอดเงินโอน
+                    let transferAmount = 0;
                     if (data.payments && Array.isArray(data.payments)) {
                         data.payments.forEach(p => {
                             let m = String(p.method || "").toLowerCase();
                             let amt = parseFloat(p.amount || 0);
-                            if (m.includes("สด") || m.includes("cash")) cashAmount += amt;
-                            else transferAmount += amt;
+                            if (!m.includes("สด") && !m.includes("cash")) {
+                                transferAmount += amt;
+                            }
                         });
-                    } else {
-                        let method = String(data.paymentMethod || data.payType || "").toLowerCase();
-                        if (method.includes("สด") || method.includes("cash")) cashAmount += amount;
-                        else transferAmount += amount;
                     }
-                    cashSales += cashAmount;
                     transferSales += transferAmount;
 
                     // จำนวนคนและแพ็กเกจ
@@ -420,10 +416,13 @@
                     }
                 });
 
-                // คำนวณยอดเงินสดในเก๊ะ (Expected Cash in Drawer) = เงินทอนเริ่มต้น + ยอดขายเงินสด + เงินเข้า - เงินออก
+                // ✅ คำนวณยอดขายเงินสดสุทธิจาก ยอดขายรวม หักด้วยยอดเงินโอน
+                let cashSales = totalSales - transferSales;
+
+                // คำนวณยอดเงินสดในเก๊ะ = เงินทอนเริ่มต้น + ยอดขายเงินสดสุทธิ + เงินเข้า - เงินออก
                 let cashInDrawer = openShiftVal + cashSales + cashFlowIn - cashFlowOut;
 
-                // แสดงผลสรุปการเงินบน Dashboard (ช่องรับเงินสดแสดงเฉพาะยอดขายเงินสดบริสุทธิ์ ไม่รวมเงินทอน)
+                // แสดงผลลัพธ์บน Dashboard
                 document.getElementById('dashSales').innerText = totalSales.toLocaleString() + " ฿";
                 document.getElementById('dashCash').innerText = cashSales.toLocaleString() + " ฿";
                 document.getElementById('dashTransfer').innerText = transferSales.toLocaleString() + " ฿";
