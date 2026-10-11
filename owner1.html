@@ -272,10 +272,21 @@
         /* --- 1. DASHBOARD & SUMMARY SYSTEM ------------------ */
         /* ---------------------------------------------------- */
         async function loadDashboard() {
-            let selectedDateStr = document.getElementById('dashDate').value;
-            if (!selectedDateStr) return;
+            let dateInput = document.getElementById('dashDate');
+            if (!dateInput || !dateInput.value) return;
+            let selectedDateStr = dateInput.value;
 
             try {
+                const getSafeDateStr = (ts) => {
+                    if (!ts) return "";
+                    try {
+                        let d = ts.toDate ? ts.toDate() : new Date(ts);
+                        return !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : "";
+                    } catch (e) {
+                        return "";
+                    }
+                };
+
                 // 1. ดึงข้อมูล "กะ" จาก collection 'shifts'
                 let openShiftVal = 0;
                 let closeShiftVal = 0;
@@ -284,15 +295,11 @@
                 const shiftsSnap = await db.collection("shifts").get();
                 shiftsSnap.forEach(doc => {
                     let s = doc.data();
-                    let sDate = s.timestamp;
-                    if (sDate) {
-                        let d = sDate.toDate ? sDate.toDate() : new Date(sDate);
-                        let dStr = d.toISOString().split('T')[0];
-                        if (dStr === selectedDateStr) {
-                            openShiftVal += parseFloat(s.startingCash || 0);
-                            closeShiftVal += parseFloat(s.endingCash || 0);
-                            activeShiftIds.push(doc.id);
-                        }
+                    let dStr = getSafeDateStr(s.timestamp);
+                    if (dStr === selectedDateStr) {
+                        openShiftVal += parseFloat(s.startingCash || 0);
+                        closeShiftVal += parseFloat(s.endingCash || 0);
+                        activeShiftIds.push(doc.id);
                     }
                 });
 
@@ -320,7 +327,14 @@
                                 cashFlowIn += amt;
                             }
 
-                            let timeStr = cf.timestamp && cf.timestamp.toDate ? cf.timestamp.toDate().toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : '';
+                            let timeStr = "";
+                            if (cf.timestamp) {
+                                let tDate = cf.timestamp.toDate ? cf.timestamp.toDate() : new Date(cf.timestamp);
+                                if (!isNaN(tDate.getTime())) {
+                                    timeStr = tDate.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
+                                }
+                            }
+
                             let badgeColor = isOut ? '#ff4757' : '#2ed573';
                             let typeText = isOut ? 'เงินออก' : 'เงินเข้า';
 
@@ -340,18 +354,14 @@
                 const checkoutsSnapshot = await db.collection("checkouts").get();
 
                 let totalSales = 0, transferSales = 0, totalPeople = 0, totalTables = 0, totalStoves = 0;
-                let soupAggMap = {}; // สำหรับรวมยอดน้ำซุปแยก หม้อ / เตา
+                let soupAggMap = {}; 
                 let itemMap = {}, pkgPeopleMap = {};
                 let packageSummaryMap = {}; 
 
                 checkoutsSnapshot.forEach(doc => {
                     let data = doc.data();
-                    if (!data.timestamp) return;
-
-                    let docDate = data.timestamp.toDate ? data.timestamp.toDate() : new Date(data.timestamp);
-                    let docDateStr = docDate.toISOString().split('T')[0];
-
-                    if (docDateStr !== selectedDateStr) return;
+                    let docDateStr = getSafeDateStr(data.timestamp);
+                    if (!docDateStr || docDateStr !== selectedDateStr) return;
 
                     totalTables += 1;
                     let amount = parseFloat(data.netTotal || data.total || 0);
@@ -393,7 +403,7 @@
                             let qty = parseInt(it.qty || it.quantity || 1);
                             let price = parseFloat(it.price || 0);
 
-                            // 🍲 แยกวิเคราะห์ข้อมูลเตาและน้ำซุป
+                            // 🍲 วิเคราะห์ข้อมูลเตาและน้ำซุป
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
                                 totalStoves += qty;
                                 
@@ -457,7 +467,7 @@
                 }
                 document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
 
-                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม)
+                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป
                 let soupSummaryList = Object.keys(soupAggMap).map(sName => ({
                     name: sName,
                     pot: soupAggMap[sName].pot,
