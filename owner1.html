@@ -67,7 +67,7 @@
             
             <div class="date-filter">
                 <label for="dashDate"><b>เลือกวันที่ต้องการดู:</b> </label>
-                <input type="date" id="dashDate" onchange="loadDashboard()">
+                <input type="date" id="dashDate" onchange="board()">
             </div>
             
             <!-- Cards สรุปการเงิน -->
@@ -254,7 +254,7 @@
         today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
         document.getElementById('dashDate').value = today.toISOString().split('T')[0];
 
-        window.onload = function() { loadDashboard(); };
+        window.onload = function() { board(); };
 
         function switchTab(tabId, btnElement) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
@@ -262,7 +262,7 @@
             document.getElementById(tabId).classList.add('active');
             btnElement.classList.add('active');
 
-            if(tabId === 'tab-dashboard') loadDashboard();
+            if(tabId === 'tab-dashboard') board();
             if(tabId === 'tab-packages') loadPackages();
             if(tabId === 'tab-soups') loadSoups();
             if(tabId === 'tab-menu') loadMenu();
@@ -342,7 +342,7 @@
                 let totalSales = 0, transferSales = 0, totalPeople = 0, totalTables = 0, totalStoves = 0;
                 let soupAggMap = {}; // สำหรับรวมยอดน้ำซุปแยก หม้อ / เตา
                 let itemMap = {}, pkgPeopleMap = {};
-                let packageSummaryMap = {}; // สำหรับเก็บจำนวนคนและยอดเงินแยกตามแพ็กเกจ
+                let packageSummaryMap = {}; 
 
                 checkoutsSnapshot.forEach(doc => {
                     let data = doc.data();
@@ -378,7 +378,6 @@
                     let pkgName = data.packageName || data.package || (pkgPriceNum ? pkgPriceNum + ' บาท' : "ไม่ระบุ");
                     pkgPeopleMap[pkgName] = (pkgPeopleMap[pkgName] || 0) + pCount;
 
-                    // เก็บข้อมูลแพ็กเกจสำหรับตารางอาหาร
                     if (pkgPriceNum > 0) {
                         if (!packageSummaryMap[pkgName]) {
                             packageSummaryMap[pkgName] = { count: 0, price: pkgPriceNum, total: 0 };
@@ -394,14 +393,11 @@
                             let qty = parseInt(it.qty || it.quantity || 1);
                             let price = parseFloat(it.price || 0);
 
-                            // 🍲 แยกวิเคราะห์ข้อมูลเตาและน้ำซุป (รวมยอด หม้อ/เตา)
+                            // 🍲 แยกวิเคราะห์ข้อมูลเตาและน้ำซุป
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
                                 totalStoves += qty;
                                 
-                                // เช็คว่าเป็นเตาหมูกระทะหรือไม่ (ถ้าไม่ใช่ จะนับเป็นหม้อชาบู/หม้อทั่วไป)
                                 let isStoveType = name.includes("เตา") || name.includes("หมูกระทะ");
-
-                                // สแกนชื่อซุป
                                 let soupMatch = name.match(/ซุป:\s*([^\)]+)/);
                                 if (soupMatch && soupMatch[1]) {
                                     let soupsFound = soupMatch[1].split('+');
@@ -423,18 +419,24 @@
                                 return; 
                             }
 
-                            // 🥩 รายการอาหารและเครื่องดื่มปกติ (ข้ามรายการบุฟเฟ่ต์ที่เป็นหัวบิล)
                             if (name.includes("บุฟเฟ่") || name.includes("บุฟเฟต์")) return;
 
+                            name = name.replace(/\s+/g, ' ').replace(/^[,\-\+\s]+/, '').trim();
+                            if (!name) return;
+
+                            let category = it.category || "อาหาร/เครื่องดื่ม";
+                            let isDrink = category.includes("เครื่องดื่ม") || category.includes("Drink") || category.includes("น้ำ");
+
                             if (!itemMap[name]) {
-                                itemMap[name] = { qty: 0, price: price, total: 0, category: "อาหาร/เครื่องดื่ม" };
+                                itemMap[name] = { qty: 0, price: price, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
                             }
                             itemMap[name].qty += qty;
                             itemMap[name].total += (price * qty);
                             if (price > 0 && itemMap[name].price === 0) itemMap[name].price = price;
                         });
                     }
-                    
+                });
+
                 // คำนวณเงินสดสุทธิ
                 let cashSales = totalSales - transferSales;
                 let cashInDrawer = openShiftVal + cashSales + cashFlowIn - cashFlowOut;
@@ -449,21 +451,20 @@
                 document.getElementById('dashTablesCount').innerText = totalTables + " โต๊ะ";
                 document.getElementById('dashStoves').innerText = totalStoves + " เตา";
 
-                // แสดงสรุปแพ็กเกจ (การ์ดด้านบน)
                 let pkgBreakdownHtml = "";
                 for (let [pName, pCount] of Object.entries(pkgPeopleMap)) {
                     pkgBreakdownHtml += `<li><span>แพ็กเกจ <b>${pName}</b></span><b style="color:#ff4757;">${pCount} คน</b></li>`;
                 }
                 document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
 
-                 // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม) เรียงจากมากไปน้อย
+                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม)
                 let soupSummaryList = Object.keys(soupAggMap).map(sName => ({
                     name: sName,
                     pot: soupAggMap[sName].pot,
                     stove: soupAggMap[sName].stove,
                     total: soupAggMap[sName].total
                 }));
-                soupSummaryList.sort((a, b) => b.total - a.total); // เรียงจากจำนวนรวมมากไปน้อย
+                soupSummaryList.sort((a, b) => b.total - a.total);
 
                 let soupHtml = "";
                 soupSummaryList.forEach(s => {
@@ -475,11 +476,16 @@
                                  </tr>`;
                 });
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
-                    
-                    // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (รวมจำนวนลูกค้าตามแพ็กเกจ + เตา/หม้อ + อาหารปกติ)
-                let menuHtml = "";
 
-                // 1. นำจำนวนลูกค้าแยกตามแพ็กเกจมาใส่ไว้บรรทัดแรกๆ ของตารางอาหาร
+                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม
+                let itemsList = Object.values(itemMap);
+                let drinkItems = itemsList.filter(i => i.type === 'drink');
+                let foodItems = itemsList.filter(i => i.type === 'food');
+
+                drinkItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
+                foodItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
+
+                let menuHtml = "";
                 for (let [pName, info] of Object.entries(packageSummaryMap)) {
                     menuHtml += `<tr style="background: #fdf2f2;">
                                     <td><b>บุฟเฟต์ผู้ใหญ่ (${pName})</b></td>
@@ -490,19 +496,19 @@
                                  </tr>`;
                 }
 
-                // 2. รายการอาหารและเครื่องดื่มปกติ
-                for (let [menuName, info] of Object.entries(itemMap)) {
-                    let unitPriceText = info.price > 0 ? info.price.toLocaleString() + " ฿" : "ฟรี (รวมในบุฟเฟต์)";
-                    let totalPriceText = info.total > 0 ? info.total.toLocaleString() + " ฿" : "0 ฿";
+                let allDisplayItems = [...drinkItems, ...foodItems];
+                allDisplayItems.forEach(item => {
+                    let unitPriceText = item.price > 0 ? item.price.toLocaleString() + " ฿" : "ฟรี (รวมในบุฟเฟต์)";
+                    let totalPriceText = item.total > 0 ? item.total.toLocaleString() + " ฿" : "0 ฿";
                     
                     menuHtml += `<tr>
-                                    <td>${menuName}</td>
-                                    <td>${info.category}</td>
-                                    <td style="font-weight: bold;">${info.qty} รายการ</td>
+                                    <td>${item.name}</td>
+                                    <td>${item.category}</td>
+                                    <td style="font-weight: bold;">${item.qty} รายการ</td>
                                     <td>${unitPriceText}</td>
                                     <td style="font-weight: bold; color: #2ed573;">${totalPriceText}</td>
                                  </tr>`;
-                }
+                });
 
                 document.getElementById('menuSummaryBody').innerHTML = menuHtml || "<tr><td colspan='5'>ไม่มีข้อมูลการสั่งอาหารวันนี้</td></tr>";
 
