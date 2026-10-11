@@ -29,6 +29,7 @@
         input[type="text"], input[type="number"], input[type="date"], input[type="file"] { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; width: 100%; box-sizing: border-box;}
         
         button.btn-add { background: #2ed573; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button.btn-shift { background: #1e90ff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         button.btn-del { background: #ff4757; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;}
         button.btn-edit { background: #1e90ff; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; margin-right: 5px;}
         
@@ -69,9 +70,25 @@
                 <label for="dashDate"><b>เลือกวันที่ต้องการดู:</b> </label>
                 <input type="date" id="dashDate" onchange="loadDashboard()">
             </div>
+
+            <!-- ส่วนบันทึกยอดเปิดกะ -->
+            <div class="mgmt-card" style="background: #eccc68; color: #2f3542;">
+                <h3 style="margin-top:0;">💵 บันทึกยอดเงินเปิดกะ (เงินทอนในลิ้นชัก)</h3>
+                <div class="form-grid">
+                    <div>
+                        <label><b>ยอดเปิดกะวันนี้ (บาท):</b></label>
+                        <input type="number" id="openShiftAmount" placeholder="0.00">
+                    </div>
+                </div>
+                <button class="btn-shift" onclick="saveShiftDaily()">💾 บันทึกยอดเปิดกะ</button>
+            </div>
             
             <!-- Cards สรุปการเงิน -->
             <div class="card-container">
+                <div class="card">
+                    <h3>ยอดเปิดกะ</h3>
+                    <p id="dashOpenShift" style="color: #ffa502;">0 ฿</p>
+                </div>
                 <div class="card">
                     <h3>ยอดขายรวม</h3>
                     <p id="dashSales" style="color: #2ed573;">0 ฿</p>
@@ -87,10 +104,6 @@
                 <div class="card">
                     <h3>จ่ายออกไปรวม</h3>
                     <p id="dashExpenseTotal" style="color: #ff4757;">0 ฿</p>
-                </div>
-                <div class="card">
-                    <h3>เงินสดสุทธิ (เงินสด - จ่ายออก)</h3>
-                    <p id="dashNetCash" style="color: #2ed573;">0 ฿</p>
                 </div>
             </div>
 
@@ -131,7 +144,7 @@
                 </table>
             </div>
 
-            <!-- ตารางสรุปน้ำซุป (มีราคา & ยอดรวม) -->
+            <!-- ตารางสรุปน้ำซุป -->
             <div class="mgmt-card">
                 <h3>🍲 สรุปน้ำซุปที่ออกวันนี้</h3>
                 <table>
@@ -147,7 +160,7 @@
                 </table>
             </div>
 
-            <!-- ตารางสรุปรายการอาหาร & เครื่องดื่ม (มีราคา & ยอดรวม) -->
+            <!-- ตารางสรุปรายการอาหาร & เครื่องดื่ม -->
             <div class="mgmt-card">
                 <h3>🥩 สรุปรายการอาหาร & เครื่องดื่มที่ออกวันนี้</h3>
                 <table>
@@ -273,9 +286,6 @@
             if (!selectedDateStr) return;
 
             try {
-                let startDate = new Date(selectedDateStr + "T00:00:00");
-                let endDate = new Date(selectedDateStr + "T23:59:59");
-
                 // 1. โหลดข้อมูลยอดเปิดกะของวันนี้
                 const shiftDoc = await db.collection("daily_shifts").doc(selectedDateStr).get();
                 let openShiftVal = 0;
@@ -295,21 +305,30 @@
                     if (s.name) soupPricesMap[s.name] = parseFloat(s.price || 0);
                 });
 
-                // ดึงข้อมูล Checkouts
+                // 2. ดึงข้อมูล Checkouts (ดึงรายการล่าสุดแล้วคัดกรองวันที่ด้วย JS ป้องกันปัญหาเงื่อนไขคิวรี)
                 const checkoutsSnapshot = await db.collection("checkouts")
-                    .where("timestamp", ">=", startDate)
-                    .where("timestamp", "<=", endDate)
+                    .orderBy("timestamp", "desc")
+                    .limit(100)
                     .get();
 
-                let totalSales = 0, cashSales = 0, transferSales = 0, totalPeople = 0, totalTables = checkoutsSnapshot.size, totalStoves = 0;
+                let totalSales = 0, cashSales = 0, transferSales = 0, totalPeople = 0, totalTables = 0, totalStoves = 0;
                 let soupMap = {}, itemMap = {}, pkgPeopleMap = {};
 
                 checkoutsSnapshot.forEach(doc => {
                     let data = doc.data();
+                    if (!data.timestamp) return;
+
+                    let docDate = data.timestamp.toDate ? data.timestamp.toDate() : new Date(data.timestamp);
+                    let docDateStr = docDate.toISOString().split('T')[0];
+
+                    // เช็คว่าเป็นวันที่เลือกไว้หรือไม่
+                    if (docDateStr !== selectedDateStr) return;
+
+                    totalTables += 1;
                     let amount = parseFloat(data.netTotal || data.total || 0);
                     totalSales += amount;
 
-                    // ✅ รองรับการอ่านแยกเงินสด / เงินโอนจาก payments array ที่บันทึกมา
+                    // แยกประเภทชำระเงิน (เงินสด / เงินโอน)
                     let cashAmount = 0;
                     let transferAmount = 0;
                     if (data.payments && Array.isArray(data.payments)) {
@@ -319,21 +338,21 @@
                             if (m.includes("สด") || m.includes("cash")) {
                                 cashAmount += amt;
                             } else {
-                                transferAmount += amt; // เงินโอน, บัตรเครดิต, ฯลฯ
+                                transferAmount += amt;
                             }
                         });
                     } else {
                         let method = String(data.paymentMethod || data.payType || "").toLowerCase();
                         if (method.includes("สด") || method.includes("cash")) {
-                            cashSales += amount;
+                            cashAmount += amount;
                         } else {
-                            transferSales += amount;
+                            transferAmount += amount;
                         }
                     }
                     cashSales += cashAmount;
                     transferSales += transferAmount;
 
-                    // ✅ ดึงจำนวนคนและแพ็กเกจที่ถูกต้อง
+                    // จำนวนคนและแพ็กเกจ
                     let pCount = parseInt(data.customerCount || data.totalPeople || data.adults + data.children || 1);
                     totalPeople += pCount;
 
@@ -375,18 +394,24 @@
                     }
                 });
 
-                // รายจ่าย
+                // 3. ดึงข้อมูลรายจ่าย
                 const expenseSnapshot = await db.collection("expenses")
-                    .where("timestamp", ">=", startDate)
-                    .where("timestamp", "<=", endDate)
+                    .orderBy("timestamp", "desc")
+                    .limit(50)
                     .get();
 
                 let totalExpense = 0, expHtml = "";
                 expenseSnapshot.forEach(doc => {
                     let ed = doc.data();
+                    if (!ed.timestamp) return;
+                    let edDate = ed.timestamp.toDate ? ed.timestamp.toDate() : new Date(ed.timestamp);
+                    let edDateStr = edDate.toISOString().split('T')[0];
+
+                    if (edDateStr !== selectedDateStr) return;
+
                     let amt = parseFloat(ed.amount || 0);
                     totalExpense += amt;
-                    let timeStr = ed.timestamp && ed.timestamp.toDate ? ed.timestamp.toDate().toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : '';
+                    let timeStr = edDate.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
 
                     expHtml += `<tr>
                                     <td>${ed.description || ''}</td>
@@ -406,7 +431,7 @@
                 document.getElementById('dashTablesCount').innerText = totalTables + " โต๊ะ";
                 document.getElementById('dashStoves').innerText = totalStoves + " เตา";
 
-                // แสดงสรุปแพ็กเกจ (เช่น 99, 119, 159)
+                // แสดงสรุปแพ็กเกจ
                 let pkgBreakdownHtml = "";
                 for (let [pName, pCount] of Object.entries(pkgPeopleMap)) {
                     pkgBreakdownHtml += `<li><span>แพ็กเกจ <b>${pName} บาท</b></span><b style="color:#ff4757;">${pCount} คน</b></li>`;
@@ -440,7 +465,26 @@
 
             } catch (err) { console.error("Dashboard error:", err); }
         }
-        
+
+        async function saveShiftDaily() {
+            let selectedDateStr = document.getElementById('dashDate').value;
+            let openVal = parseFloat(document.getElementById('openShiftAmount').value) || 0;
+            if (!selectedDateStr) return alert("กรุณาเลือกวันที่");
+
+            try {
+                await db.collection("daily_shifts").doc(selectedDateStr).set({
+                    date: selectedDateStr,
+                    openAmount: openVal,
+                    updatedAt: new Date()
+                }, { merge: true });
+
+                alert("บันทึกยอดเปิดกะเรียบร้อย!");
+                loadDashboard();
+            } catch (err) {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            }
+        }
+
         async function addExpense() {
             let desc = document.getElementById('expDesc').value.trim();
             let amount = parseFloat(document.getElementById('expAmount').value);
@@ -665,33 +709,6 @@
             } catch (err) { document.getElementById('menuTableBody').innerHTML = `<tr><td colspan='7' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`; }
         }
 
-        function convertFileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = () => {
-                        const MAX_WIDTH = 800, MAX_HEIGHT = 800;
-                        let width = img.width, height = img.height;
-                        if (width > height) {
-                            if (width > MAX_WIDTH) { height = Math.round(height * (MAX_WIDTH / width)); width = MAX_WIDTH; }
-                        } else {
-                            if (height > MAX_HEIGHT) { width = Math.round(width * (MAX_HEIGHT / height)); height = MAX_HEIGHT; }
-                        }
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width; canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL('image/jpeg', 0.7));
-                    };
-                    img.onerror = error => reject(error);
-                };
-                reader.onerror = error => reject(error);
-            });
-        }
-
         async function addMenu() {
             let sort = parseInt(document.getElementById('menuSort').value) || 99;
             let name = document.getElementById('menuName').value.trim();
@@ -707,7 +724,14 @@
             try {
                 let imageUrl = "";
                 if (fileInput.files.length > 0) {
-                    imageUrl = await convertFileToBase64(fileInput.files[0]);
+                    const reader = new FileReader();
+                    reader.readAsDataURL(fileInput.files[0]);
+                    await new Promise((resolve) => {
+                        reader.onload = (e) => {
+                            imageUrl = e.target.result;
+                            resolve();
+                        };
+                    });
                 }
                 await db.collection("menu").add({ sortOrder: sort, name: name, category: cat, allowedPackage: allowed, price: price, imageUrl: imageUrl });
                 ['menuSort', 'menuName', 'menuCat', 'menuAllowed', 'menuPrice'].forEach(id => document.getElementById(id).value = "");
@@ -742,13 +766,9 @@
             let newCat = document.getElementById(`edit-cat-${docId}`).value.trim();
             let newAllowed = document.getElementById(`edit-allowed-${docId}`).value.trim();
             let newPrice = parseFloat(document.getElementById(`edit-price-${docId}`).value) || 0;
-            let fileInput = document.getElementById(`edit-img-${docId}`);
             btn.innerText = "⏳..."; btn.disabled = true;
             try {
                 let updatePayload = { sortOrder: newSort, name: newName, category: newCat, allowedPackage: newAllowed, price: newPrice };
-                if (fileInput.files.length > 0) {
-                    updatePayload.imageUrl = await convertFileToBase64(fileInput.files[0]);
-                }
                 await db.collection("menu").doc(docId).update(updatePayload);
                 loadMenu();
             } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); loadMenu(); }
