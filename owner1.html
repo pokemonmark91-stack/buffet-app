@@ -29,7 +29,6 @@
         input[type="text"], input[type="number"], input[type="date"], input[type="file"] { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; width: 100%; box-sizing: border-box;}
         
         button.btn-add { background: #2ed573; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button.btn-shift { background: #1e90ff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         button.btn-del { background: #ff4757; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;}
         button.btn-edit { background: #1e90ff; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; margin-right: 5px;}
         
@@ -70,18 +69,6 @@
                 <label for="dashDate"><b>เลือกวันที่ต้องการดู:</b> </label>
                 <input type="date" id="dashDate" onchange="loadDashboard()">
             </div>
-
-            <!-- ส่วนบันทึกยอดเปิดกะ -->
-            <div class="mgmt-card" style="background: #eccc68; color: #2f3542;">
-                <h3 style="margin-top:0;">💵 บันทึกยอดเงินเปิดกะ (เงินทอนในลิ้นชัก)</h3>
-                <div class="form-grid">
-                    <div>
-                        <label><b>ยอดเปิดกะวันนี้ (บาท):</b></label>
-                        <input type="number" id="openShiftAmount" placeholder="0.00">
-                    </div>
-                </div>
-                <button class="btn-shift" onclick="saveShiftDaily()">💾 บันทึกยอดเปิดกะ</button>
-            </div>
             
             <!-- Cards สรุปการเงิน -->
             <div class="card-container">
@@ -94,7 +81,7 @@
                     <p id="dashSales" style="color: #2ed573;">0 ฿</p>
                 </div>
                 <div class="card">
-                    <h3>รับเงินสด</h3>
+                    <h3>รับเงินสด (ยอดขาย)</h3>
                     <p id="dashCash" style="color: #1e90ff;">0 ฿</p>
                 </div>
                 <div class="card">
@@ -104,6 +91,14 @@
                 <div class="card">
                     <h3>จ่ายออกไปรวม</h3>
                     <p id="dashExpenseTotal" style="color: #ff4757;">0 ฿</p>
+                </div>
+                <div class="card">
+                    <h3>ยอดเงินสดในเก๊ะ</h3>
+                    <p id="dashCashInDrawer" style="color: #e67e22;">0 ฿</p>
+                </div>
+                <div class="card">
+                    <h3>ยอดปิดกะ</h3>
+                    <p id="dashCloseShift" style="color: #8e44ad;">0 ฿</p>
                 </div>
             </div>
 
@@ -129,18 +124,12 @@
                 </div>
             </div>
 
-            <!-- ส่วนบันทึกรายจ่าย -->
+            <!-- ส่วนแสดงประวัติเงินเข้า-ออก -->
             <div class="mgmt-card">
-                <h3>💸 บันทึกรายจ่ายประจำวัน</h3>
-                <div class="form-grid">
-                    <input type="text" id="expDesc" placeholder="รายการจ่าย (เช่น ค่าแก๊ส, ซื้อน้ำแข็ง)">
-                    <input type="number" id="expAmount" placeholder="จำนวนเงิน (บาท)">
-                </div>
-                <button class="btn-add" onclick="addExpense()" style="background: #ffa502;">+ บันทึกรายจ่าย</button>
-                
+                <h3>💸 รายการเงินเข้า - เงินออก (ซื้อน้ำแข็ง / อื่นๆ)</h3>
                 <table style="margin-top: 15px;">
-                    <thead><tr><th>รายการจ่าย</th><th>จำนวนเงิน</th><th>เวลา</th><th>จัดการ</th></tr></thead>
-                    <tbody id="expenseTableBody"><tr><td colspan="4">ไม่มีรายจ่ายวันนี้</td></tr></tbody>
+                    <thead><tr><th>รายการ</th><th>จำนวนเงิน</th><th>เวลา</th><th>จัดการ</th></tr></thead>
+                    <tbody id="expenseTableBody"><tr><td colspan="4">ไม่มีรายการวันนี้</td></tr></tbody>
                 </table>
             </div>
 
@@ -286,11 +275,9 @@
             if (!selectedDateStr) return;
 
             try {
-                let startDate = new Date(selectedDateStr + "T00:00:00");
-                let endDate = new Date(selectedDateStr + "T23:59:59");
-
                 // 1. ดึงข้อมูล "กะ" จาก collection 'shifts'
                 let openShiftVal = 0;
+                let closeShiftVal = 0;
                 let activeShiftIds = [];
 
                 const shiftsSnap = await db.collection("shifts").get();
@@ -302,15 +289,19 @@
                         let dStr = d.toISOString().split('T')[0];
                         if (dStr === selectedDateStr) {
                             openShiftVal += parseFloat(s.startingCash || 0);
+                            closeShiftVal += parseFloat(s.endingCash || 0);
                             activeShiftIds.push(doc.id);
                         }
                     }
                 });
 
                 document.getElementById('dashOpenShift').innerText = openShiftVal.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ฿";
+                document.getElementById('dashCloseShift').innerText = closeShiftVal > 0 ? (closeShiftVal.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ฿") : "-";
 
-                // 2. ดึงรายการ "เงินเข้า-ออก" (เช่น ซื้อน้ำแข็ง) จาก collection 'cash_flows' ตามกะในวันนี้
+                // 2. ดึงรายการ "เงินเข้า-ออก" จาก collection 'cash_flows' ตามกะในวันนี้
                 let totalExpense = 0;
+                let cashFlowIn = 0;
+                let cashFlowOut = 0;
                 let expHtml = "";
 
                 if (activeShiftIds.length > 0) {
@@ -322,9 +313,11 @@
                             let amt = parseFloat(cf.amount || 0);
                             let isOut = cf.type === 'out';
                             
-                            // ถ้าเป็นเงินออก (ซื้อน้ำแข็ง/ค่าใช้จ่าย) นำมาบวกเป็นรายจ่ายรวม
                             if (isOut) {
+                                cashFlowOut += amt;
                                 totalExpense += amt;
+                            } else {
+                                cashFlowIn += amt;
                             }
 
                             let timeStr = cf.timestamp && cf.timestamp.toDate ? cf.timestamp.toDate().toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : '';
@@ -370,7 +363,7 @@
                     let amount = parseFloat(data.netTotal || data.total || 0);
                     totalSales += amount;
 
-                    // แยกประเภทการชำระเงิน (เงินสด / เงินโอน) ตามโครงสร้างจากหน้า Checkout
+                    // แยกประเภทการชำระเงิน (เงินสด / เงินโอน)
                     let cashAmount = 0, transferAmount = 0;
                     if (data.payments && Array.isArray(data.payments)) {
                         data.payments.forEach(p => {
@@ -427,10 +420,14 @@
                     }
                 });
 
-                // แสดงผลสรุปการเงินบน Dashboard
+                // คำนวณยอดเงินสดในเก๊ะ (Expected Cash in Drawer) = เงินทอนเริ่มต้น + ยอดขายเงินสด + เงินเข้า - เงินออก
+                let cashInDrawer = openShiftVal + cashSales + cashFlowIn - cashFlowOut;
+
+                // แสดงผลสรุปการเงินบน Dashboard (ช่องรับเงินสดแสดงเฉพาะยอดขายเงินสดบริสุทธิ์ ไม่รวมเงินทอน)
                 document.getElementById('dashSales').innerText = totalSales.toLocaleString() + " ฿";
                 document.getElementById('dashCash').innerText = cashSales.toLocaleString() + " ฿";
                 document.getElementById('dashTransfer').innerText = transferSales.toLocaleString() + " ฿";
+                document.getElementById('dashCashInDrawer').innerText = cashInDrawer.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ฿";
 
                 document.getElementById('dashPeople').innerText = totalPeople + " คน";
                 document.getElementById('dashTablesCount').innerText = totalTables + " โต๊ะ";
@@ -473,46 +470,10 @@
             }
         }
 
-        async function saveShiftDaily() {
-            let selectedDateStr = document.getElementById('dashDate').value;
-            let openVal = parseFloat(document.getElementById('openShiftAmount').value) || 0;
-            if (!selectedDateStr) return alert("กรุณาเลือกวันที่");
-
-            try {
-                await db.collection("daily_shifts").doc(selectedDateStr).set({
-                    date: selectedDateStr,
-                    openAmount: openVal,
-                    updatedAt: new Date()
-                }, { merge: true });
-
-                alert("บันทึกยอดเปิดกะเรียบร้อย!");
-                loadDashboard();
-            } catch (err) {
-                alert("เกิดข้อผิดพลาด: " + err.message);
-            }
-        }
-
-        async function addExpense() {
-            let desc = document.getElementById('expDesc').value.trim();
-            let amount = parseFloat(document.getElementById('expAmount').value);
-            if (!desc || isNaN(amount) || amount <= 0) return alert("กรุณากรอกข้อมูลให้ถูกต้อง");
-
-            try {
-                await db.collection("expenses").add({
-                    description: desc,
-                    amount: amount,
-                    timestamp: new Date()
-                });
-                document.getElementById('expDesc').value = "";
-                document.getElementById('expAmount').value = "";
-                loadDashboard();
-            } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
-        }
-
         async function deleteExpense(docId) {
-            if (confirm("ยืนยันการลบรายจ่ายนี้?")) {
+            if (confirm("ยืนยันการลบรายการนี้?")) {
                 try {
-                    await db.collection("expenses").doc(docId).delete();
+                    await db.collection("cash_flows").doc(docId).delete();
                     loadDashboard();
                 } catch (err) { alert("เกิดข้อผิดพลาด: " + err.message); }
             }
