@@ -133,22 +133,22 @@
                 </table>
             </div>
 
-            <!-- ตารางสรุปน้ำซุป -->
+                        <!-- ตารางสรุปน้ำซุป -->
             <div class="mgmt-card">
                 <h3>🍲 สรุปน้ำซุปที่ออกวันนี้</h3>
                 <table>
                     <thead>
                         <tr>
-                            <th>ชื่อน้ำซุป</th>
-                            <th>ประเภทเตา/หม้อ</th>
-                            <th>จำนวน (หม้อ/ชุด)</th>
-                            <th>ราคาต่อหน่วย</th>
-                            <th>ยอดรวม (บาท)</th>
+                            <th>ชื่อ</th>
+                            <th style="text-align: center;">หม้อ</th>
+                            <th style="text-align: center;">เตา</th>
+                            <th style="text-align: center;">รวม</th>
                         </tr>
                     </thead>
-                    <tbody id="soupSummaryBody"><tr><td colspan="5">ไม่มีข้อมูลน้ำซุป</td></tr></tbody>
+                    <tbody id="soupSummaryBody"><tr><td colspan="4">ไม่มีข้อมูลน้ำซุป</td></tr></tbody>
                 </table>
             </div>
+
 
             <!-- ตารางสรุปรายการอาหาร & เครื่องดื่ม -->
             <div class="mgmt-card">
@@ -340,7 +340,7 @@
                 const checkoutsSnapshot = await db.collection("checkouts").get();
 
                 let totalSales = 0, transferSales = 0, totalPeople = 0, totalTables = 0, totalStoves = 0;
-                let soupList = [];
+                let soupAggMap = {}; // สำหรับรวมยอดน้ำซุปแยก หม้อ / เตา
                 let itemMap = {}, pkgPeopleMap = {};
                 let packageSummaryMap = {}; // สำหรับเก็บจำนวนคนและยอดเงินแยกตามแพ็กเกจ
 
@@ -394,14 +394,12 @@
                             let qty = parseInt(it.qty || it.quantity || 1);
                             let price = parseFloat(it.price || 0);
 
-                            // 🍲 แยกวิเคราะห์ข้อมูลเตาและน้ำซุป
+                            // 🍲 แยกวิเคราะห์ข้อมูลเตาและน้ำซุป (รวมยอด หม้อ/เตา)
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
                                 totalStoves += qty;
                                 
-                                // หาประเภทเตา
-                                let stoveType = "เตา/หม้อทั่วไป";
-                                if (name.includes("หม้อชาบู")) stoveType = "หม้อชาบู";
-                                else if (name.includes("เตาหมูกระทะ")) stoveType = "เตาหมูกระทะ";
+                                // เช็คว่าเป็นเตาหมูกระทะหรือไม่ (ถ้าไม่ใช่ จะนับเป็นหม้อชาบู/หม้อทั่วไป)
+                                let isStoveType = name.includes("เตา") || name.includes("หมูกระทะ");
 
                                 // สแกนชื่อซุป
                                 let soupMatch = name.match(/ซุป:\s*([^\)]+)/);
@@ -410,13 +408,15 @@
                                     soupsFound.forEach(sName => {
                                         sName = sName.trim();
                                         if (sName) {
-                                            soupList.push({
-                                                name: sName,
-                                                stove: stoveType,
-                                                qty: qty,
-                                                price: price,
-                                                total: price * qty
-                                            });
+                                            if (!soupAggMap[sName]) {
+                                                soupAggMap[sName] = { pot: 0, stove: 0, total: 0 };
+                                            }
+                                            if (isStoveType) {
+                                                soupAggMap[sName].stove += qty;
+                                            } else {
+                                                soupAggMap[sName].pot += qty;
+                                            }
+                                            soupAggMap[sName].total += qty;
                                         }
                                     });
                                 }
@@ -434,8 +434,7 @@
                             if (price > 0 && itemMap[name].price === 0) itemMap[name].price = price;
                         });
                     }
-                });
-
+                    
                 // คำนวณเงินสดสุทธิ
                 let cashSales = totalSales - transferSales;
                 let cashInDrawer = openShiftVal + cashSales + cashFlowIn - cashFlowOut;
@@ -457,20 +456,27 @@
                 }
                 document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
 
-                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ, จำนวน, หม้อ/เตา, ราคา, ยอดรวม)
+                 // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม) เรียงจากมากไปน้อย
+                let soupSummaryList = Object.keys(soupAggMap).map(sName => ({
+                    name: sName,
+                    pot: soupAggMap[sName].pot,
+                    stove: soupAggMap[sName].stove,
+                    total: soupAggMap[sName].total
+                }));
+                soupSummaryList.sort((a, b) => b.total - a.total); // เรียงจากจำนวนรวมมากไปน้อย
+
                 let soupHtml = "";
-                soupList.forEach(s => {
+                soupSummaryList.forEach(s => {
                     soupHtml += `<tr>
                                     <td><b>${s.name}</b></td>
-                                    <td><span class="badge bg-info text-dark">${s.stove}</span></td>
-                                    <td style="font-weight: bold;">${s.qty} หม้อ/ชุด</td>
-                                    <td>${s.price > 0 ? s.price.toLocaleString() + ' ฿' : '-'}</td>
-                                    <td style="font-weight: bold; color: #2ed573;">${s.total > 0 ? s.total.toLocaleString() + ' ฿' : '-'}</td>
+                                    <td style="text-align: center;">${s.pot > 0 ? s.pot : '-'}</td>
+                                    <td style="text-align: center;">${s.stove > 0 ? s.stove : '-'}</td>
+                                    <td style="font-weight: bold; color: #2ed573; text-align: center;">${s.total}</td>
                                  </tr>`;
                 });
-                document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='5'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
-
-                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (รวมจำนวนลูกค้าตามแพ็กเกจ + เตา/หม้อ + อาหารปกติ)
+                document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
+                    
+                    // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (รวมจำนวนลูกค้าตามแพ็กเกจ + เตา/หม้อ + อาหารปกติ)
                 let menuHtml = "";
 
                 // 1. นำจำนวนลูกค้าแยกตามแพ็กเกจมาใส่ไว้บรรทัดแรกๆ ของตารางอาหาร
