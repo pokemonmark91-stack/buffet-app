@@ -320,15 +320,15 @@
             console.warn("❌ โหลดราคา Master ไม่สำเร็จ:", err);
         }
 
-        // ฟังก์ชันช่วยจัดกลุ่มสินค้าที่ชื่อเหมือนกัน
+        // ฟังก์ชันช่วยจัดกลุ่มสินค้าที่ชื่อเหมือนกัน (แก้ไขให้ใช้ชื่อเป็น Key หลักและเคลียร์ช่องว่างแฝง เพื่อไม่ให้ไส้อ่อนแยกบรรทัด)
         function addOrUpdateGroupItem(name, qty, unitPrice, fixedAmt, type) {
-            name = name.trim().replace(/^[,\-\+\s]+/, '');
+            name = name.trim().replace(/\s+/g, ' ').replace(/^[,\-\+\s]+/, '').trim();
             if (!name) return;
 
             // ถ้ามีราคาต่อหน่วยจาก Master ส่งมา ให้ยึดราคานั้นเลย
             let finalUnitPrice = unitPrice > 0 ? unitPrice : (fixedAmt / qty || 0);
             
-            let key = name + "_" + type;
+            let key = name; // ใช้ชื่อสินค้าเป็น Key หลัก เพื่อรวมร่างชื่อเดียวกันทั้งหมด
             if (groupedItemsMap[key]) {
                 groupedItemsMap[key].qty += qty;
                 groupedItemsMap[key].totalAmt += (finalUnitPrice * qty);
@@ -462,8 +462,8 @@
         let drinkItems = itemsList.filter(i => i.type === 'drink');
         let foodItems = itemsList.filter(i => i.type === 'food');
 
-        // เรียงลำดับให้สวยงาม
-        drinkItems.sort((a, b) => b.totalAmt - a.totalAmt);
+        // เรียงลำดับจากจำนวนมากไปน้อย (b.qty - a.qty) ทั้งเครื่องดื่มและอาหาร
+        drinkItems.sort((a, b) => b.qty - a.qty);
         foodItems.sort((a, b) => b.qty - a.qty);
 
         let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
