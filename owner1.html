@@ -400,15 +400,14 @@
                         packageSummaryMap[pkgName].total += (pCount * pkgPriceNum);
                     }
 
-                    // ดึงรายการสั่งซื้อ (ข้อมูลตรงตามใบเสร็จ 100%)
+                    // ดึงรายการสั่งซื้อทั้งหมด (รวมเตา และใช้ข้อมูลตรงจากใบเสร็จ)
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(it => {
                             let name = (it.name || "ไม่ระบุชื่อ").trim();
                             let qty = parseInt(it.qty || it.quantity || 1);
                             let price = parseFloat(it.price || 0);
-                            let total = parseFloat(it.total !== undefined ? it.total : (it.sumPrice !== undefined ? it.sumPrice : (price * qty)));
 
-                            // 🍲 วิเคราะห์ข้อมูลเตาและน้ำซุป
+                            // วิเคราะห์น้ำซุปเพื่อลงตารางสรุปน้ำซุป
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
                                 totalStoves += qty;
                                 
@@ -431,22 +430,30 @@
                                         }
                                     });
                                 }
-                                return; 
                             }
 
+                            // ข้ามหัวบิลบุฟเฟต์ (แยกแสดงโซนด้านบนแล้ว)
                             if (name.includes("บุฟเฟ่") || name.includes("บุฟเฟต์")) return;
 
                             name = name.replace(/\s+/g, ' ').replace(/^[,\-\+\s]+/, '').trim();
                             if (!name) return;
 
                             let category = it.category || "อาหาร/เครื่องดื่ม";
+                            if (name.includes("สั่งเตา") || name.includes("เตาหมูกระทะ") || name.includes("หม้อชาบู")) {
+                                category = "เตา/หม้อ";
+                            }
+
                             let isDrink = category.includes("เครื่องดื่ม") || category.includes("Drink") || category.includes("น้ำ");
 
                             if (!itemMap[name]) {
-                                itemMap[name] = { name: name, qty: 0, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
+                                itemMap[name] = { name: name, qty: 0, price: price, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
                             }
                             itemMap[name].qty += qty;
-                            itemMap[name].total += total; // รวมยอดเงินจริงจากใบเสร็จ
+                            itemMap[name].total += (price * qty);
+                            
+                            if (price > 0 && itemMap[name].price === 0) {
+                                itemMap[name].price = price;
+                            }
                         });
                     }
                 });
@@ -471,7 +478,7 @@
                 }
                 document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
 
-                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม) เรียงจากมากไปน้อย
+                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม) เรียงจากยอดรวมมากไปน้อย
                 let soupSummaryList = Object.keys(soupAggMap).map(sName => ({
                     name: sName,
                     pot: soupAggMap[sName].pot,
@@ -491,19 +498,8 @@
                 });
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
 
-                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (ใช้ยอดรวมหารจำนวนเพื่อความแม่นยำของราคาต่อหน่วย และเรียงราคา/จำนวนจากมากไปน้อย)
-                let itemsList = Object.values(itemMap).map(item => {
-                    let exactUnitPrice = item.qty > 0 ? item.total / item.qty : 0;
-                    return {
-                        name: item.name,
-                        qty: item.qty,
-                        price: exactUnitPrice,
-                        total: item.total,
-                        category: item.category,
-                        type: item.type
-                    };
-                });
-
+                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (เรียงตามราคา มากไปน้อย แล้วตามด้วยจำนวน มากไปน้อย)
+                let itemsList = Object.values(itemMap);
                 let drinkItems = itemsList.filter(i => i.type === 'drink');
                 let foodItems = itemsList.filter(i => i.type === 'food');
 
@@ -541,7 +537,7 @@
                 console.error("Dashboard error:", err); 
             }
         }
-
+        
         async function deleteExpense(docId) {
             if (confirm("ยืนยันการลบรายการนี้?")) {
                 try {
