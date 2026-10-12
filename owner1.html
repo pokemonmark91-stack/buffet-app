@@ -400,14 +400,15 @@
                         packageSummaryMap[pkgName].total += (pCount * pkgPriceNum);
                     }
 
-                    // ดึงรายการสั่งซื้อ
+                    // 3. ดึงรายการสั่งซื้อ (รวมยอดตรงตามใบเสร็จ)
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(it => {
                             let name = (it.name || "ไม่ระบุชื่อ").trim();
                             let qty = parseInt(it.qty || it.quantity || 1);
                             let price = parseFloat(it.price || 0);
+                            let total = parseFloat(it.total !== undefined ? it.total : (it.sumPrice !== undefined ? it.sumPrice : (price * qty)));
 
-                            // 🍲 วิเคราะห์ข้อมูลเตาและน้ำซุป (แยก หม้อชาบู และ เตาหมูกระทะ ชัดเจน)
+                            // 🍲 วิเคราะห์ข้อมูลเตาและน้ำซุป
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
                                 totalStoves += qty;
                                 
@@ -442,16 +443,12 @@
                             let isDrink = category.includes("เครื่องดื่ม") || category.includes("Drink") || category.includes("น้ำ");
 
                             if (!itemMap[name]) {
-                                itemMap[name] = { qty: 0, price: price, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
+                                itemMap[name] = { name: name, qty: 0, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
                             }
                             itemMap[name].qty += qty;
-                            itemMap[name].total += (price * qty);
-                            if (price > itemMap[name].price) {
-                                itemMap[name].price = price;
-                            }
+                            itemMap[name].total += total; // รวมยอดเงินจริงจากทุกบิล
                         });
                     }
-                });
 
                 // คำนวณเงินสดสุทธิ
                 let cashSales = totalSales - transferSales;
@@ -493,19 +490,23 @@
                 });
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
 
-                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (เรียงตามราคา มากไปน้อย แล้วตามด้วยจำนวน มากไปน้อย)
-                let itemsList = Object.keys(itemMap).map(menuName => ({
-                    name: menuName,
-                    qty: itemMap[menuName].qty,
-                    price: itemMap[menuName].price,
-                    total: itemMap[menuName].total,
-                    category: itemMap[menuName].category,
-                    type: itemMap[menuName].type
-                }));
+                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (ใช้สูตรยอดรวมหารจำนวนเพื่อความแม่นยำ)
+                let itemsList = Object.values(itemMap).map(item => {
+                    let exactUnitPrice = item.qty > 0 ? item.total / item.qty : 0;
+                    return {
+                        name: item.name,
+                        qty: item.qty,
+                        price: exactUnitPrice,
+                        total: item.total,
+                        category: item.category,
+                        type: item.type
+                    };
+                });
 
                 let drinkItems = itemsList.filter(i => i.type === 'drink');
                 let foodItems = itemsList.filter(i => i.type === 'food');
 
+                // เรียงลำดับ: ราคา (มากไปน้อย) -> จำนวน (มากไปน้อย)
                 drinkItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
                 foodItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
 
@@ -535,7 +536,7 @@
                 });
 
                 document.getElementById('menuSummaryBody').innerHTML = menuHtml || "<tr><td colspan='5'>ไม่มีข้อมูลการสั่งอาหารวันนี้</td></tr>";
-
+                    
             } catch (err) { 
                 console.error("Dashboard error:", err); 
             }
