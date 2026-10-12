@@ -400,12 +400,13 @@
                         packageSummaryMap[pkgName].total += (pCount * pkgPriceNum);
                     }
 
-                    // ดึงรายการสั่งซื้อทั้งหมด (รวมเตา และใช้ข้อมูลตรงจากใบเสร็จ)
+                    // ดึงรายการสั่งซื้อทั้งหมด (รวมเตา และใช้ราคาต่อหน่วยจริงจากใบเสร็จ)
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(it => {
                             let name = (it.name || "ไม่ระบุชื่อ").trim();
                             let qty = parseInt(it.qty || it.quantity || 1);
                             let price = parseFloat(it.price || 0);
+                            let total = parseFloat(it.total !== undefined ? it.total : (it.sumPrice !== undefined ? it.sumPrice : (price * qty)));
 
                             // วิเคราะห์น้ำซุปเพื่อลงตารางสรุปน้ำซุป
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
@@ -432,7 +433,7 @@
                                 }
                             }
 
-                            // ข้ามหัวบิลบุฟเฟต์ (แยกแสดงโซนด้านบนแล้ว)
+                            // ข้ามหัวบิลบุฟเฟต์ (เพราะแยกแสดงโซนด้านบนแล้ว)
                             if (name.includes("บุฟเฟ่") || name.includes("บุฟเฟต์")) return;
 
                             name = name.replace(/\s+/g, ' ').replace(/^[,\-\+\s]+/, '').trim();
@@ -449,14 +450,14 @@
                                 itemMap[name] = { name: name, qty: 0, price: price, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
                             }
                             itemMap[name].qty += qty;
-                            itemMap[name].total += (price * qty);
+                            itemMap[name].total += total;
                             
-                            if (price > 0 && itemMap[name].price === 0) {
+                            // ล็อกราคาต่อหน่วยจริงจากใบเสร็จ (ถ้ามีค่ามากกว่า 0)
+                            if (price > 0) {
                                 itemMap[name].price = price;
                             }
                         });
                     }
-                });
 
                 // คำนวณเงินสดสุทธิ
                 let cashSales = totalSales - transferSales;
@@ -498,11 +499,12 @@
                 });
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
 
-                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (เรียงตามราคา มากไปน้อย แล้วตามด้วยจำนวน มากไปน้อย)
+                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (เรียงราคา: มากไปน้อย -> จำนวน: มากไปน้อย)
                 let itemsList = Object.values(itemMap);
                 let drinkItems = itemsList.filter(i => i.type === 'drink');
                 let foodItems = itemsList.filter(i => i.type === 'food');
 
+                // เรียงลำดับ: ราคา (มากไปน้อย) ถ้าเท่ากันเรียงตาม จำนวน (มากไปน้อย)
                 drinkItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
                 foodItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
 
@@ -533,7 +535,7 @@
 
                 document.getElementById('menuSummaryBody').innerHTML = menuHtml || "<tr><td colspan='5'>ไม่มีข้อมูลการสั่งอาหารวันนี้</td></tr>";
 
-            } catch (err) { 
+                } catch (err) { 
                 console.error("Dashboard error:", err); 
             }
         }
