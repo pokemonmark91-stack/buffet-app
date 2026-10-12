@@ -226,8 +226,19 @@
             </div>
             <div class="mgmt-card">
                 <table>
-                    <thead><tr><th>รูปภาพ</th><th style="width: 60px; text-align: center;">ลำดับ</th><th>ชื่อเมนู</th><th>หมวดหมู่</th><th>แพ็กเกจที่ได้</th><th>ราคา</th><th>จัดการ</th></tr></thead>
-                    <tbody id="menuTableBody"><tr><td colspan="7">กำลังโหลด...</td></tr></tbody>
+                    <thead>
+                        <tr>
+                            <th>รูปภาพ</th>
+                            <th style="width: 60px; text-align: center;">ลำดับ</th>
+                            <th>ชื่อเมนู</th>
+                            <th>หมวดหมู่</th>
+                            <th>แพ็กเกจที่ได้</th>
+                            <th>ราคา</th>
+                            <th style="text-align: center;">สถานะ</th>
+                            <th>จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="menuTableBody"><tr><td colspan="8">กำลังโหลด...</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -400,13 +411,12 @@
                         packageSummaryMap[pkgName].total += (pCount * pkgPriceNum);
                     }
 
-                    // ดึงรายการสั่งซื้อทั้งหมด (รวมเตา และใช้ข้อมูลราคาจริงจากใบเสร็จ)
+                    // ดึงรายการสั่งซื้อทั้งหมด (รวมเตา และคำนวณราคาจริงแม่นยำ)
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(it => {
                             let name = (it.name || "ไม่ระบุชื่อ").trim();
                             let qty = parseInt(it.qty || it.quantity || 1);
                             let price = parseFloat(it.price || 0);
-                            let total = parseFloat(it.total !== undefined ? it.total : (it.sumPrice !== undefined ? it.sumPrice : (price * qty)));
 
                             // วิเคราะห์น้ำซุปเพื่อลงตารางสรุปน้ำซุป
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
@@ -444,15 +454,12 @@
                                 category = "เตา/หม้อ";
                             }
 
-                            let isDrink = category.includes("เครื่องดื่ม") || category.includes("Drink") || category.includes("น้ำ");
-
                             if (!itemMap[name]) {
-                                itemMap[name] = { name: name, qty: 0, price: price, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
+                                itemMap[name] = { name: name, qty: 0, price: price, category: category };
                             }
                             itemMap[name].qty += qty;
-                            itemMap[name].total += total;
                             
-                            // ล็อกราคาต่อหน่วยจริงจากใบเสร็จ (ถ้ามีค่ามากกว่า 0)
+                            // ล็อกราคาจริงจากเมนู (ถ้าเป็นสินค้าคิดเงิน ให้จำราคาต่อหน่วยที่ถูกต้อง)
                             if (price > 0) {
                                 itemMap[name].price = price;
                             }
@@ -500,15 +507,24 @@
                 });
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
 
-                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (เรียงตามราคา มากไปน้อย -> ตามด้วยจำนวน มากไปน้อย)
-                let itemsList = Object.values(itemMap);
-                let drinkItems = itemsList.filter(i => i.type === 'drink');
-                let foodItems = itemsList.filter(i => i.type === 'food');
+                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (เรียงตาม ราคาต่อหน่วย (มากไปน้อย) -> จำนวน (มากไปน้อย))
+                let itemsList = Object.values(itemMap).map(item => {
+                    let totalVal = item.price > 0 ? (item.price * item.qty) : 0;
+                    return {
+                        name: item.name,
+                        qty: item.qty,
+                        price: item.price,
+                        total: totalVal,
+                        category: item.category
+                    };
+                });
 
-                drinkItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
-                foodItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
+                // เรียงลำดับ: ราคาต่อหน่วย (มากไปน้อย) เป็นหลัก ถ้าเท่ากันให้เรียงตาม จำนวนที่ออก (มากไปน้อย)
+                itemsList.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
 
                 let menuHtml = "";
+
+                // 1. แสดงรายการแพ็กเกจบุฟเฟต์ก่อน
                 for (let [pName, info] of Object.entries(packageSummaryMap)) {
                     menuHtml += `<tr style="background: #fdf2f2;">
                                     <td><b>บุฟเฟต์ผู้ใหญ่ (${pName})</b></td>
@@ -519,8 +535,8 @@
                                  </tr>`;
                 }
 
-                let allDisplayItems = [...drinkItems, ...foodItems];
-                allDisplayItems.forEach(item => {
+                // 2. แสดงรายการอาหาร เครื่องดื่ม และเตา ทั้งหมด
+                itemsList.forEach(item => {
                     let unitPriceText = item.price > 0 ? item.price.toLocaleString() + " ฿" : "ฟรี (รวมในบุฟเฟต์)";
                     let totalPriceText = item.total > 0 ? item.total.toLocaleString() + " ฿" : "0 ฿";
                     
@@ -539,7 +555,7 @@
                 console.error("Dashboard error:", err); 
             }
         }
-        
+
         async function deleteExpense(docId) {
             if (confirm("ยืนยันการลบรายการนี้?")) {
                 try {
@@ -730,21 +746,39 @@
                     let allowed = (item.allowedPackage || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     let price = item.price !== undefined ? item.price : 0;
 
+                    // สถานะสินค้า (isAvailable: true = พร้อมขาย, false = สินค้าหมด)
+                    let isAvail = item.isAvailable !== false; 
+                    let statusText = isAvail ? '🟢 พร้อมขาย' : '🔴 สินค้าหมด';
+                    let statusBtnStyle = isAvail ? 'background: #2ed573; color: white;' : 'background: #ff4757; color: white;';
+
                     html += `<tr id="menu-row-${docId}">
                                 <td><img src="${imgSrc}" class="img-preview" id="img-preview-${docId}" onerror="this.src='https://via.placeholder.com/60?text=Error'"></td>
                                 <td style="text-align: center; font-weight: bold; color: #2f3542;">${sort}</td>
-                                <td>${item.name || ''}</td>
+                                <td><b>${item.name || ''}</b></td>
                                 <td>${item.category || ''}</td>
                                 <td>${item.allowedPackage || ''}</td>
                                 <td>${price}</td>
+                                <td style="text-align: center;">
+                                    <button style="${statusBtnStyle} padding: 5px 10px; border-radius: 4px; border:none; cursor:pointer; font-size:12px; font-weight:bold;" onclick="toggleMenuStock('${docId}', ${isAvail})">${statusText}</button>
+                                </td>
                                 <td>
                                     <button class="btn-edit" onclick="editMenuInline('${docId}', ${sort}, '${name}', '${cat}', '${allowed}', ${price})">แก้ไข</button>
                                     <button class="btn-del" onclick="deleteDoc('menu', '${docId}', loadMenu)">ลบ</button>
                                 </td>
                              </tr>`;
                 });
-                document.getElementById('menuTableBody').innerHTML = html || "<tr><td colspan='7'>ไม่มีข้อมูล</td></tr>";
-            } catch (err) { document.getElementById('menuTableBody').innerHTML = `<tr><td colspan='7' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`; }
+                document.getElementById('menuTableBody').innerHTML = html || "<tr><td colspan='8'>ไม่มีข้อมูล</td></tr>";
+            } catch (err) { document.getElementById('menuTableBody').innerHTML = `<tr><td colspan='8' class='text-danger'>เกิดข้อผิดพลาด: ${err.message}</td></tr>`; }
+        }
+
+        // ฟังก์ชันสลับสถานะ พร้อมขาย / สินค้าหมด
+        async function toggleMenuStock(docId, currentStatus) {
+            try {
+                await db.collection("menu").doc(docId).update({ isAvailable: !currentStatus });
+                loadMenu();
+            } catch (err) {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            }
         }
 
         async function addMenu() {
@@ -771,7 +805,7 @@
                         };
                     });
                 }
-                await db.collection("menu").add({ sortOrder: sort, name: name, category: cat, allowedPackage: allowed, price: price, imageUrl: imageUrl });
+                await db.collection("menu").add({ sortOrder: sort, name: name, category: cat, allowedPackage: allowed, price: price, imageUrl: imageUrl, isAvailable: true });
                 ['menuSort', 'menuName', 'menuCat', 'menuAllowed', 'menuPrice'].forEach(id => document.getElementById(id).value = "");
                 fileInput.value = ""; btn.innerText = "+ เพิ่มข้อมูล"; btn.disabled = false;
                 loadMenu();
@@ -791,6 +825,7 @@
                 <td style="vertical-align: middle;"><input type="text" id="edit-cat-${docId}" value="${cat}"></td>
                 <td style="vertical-align: middle;"><input type="text" id="edit-allowed-${docId}" value="${allowed}"></td>
                 <td style="vertical-align: middle;"><input type="number" id="edit-price-${docId}" value="${price}" style="width: 80px;"></td>
+                <td style="vertical-align: middle; text-align: center;">-</td>
                 <td style="vertical-align: middle; white-space: nowrap;">
                     <button class="btn-add" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;" onclick="saveMenuInline(this, '${docId}')">บันทึก</button>
                     <button class="btn-del" onclick="loadMenu()">ยกเลิก</button>
