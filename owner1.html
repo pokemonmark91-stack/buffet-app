@@ -400,7 +400,7 @@
                         packageSummaryMap[pkgName].total += (pCount * pkgPriceNum);
                     }
 
-                    // 3. ดึงรายการสั่งซื้อ (รวมยอดตรงตามใบเสร็จ)
+                    // ดึงรายการสั่งซื้อ (ข้อมูลตรงตามใบเสร็จ 100%)
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(it => {
                             let name = (it.name || "ไม่ระบุชื่อ").trim();
@@ -446,9 +446,10 @@
                                 itemMap[name] = { name: name, qty: 0, total: 0, category: category, type: isDrink ? 'drink' : 'food' };
                             }
                             itemMap[name].qty += qty;
-                            itemMap[name].total += total; // รวมยอดเงินจริงจากทุกบิล
+                            itemMap[name].total += total; // รวมยอดเงินจริงจากใบเสร็จ
                         });
                     }
+                });
 
                 // คำนวณเงินสดสุทธิ
                 let cashSales = totalSales - transferSales;
@@ -490,7 +491,7 @@
                 });
                 document.getElementById('soupSummaryBody').innerHTML = soupHtml || "<tr><td colspan='4'>ไม่มีข้อมูลน้ำซุปวันนี้</td></tr>";
 
-                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (ใช้สูตรยอดรวมหารจำนวนเพื่อความแม่นยำ)
+                // 🥩 เรนเดอร์ ตารางสรุปรายการอาหาร & เครื่องดื่ม (ใช้ยอดรวมหารจำนวนเพื่อความแม่นยำของราคาต่อหน่วย และเรียงราคา/จำนวนจากมากไปน้อย)
                 let itemsList = Object.values(itemMap).map(item => {
                     let exactUnitPrice = item.qty > 0 ? item.total / item.qty : 0;
                     return {
@@ -506,7 +507,6 @@
                 let drinkItems = itemsList.filter(i => i.type === 'drink');
                 let foodItems = itemsList.filter(i => i.type === 'food');
 
-                // เรียงลำดับ: ราคา (มากไปน้อย) -> จำนวน (มากไปน้อย)
                 drinkItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
                 foodItems.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
 
@@ -536,7 +536,7 @@
                 });
 
                 document.getElementById('menuSummaryBody').innerHTML = menuHtml || "<tr><td colspan='5'>ไม่มีข้อมูลการสั่งอาหารวันนี้</td></tr>";
-                    
+
             } catch (err) { 
                 console.error("Dashboard error:", err); 
             }
@@ -569,7 +569,7 @@
                 let html = "";
                 items.forEach(item => {
                     let docId = item._docId;
-                    let name = (item.name || '').toString().replace(/'/g, "\\'");
+                    let name = (item.name || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     let price = item.price !== undefined ? item.price : 0;
                     let sort = item.sortOrder;
                     
@@ -643,9 +643,9 @@
                 items.forEach(item => {
                     let docId = item._docId;
                     let sort = item.sortOrder;
-                    let name = (item.name || '').toString().replace(/'/g, "\\'");
-                    let cat = (item.category || '').toString().replace(/'/g, "\\'");
-                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "\\'");
+                    let name = (item.name || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    let cat = (item.category || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     let price = item.price !== undefined ? item.price : 0;
                     
                     html += `<tr id="soup-row-${docId}">
@@ -727,9 +727,9 @@
                     let docId = item._docId;
                     let sort = item.sortOrder;
                     let imgSrc = item.imageUrl ? item.imageUrl : 'https://via.placeholder.com/60?text=No+Img';
-                    let name = (item.name || '').toString().replace(/'/g, "\\'");
-                    let cat = (item.category || '').toString().replace(/'/g, "\\'");
-                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "\\'");
+                    let name = (item.name || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    let cat = (item.category || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    let allowed = (item.allowedPackage || '').toString().replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     let price = item.price !== undefined ? item.price : 0;
 
                     html += `<tr id="menu-row-${docId}">
