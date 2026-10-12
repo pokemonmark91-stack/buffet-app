@@ -522,8 +522,12 @@
             let item = doc.data();
             item.id = doc.id;
             
-            // 🟢 สิ่งที่เพิ่มเข้ามา: ดึงค่า sortOrder (ถ้าไม่มีให้เป็น 99)
-            item.sortOrder = item.sortOrder !== undefined ? Number(item.sortOrder) : 99;
+            // 🛑 เพิ่มเงื่อนไขกรอง: ถ้าสินค้าถูกปิดการขาย (isAvailable === false) หรือไม่มี sortOrder (ถูกลบตอนกดหมด) ให้ข้ามไปทันที
+            if (item.isAvailable === false || item.sortOrder === undefined || item.sortOrder === null || item.sortOrder === "") {
+                return;
+            }
+            
+            item.sortOrder = Number(item.sortOrder);
             
             let itemPkg = item.allowedPackage || item.package || item.packageName || item.packages || item.tier || item.priceTier || item.pkg || "";
 
@@ -558,7 +562,7 @@
             return;
         }
 
-        // 🟢 สิ่งที่เพิ่มเข้ามา: จัดเรียงรายการอาหารทั้งหมดตาม sortOrder จากน้อยไปมาก
+        // จัดเรียงรายการอาหารทั้งหมดตาม sortOrder จากน้อยไปมาก
         allMenuItems.sort((a, b) => a.sortOrder - b.sortOrder);
 
         renderCategories(Array.from(categoriesSet));
