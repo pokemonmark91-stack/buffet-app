@@ -302,6 +302,18 @@
                     }
                 };
 
+                // 0. ดึงราคาอ้างอิงจากหน้าจัดการ Menu มาทำ Map (ชื่อเมนู -> ราคาจริง)
+                let menuPriceMap = {};
+                const menuSnap = await db.collection("menu").get();
+                menuSnap.forEach(doc => {
+                    let mData = doc.data();
+                    let mName = (mData.name || "").trim();
+                    let mPrice = parseFloat(mData.price || 0);
+                    if (mName) {
+                        menuPriceMap[mName] = mPrice;
+                    }
+                });
+
                 // 1. ดึงข้อมูล "กะ" จาก collection 'shifts'
                 let openShiftVal = 0;
                 let closeShiftVal = 0;
@@ -395,28 +407,50 @@
                     }
                     transferSales += transferAmount;
 
-                    // ดึงจำนวนคนและแพ็กเกจ
-                    let pCount = parseInt(data.customerCount || data.totalPeople || (parseInt(data.adults||0) + parseInt(data.children||0)) || 1);
-                    totalPeople += pCount;
+                    // แยกผู้ใหญ่และเด็ก
+                    let adults = parseInt(data.adults || data.adultCount || 0);
+                    let children = parseInt(data.children || data.childCount || 0);
+                    let totalP = parseInt(data.customerCount || data.totalPeople || (adults + children) || 1);
+                    
+                    // ถ้าบิลไม่ได้แยกช่อง adults/children ชัดเจน ให้เหมาเป็นผู้ใหญ่ทั้งหมด
+                    if (adults === 0 && children === 0) {
+                        adults = totalP;
+                    }
+                    totalPeople += totalP;
 
                     let pkgPriceNum = parseFloat(data.packagePrice || 0);
+                    let childPriceNum = parseFloat(data.childPrice || (pkgPriceNum > 0 ? pkgPriceNum / 2 : 0)); // ราคาเด็ก (ถ้ามีบันทึก หรือครึ่งราคา)
                     let pkgName = data.packageName || data.package || (pkgPriceNum ? pkgPriceNum + ' บาท' : "ไม่ระบุ");
-                    pkgPeopleMap[pkgName] = (pkgPeopleMap[pkgName] || 0) + pCount;
 
-                    if (pkgPriceNum > 0) {
-                        if (!packageSummaryMap[pkgName]) {
-                            packageSummaryMap[pkgName] = { count: 0, price: pkgPriceNum, total: 0 };
+                    // เก็บสถิติคนแยกแพ็กเกจ
+                    if (adults > 0) {
+                        pkgPeopleMap[pkgName + " (ผู้ใหญ่)"] = (pkgPeopleMap[pkgName + " (ผู้ใหญ่)"] || 0) + adults;
+                        let adultKey = `บุฟเฟต์ผู้ใหญ่ (${pkgName})`;
+                        if (!packageSummaryMap[adultKey]) {
+                            packageSummaryMap[adultKey] = { label: adultKey, type: 'ผู้ใหญ่', count: 0, price: pkgPriceNum, total: 0 };
                         }
-                        packageSummaryMap[pkgName].count += pCount;
-                        packageSummaryMap[pkgName].total += (pCount * pkgPriceNum);
+                        packageSummaryMap[adultKey].count += adults;
+                        packageSummaryMap[adultKey].total += (adults * pkgPriceNum);
                     }
 
-                    // ดึงรายการสั่งซื้อทั้งหมด
+                    if (children > 0) {
+                        pkgPeopleMap[pkgName + " (เด็ก)"] = (pkgPeopleMap[pkgName + " (เด็ก)"] || 0) + children;
+                        let childKey = `บุฟเฟต์เด็ก (${pkgName})`;
+                        if (!packageSummaryMap[childKey]) {
+                            packageSummaryMap[childKey] = { label: childKey, type: 'เด็ก', count: 0, price: childPriceNum, total: 0 };
+                        }
+                        packageSummaryMap[childKey].count += children;
+                        packageSummaryMap[childKey].total += (children * childPriceNum);
+                    }
+
+                    // ดึงรายการสั่งซื้อทั้งหมด (ดึงราคาจากหน้าจัดการเมนูมาใช้เป็นหลัก)
                     if (data.items && Array.isArray(data.items)) {
                         data.items.forEach(it => {
                             let name = (it.name || "ไม่ระบุชื่อ").trim();
                             let qty = parseInt(it.qty || it.quantity || 1);
-                            let price = parseFloat(it.price || 0);
+                            
+                            // ดึงราคาจากหน้าจัดการเมนู (menuPriceMap) ถ้าไม่มีค่อยใช้ราคาจากใบเสร็จ
+                            let price = menuPriceMap[name] !== undefined ? menuPriceMap[name] : parseFloat(it.price || 0);
 
                             // วิเคราะห์น้ำซุปเพื่อลงตารางสรุปน้ำซุป
                             if (name.includes("สั่งเตา") || name.includes("ซุป") || name.includes("หม้อชาบู") || name.includes("เตาหมูกระทะ")) {
@@ -485,7 +519,7 @@
                 }
                 document.getElementById('dashPkgBreakdown').innerHTML = pkgBreakdownHtml || "<li><span>ไม่มีข้อมูลแพ็กเกจวันนี้</span> <b>0 คน</b></li>";
 
-                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป (ชื่อ | หม้อ | เตา | รวม)
+                // 🍲 เรนเดอร์ ตารางสรุปน้ำซุป
                 let soupSummaryList = Object.keys(soupAggMap).map(sName => ({
                     name: sName,
                     pot: soupAggMap[sName].pot,
@@ -520,16 +554,20 @@
                 itemsList.sort((a, b) => (b.price - a.price) || (b.qty - a.qty));
 
                 let menuHtml = "";
-                for (let [pName, info] of Object.entries(packageSummaryMap)) {
+                
+                // 1. แสดงรายการแพ็กเกจ (แยก ผู้ใหญ่ และ เด็ก)
+                for (let info of Object.values(packageSummaryMap)) {
+                    let badgeColor = info.type === 'ผู้ใหญ่' ? '#ff4757' : '#ffa502';
                     menuHtml += `<tr style="background: #fdf2f2;">
-                                    <td><b>บุฟเฟต์ผู้ใหญ่ (${pName})</b></td>
-                                    <td>แพ็กเกจ/ลูกค้า</td>
-                                    <td style="font-weight: bold; color: #ff4757;">${info.count} คน</td>
+                                    <td><b>${info.label}</b></td>
+                                    <td>แพ็กเกจ/ลูกค้า (${info.type})</td>
+                                    <td style="font-weight: bold; color: ${badgeColor};">${info.count} คน</td>
                                     <td>${info.price.toLocaleString()} ฿</td>
                                     <td style="font-weight: bold; color: #2ed573;">${info.total.toLocaleString()} ฿</td>
                                  </tr>`;
                 }
 
+                // 2. แสดงรายการอาหาร เครื่องดื่ม และเตา
                 itemsList.forEach(item => {
                     let unitPriceText = item.price > 0 ? item.price.toLocaleString() + " ฿" : "ฟรี (รวมในบุฟเฟต์)";
                     let totalPriceText = item.total > 0 ? item.total.toLocaleString() + " ฿" : "0 ฿";
