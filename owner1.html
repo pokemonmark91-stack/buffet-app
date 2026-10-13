@@ -419,8 +419,17 @@
                     totalPeople += totalP;
 
                     let pkgPriceNum = parseFloat(data.packagePrice || 0);
-                    let childPriceNum = parseFloat(data.childPrice || (pkgPriceNum > 0 ? pkgPriceNum / 2 : 0)); // ราคาเด็ก (ถ้ามีบันทึก หรือครึ่งราคา)
+                    
+                    // 🟢 ปัดเศษราคาเด็กขึ้นเป็นจำนวนเต็มด้วย Math.ceil (เช่น 49.5 -> 50)
+                    let childPriceNum = parseFloat(data.childPrice || 0);
+                    if (childPriceNum === 0 && pkgPriceNum > 0) {
+                        childPriceNum = Math.ceil(pkgPriceNum / 2);
+                    } else if (childPriceNum > 0) {
+                        childPriceNum = Math.ceil(childPriceNum);
+                    }
+                    
                     let pkgName = data.packageName || data.package || (pkgPriceNum ? pkgPriceNum + ' บาท' : "ไม่ระบุ");
+
 
                     // เก็บสถิติคนแยกแพ็กเกจ
                     if (adults > 0) {
