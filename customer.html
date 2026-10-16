@@ -689,57 +689,81 @@
         }
 
         async function confirmAndSendOrder() {
-            let btn = document.getElementById('btnConfirmSend');
-            btn.disabled = true;
-            btn.innerText = "กำลังส่ง...";
+    let btn = document.getElementById('btnConfirmSend');
+    btn.disabled = true;
+    btn.innerText = "กำลังส่ง...";
 
-            let totalAmount = 0;
-            let orderDetails = "";
+    let totalAmount = 0;
+    let orderDetails = "";
+    
+    // 1. แปลงรายการในตะกร้า (cart) ให้อยู่ในรูป Array สำหรับส่งให้ LINE
+    let itemsForLine = [];
 
-            for (let key in cart) {
-                if (cart[key].qty > 0) {
-                    totalAmount += (cart[key].price * cart[key].qty);
-                    orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
-                }
-            }
+    for (let key in cart) {
+        if (cart[key].qty > 0) {
+            totalAmount += (cart[key].price * cart[key].qty);
+            orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
 
-            try {
-                let orderData = {
-                    action: "สั่งอาหาร",
-                    details: orderDetails.trim(),
-                    amount: totalAmount,
-                    kitchenStatus: "เตรียม",
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                };
+            // เพิ่มรายการลงใน Array เพื่อส่งเข้า LINE
+            itemsForLine.push({
+                name: cart[key].name,
+                qty: cart[key].qty
+            });
+        }
+    }
 
-                if (currentUser) {
-                    orderData.orderedBy = {
-                        uid: currentUser.uid,
-                        displayName: currentUser.displayName || currentUser.name || "ลูกค้า",
-                        pictureUrl: currentUser.pictureUrl || ""
-                    };
-                }
+    try {
+        let orderData = {
+            action: "สั่งอาหาร",
+            details: orderDetails.trim(),
+            amount: totalAmount,
+            kitchenStatus: "เตรียม",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
 
-                await db.collection("tables").doc(String(tableNo)).collection("orders").add(orderData);
-
-                let modalEl = document.getElementById('confirmOrderModal');
-                let confirmModal = bootstrap.Modal.getInstance(modalEl);
-                if (confirmModal) confirmModal.hide();
-
-                alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
-                cart = {};
-                document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
-                document.getElementById('cartCount').innerText = '0';
-
-            } catch (err) {
-                alert("เกิดข้อผิดพลาดในการส่งรายการ: " + err.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "ยืนยันส่งเข้าครัว 🚀";
-            }
+        if (currentUser) {
+            orderData.orderedBy = {
+                uid: currentUser.uid,
+                displayName: currentUser.displayName || currentUser.name || "ลูกค้า",
+                pictureUrl: currentUser.pictureUrl || ""
+            };
         }
 
-        let unsubscribeBill = null;
+        // --- A. บันทึกลง Firebase ตามเดิม ---
+        await db.collection("tables").doc(String(tableNo)).collection("orders").add(orderData);
+
+        // --- B. [เพิ่มใหม่] ยิงแจ้งเตือนเข้า LINE กลุ่มผ่าน Google Apps Script ---
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbynIA0ZCXg9AuAmZcrn2qX-uPsla57wCicJ_tReMqxr-81vb593DRXfjn7BdgqhX8lM2Q/exec"; // 🔴 นำ Web app URL ล่าสุดมาวางตรงนี้
+
+        fetch(GAS_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                tableNumber: tableNo, // ส่งเบอร์โต๊ะ
+                items: itemsForLine  // ส่งรายการอาหาร
+            })
+        }).catch(err => console.error("LINE Notify Error:", err));
+
+        // --- ซ่อน Modal และล้างตะกร้า ---
+        let modalEl = document.getElementById('confirmOrderModal');
+        let confirmModal = bootstrap.Modal.getInstance(modalEl);
+        if (confirmModal) confirmModal.hide();
+
+        alert("ส่งรายการอาหารเข้าครัวเรียบร้อยแล้วครับ!");
+        cart = {};
+        document.querySelectorAll('[id^="qty-"]').forEach(el => el.innerText = '0');
+        document.getElementById('cartCount').innerText = '0';
+
+    } catch (err) {
+        alert("เกิดข้อผิดพลาดในการส่งรายการ: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "ยืนยันส่งเข้าครัว 🚀";
+    }
+}
 
         function loadCustomerBill() {
             if (!tableNo) {
