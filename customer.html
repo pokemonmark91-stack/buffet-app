@@ -764,7 +764,9 @@
         btn.innerText = "ยืนยันส่งเข้าครัว 🚀";
     }
 }
-
+        
+        let unsubscribeBill = null;
+        
         function loadCustomerBill() {
             if (!tableNo) {
                 document.getElementById('billArea').innerHTML = "<div class='text-center my-3 text-danger'>กรุณาเลือกโต๊ะก่อนครับ</div>";
