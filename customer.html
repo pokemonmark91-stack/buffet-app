@@ -714,7 +714,7 @@
             action: "สั่งอาหาร",
             details: orderDetails.trim(),
             amount: totalAmount,
-            items: itemsForLine, // แนบรายการอาหารส่งไปให้ Firebase ทำงานต่อ
+            items: itemsForLine,
             kitchenStatus: "เตรียม",
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
@@ -727,8 +727,22 @@
             };
         }
 
-        // บันทึกลง Firebase Firestore (จุดนี้จะไปกระตุ้น Cloud Function ให้ทำงานอัตโนมัติ)
+        // 1. บันทึกลง Firebase Firestore ตามเดิม
         await db.collection("tables").doc(String(tableNo)).collection("orders").add(orderData);
+
+        // 2. ยิงข้อมูลไปที่ Make.com Webhook เพื่อส่งเข้า LINE ทันที
+        const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/byebt2ug38s572d39238riteqy3c0w72";
+        fetch(MAKE_WEBHOOK_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                tableNumber: tableNo,
+                details: orderDetails.trim(),
+                items: itemsForLine
+            })
+        }).catch(err => console.error("LINE Notify Error:", err));
 
         // ซ่อน Modal และล้างตะกร้า
         let modalEl = document.getElementById('confirmOrderModal');
