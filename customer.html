@@ -695,8 +695,6 @@
 
     let totalAmount = 0;
     let orderDetails = "";
-    
-    // 1. แปลงรายการในตะกร้า (cart) ให้อยู่ในรูป Array สำหรับส่งให้ LINE
     let itemsForLine = [];
 
     for (let key in cart) {
@@ -704,7 +702,6 @@
             totalAmount += (cart[key].price * cart[key].qty);
             orderDetails += `${cart[key].name} x ${cart[key].qty}\n`;
 
-            // เพิ่มรายการลงใน Array เพื่อส่งเข้า LINE
             itemsForLine.push({
                 name: cart[key].name,
                 qty: cart[key].qty
@@ -717,6 +714,7 @@
             action: "สั่งอาหาร",
             details: orderDetails.trim(),
             amount: totalAmount,
+            items: itemsForLine, // แนบรายการอาหารส่งไปให้ Firebase ทำงานต่อ
             kitchenStatus: "เตรียม",
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
@@ -729,23 +727,10 @@
             };
         }
 
-        // --- A. บันทึกลง Firebase ตามเดิม ---
+        // บันทึกลง Firebase Firestore (จุดนี้จะไปกระตุ้น Cloud Function ให้ทำงานอัตโนมัติ)
         await db.collection("tables").doc(String(tableNo)).collection("orders").add(orderData);
 
-        // --- B. ยิงแจ้งเตือนเข้า LINE กลุ่มผ่าน Google Apps Script (แก้ไขจุดที่ติดปัญหา) ---
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbynIA0ZCXg9AuAmZcrn2qX-uPsla57wCicJ_tReMqxr-81vb593DRXfjn7BdgqhX8lM2Q/exec";
-
-        // 💡 แก้ไข: ตัด headers ออกเมื่อใช้ mode: 'no-cors' เพื่อให้ส่ง body ไปถึง GAS ได้สำเร็จ
-        fetch(GAS_URL, {
-            method: "POST",
-            mode: "no-cors",
-            body: JSON.stringify({
-                tableNumber: tableNo, // ส่งเบอร์โต๊ะ
-                items: itemsForLine  // ส่งรายการอาหาร
-            })
-        }).catch(err => console.error("LINE Notify Error:", err));
-
-        // --- ซ่อน Modal และล้างตะกร้า ---
+        // ซ่อน Modal และล้างตะกร้า
         let modalEl = document.getElementById('confirmOrderModal');
         let confirmModal = bootstrap.Modal.getInstance(modalEl);
         if (confirmModal) confirmModal.hide();
