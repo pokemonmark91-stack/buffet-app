@@ -732,15 +732,13 @@
         // --- A. บันทึกลง Firebase ตามเดิม ---
         await db.collection("tables").doc(String(tableNo)).collection("orders").add(orderData);
 
-        // --- B. [เพิ่มใหม่] ยิงแจ้งเตือนเข้า LINE กลุ่มผ่าน Google Apps Script ---
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbynIA0ZCXg9AuAmZcrn2qX-uPsla57wCicJ_tReMqxr-81vb593DRXfjn7BdgqhX8lM2Q/exec"; // 🔴 นำ Web app URL ล่าสุดมาวางตรงนี้
+        // --- B. ยิงแจ้งเตือนเข้า LINE กลุ่มผ่าน Google Apps Script (แก้ไขจุดที่ติดปัญหา) ---
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbynIA0ZCXg9AuAmZcrn2qX-uPsla57wCicJ_tReMqxr-81vb593DRXfjn7BdgqhX8lM2Q/exec";
 
+        // 💡 แก้ไข: ตัด headers ออกเมื่อใช้ mode: 'no-cors' เพื่อให้ส่ง body ไปถึง GAS ได้สำเร็จ
         fetch(GAS_URL, {
             method: "POST",
             mode: "no-cors",
-            headers: {
-                "Content-Type": "application/json",
-            },
             body: JSON.stringify({
                 tableNumber: tableNo, // ส่งเบอร์โต๊ะ
                 items: itemsForLine  // ส่งรายการอาหาร
@@ -765,7 +763,7 @@
     }
 }
         
-        let unsubscribeBill = null;
+let unsubscribeBill = null;
         
         function loadCustomerBill() {
             if (!tableNo) {
