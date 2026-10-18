@@ -338,23 +338,28 @@ function calculateShiftCash(shiftId, shiftStartTime) {
         }
     });
 
-    unsubCheckouts = db.collection("checkouts")
+        unsubCheckouts = db.collection("checkouts")
         .where("timestamp", ">=", shiftStartTime)
         .onSnapshot(checkoutSnap => {
             cashFromCheckouts = 0;
             checkoutSnap.forEach(doc => {
                 let data = doc.data();
+                let change = Number(data.change || 0); // 🟢 ดึงค่าเงินทอนของบิลนี้
+
                 if (data.payments && Array.isArray(data.payments)) {
+                    let cashPaidInThisBill = 0;
                     data.payments.forEach(p => {
                         if (p.method === 'เงินสด' || p.method === 'cash') {
-                            cashFromCheckouts += Number(p.amount || 0);
+                            cashPaidInThisBill += Number(p.amount || 0);
                         }
                     });
+                    // 🟢 นำเงินสดที่รับในบิลนี้ มาหักลบด้วยเงินทอน แล้วค่อยบวกเข้ายอดรวม
+                    cashFromCheckouts += (cashPaidInThisBill - change);
                 } else if (data.totalReceived) {
-                    cashFromCheckouts += Number(data.totalReceived || 0) - Number(data.change || 0);
+                    cashFromCheckouts += Number(data.totalReceived || 0) - change;
                 }
             });
-            // 🟢 2. เอาเงินทอนเริ่มต้นไปบวกรวมกับยอดขาย
+            // เอาเงินทอนเริ่มต้นไปบวกรวมกับยอดขาย
             updateExpectedCashDisplay(cashFromCheckouts + startingCash, cashFlowTotal);
         });
 
