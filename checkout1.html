@@ -119,18 +119,14 @@
                     <span id="netTotalTxt" class="fw-bold m-0 text-success" style="font-size: 28px;">0 บาท</span>
                 </div>
 
-                <!-- 3. ช่องทางการชำระเงิน (รองรับแบ่งจ่ายหลายช่องทาง) -->
+                <!-- 3. ช่องทางการชำระเงิน -->
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="fw-bold text-dark m-0">💰 ช่องทางการชำระเงิน</h6>
                     <button type="button" onclick="addPaymentRow()" class="btn btn-sm btn-primary fw-bold">+ เพิ่มช่องชำระเงิน</button>
                 </div>
 
-                <!-- พื้นที่แสดงแถวช่องทางการชำระเงิน -->
-                <div id="paymentRowsContainer" class="mb-3">
-                    <!-- แถวจะถูกเพิ่มด้วย JavaScript อัตโนมัติ -->
-                </div>
+                <div id="paymentRowsContainer" class="mb-3"></div>
 
-                <!-- สรุปผลการรับเงิน / เงินทอน / เงินขาด -->
                 <div class="p-3 bg-light rounded border mb-4">
                     <div class="d-flex justify-content-between mb-1 small">
                         <span class="text-secondary">รับเงินรวมทั้งหมด:</span>
@@ -177,35 +173,25 @@
         const db = firebase.firestore();
 
         const urlParams = new URLSearchParams(window.location.search);
-        const currentTableId = urlParams.get('table');
+        const currentTableId = urlParams.get('table') || urlParams.get('tableId');
         
-        let totalBillAmount = 0; // ยอดรวมก่อนหักส่วนลด (Gross Total)
+        let totalBillAmount = 0; 
         let totalEarnedPoints = 0;
         
         let pendingDiscountAmount = 0;
         let pendingPointsToDeduct = 0;
         let redeemedByUID = "";
 
-        // ตัวแปรควบคุมโปรโมชั่นเครื่องดื่ม
         let isDrinkPromoActive = false;
         let rawItemsListForCalc = [];
-        let currentPromoDiscount = 0; // เก็บยอดส่วนลดโปรโมชั่นเพื่อนำไปรวมในโซนส่วนลด
+        let currentPromoDiscount = 0; 
 
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
 
         const defaultDrinkPrices = {
-            "น้ำเปล่า": 10,
-            "โซดา": 20,
-            "เอสใหญ่": 30,
-            "น้ำกระป๋อง": 30,
-            "โคล่า": 15,
-            "โค้ก": 15,
-            "เป๊ปซี่": 15,
-            "สไปรท์": 15,
-            "น้ำส้ม": 15,
-            "น้ำแดง": 15,
-            "น้ำเขียว": 15,
-            "น้ำแข็ง": 10
+            "น้ำเปล่า": 10, "โซดา": 20, "เอสใหญ่": 30, "น้ำกระป๋อง": 30,
+            "โคล่า": 15, "โค้ก": 15, "เป๊ปซี่": 15, "สไปรท์": 15,
+            "น้ำส้ม": 15, "น้ำแดง": 15, "น้ำเขียว": 15, "น้ำแข็ง": 10
         };
 
         window.onload = function() {
@@ -222,7 +208,6 @@
 
             addPaymentRow('เงินโอน', '');
 
-            // ฟังสถานะโปรโมชั่นจาก Firestore แบบ Realtime
             db.collection("settings").doc("promotions").onSnapshot((doc) => {
                 if (doc.exists) {
                     isDrinkPromoActive = doc.data().drink3ForHalfEnabled || false;
@@ -300,12 +285,9 @@
             if (currentValue > maxAllowed) {
                 changedInput.value = maxAllowed;
                 Swal.fire({
-                    toast: true,
-                    position: 'top',
-                    icon: 'warning',
+                    toast: true, position: 'top', icon: 'warning',
                     title: `แจกแต้มรวมได้ไม่เกิน ${totalEarnedPoints} แต้ม`,
-                    showConfirmButton: false,
-                    timer: 2000
+                    showConfirmButton: false, timer: 2000
                 });
             }
         }
@@ -314,7 +296,6 @@
             try {
                 let groupedItemsMap = {};
                 let activeMembers = [];
-
                 let dbMenuPrices = {};
                 let dbMenuCategories = {}; 
 
@@ -326,7 +307,6 @@
                             let mName = (data.name || data.menuName || "").trim();
                             let mPrice = parseFloat(data.price || data.amount) || 0;
                             let mCategory = (data.category || data.type || "").trim();
-                            
                             if (mName && mPrice > 0) {
                                 dbMenuPrices[mName] = mPrice;
                                 dbMenuCategories[mName] = mCategory;
@@ -334,7 +314,7 @@
                         });
                     }
                 } catch (err) {
-                    console.warn("❌ โหลดราคา Master ไม่สำเร็จ:", err);
+                    console.warn("โหลดราคา Master ไม่สำเร็จ:", err);
                 }
 
                 function addOrUpdateGroupItem(name, qty, unitPrice, fixedAmt, type) {
@@ -349,17 +329,14 @@
                         groupedItemsMap[key].totalAmt += (finalUnitPrice * qty);
                     } else {
                         groupedItemsMap[key] = { 
-                            name: name, 
-                            qty: qty, 
+                            name: name, qty: qty, 
                             totalAmt: (finalUnitPrice * qty), 
-                            type: type,
-                            unitPrice: finalUnitPrice 
+                            type: type, unitPrice: finalUnitPrice 
                         };
                     }
                 }
 
                 const tableDoc = await db.collection("tables").doc(currentTableId).get();
-                
                 if (tableDoc.exists) {
                     const tableData = tableDoc.data();
                     activeMembers = tableData.activeMembers || [];
@@ -437,23 +414,18 @@
                         parsedItems.forEach(it => {
                             let menuCategoryInDb = dbMenuCategories[it.name] || "";
                             let isDrink = (
-                                category === "เครื่องดื่ม" || 
-                                category.includes("Drink") || 
-                                category.includes("น้ำ") || 
-                                menuCategoryInDb.includes("เครื่องดื่ม") || 
-                                menuCategoryInDb.includes("Drink") ||
+                                category === "เครื่องดื่ม" || category.includes("Drink") || category.includes("น้ำ") || 
+                                menuCategoryInDb.includes("เครื่องดื่ม") || menuCategoryInDb.includes("Drink") ||
                                 (typeof drinkKeywords !== "undefined" && drinkKeywords.some(kw => details.includes(kw) || title.includes(kw) || it.name.includes(kw)))
                             );
 
                             let type = isDrink ? "drink" : "food";
-                            
                             let unitPriceFromDB = dbMenuPrices[it.name] || 0;
                             if (unitPriceFromDB === 0 && typeof defaultDrinkPrices !== "undefined") {
                                 unitPriceFromDB = defaultDrinkPrices[it.name] || 0;
                             }
 
                             let fallbackFixedAmt = (parsedItems.length === 1 && orderAmt > 0) ? orderAmt : 0;
-                            
                             addOrUpdateGroupItem(it.name, it.qty, unitPriceFromDB, fallbackFixedAmt, type);
                         });
                     });
@@ -470,7 +442,6 @@
             }
         }
 
-        // ฟังก์ชันประมวลผลคำนวณและเรนเดอร์รายการ (แยกส่วนลดโปรโมชั่นไปไว้ในโซนส่วนลดด้านล่าง)
         function processAndRenderBillItems(itemsList, activeMembers = []) {
             totalBillAmount = 0;
             currentPromoDiscount = 0;
@@ -522,11 +493,10 @@
             if (!html) html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
 
             document.getElementById('receiptItems').innerHTML = html;
-            
             totalBillAmount = Math.round(totalBillAmount);
             document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
-            if (activeMembers.length > 0) {
+            if (activeMembers && activeMembers.length > 0) {
                 renderMembersList(activeMembers, totalEarnedPoints);
             }
             calculateNetTotal();
@@ -565,7 +535,6 @@
             container.innerHTML = html;
         }
 
-        // ฟังก์ชันคำนวณยอดสุทธิ (นำส่วนลดโปรโมชั่นมารวมกับส่วนลดทั่วไปในช่อง "ส่วนลด" อัตโนมัติ)
         function calculateNetTotal() {
             let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
             let discType = document.getElementById('discountType').value;
@@ -576,7 +545,6 @@
 
             manualDiscount += pendingDiscountAmount;
 
-            // รวมส่วนลดทั้งหมด (ส่วนลดโปรโมชั่นเครื่องดื่ม + ส่วนลดกรอกเอง + ส่วนลดแลกแต้ม)
             let totalDiscountAmount = currentPromoDiscount + manualDiscount;
             let net = totalBillAmount - totalDiscountAmount;
             net = net < 0 ? 0 : net;
@@ -640,32 +608,11 @@
             pointInputs.forEach(inp => {
                 let pts = parseInt(inp.value) || 0;
                 totalAssignedPoints += pts;
-                
                 let uid = inp.getAttribute('data-uid');
                 if (uid && pts > 0) {
-                    let memberName = inp.getAttribute('data-name') || "";
+                    let memberName = inp.getAttribute('data-name') || "สมาชิก";
                     let memberPic = inp.getAttribute('data-pic') || "";
-
-                    let container = inp.closest('.d-flex') || inp.closest('.row') || inp.closest('li') || inp.parentElement;
-                    
-                    if (!memberName && container) {
-                        let nameElem = container.querySelector('.fw-bold') || container.querySelector('.member-name');
-                        if (nameElem) memberName = nameElem.innerText.trim();
-                    }
-
-                    if (!memberPic && container) {
-                        let imgElem = container.querySelector('img');
-                        if (imgElem) memberPic = imgElem.getAttribute('src') || imgElem.src || "";
-                    }
-
-                    if (!memberName) memberName = "สมาชิก";
-
-                    memberPointsAssigned.push({ 
-                        uid: uid, 
-                        name: memberName, 
-                        pictureUrl: memberPic, 
-                        points: pts 
-                    });
+                    memberPointsAssigned.push({ uid: uid, name: memberName, pictureUrl: memberPic, points: pts });
                 }
             });
             
@@ -713,7 +660,6 @@
                         let qty = qtySpan ? qtySpan.innerText.replace('x ', '').trim() : "1";
                         let priceText = priceSpan.innerText.replace(' บ.', '').replace(/,/g, '').trim();
                         let price = parseFloat(priceText) || 0;
-                        
                         orderedItemsDetails.push({ name: name, qty: qty, price: price });
                     }
                 });
@@ -741,21 +687,6 @@
                     console.warn("ไม่สามารถดึงข้อมูลโต๊ะเพิ่มเติมได้:", err);
                 }
 
-                memberPointsAssigned = memberPointsAssigned.map(m => {
-                    let foundInTable = currentTableMembers.find(tm => tm.uid === m.uid || tm.id === m.uid);
-                    let finalName = (m.name && m.name !== "สมาชิก") ? m.name : (foundInTable ? (foundInTable.displayName || foundInTable.name || "สมาชิก") : "สมาชิก");
-                    let finalPic = m.pictureUrl ? m.pictureUrl : (foundInTable ? (foundInTable.pictureUrl || foundInTable.photoURL || "") : "");
-                    return {
-                        ...m,
-                        name: finalName,
-                        pictureUrl: finalPic
-                    };
-                });
-
-                let firstMember = memberPointsAssigned.length > 0 ? memberPointsAssigned[0] : (currentTableMembers.length > 0 ? currentTableMembers[0] : null);
-                let primaryCustomerName = firstMember ? (firstMember.name || firstMember.displayName || "สมาชิก") : "สมาชิก";
-                let primaryPictureUrl = firstMember ? (firstMember.pictureUrl || firstMember.photoURL || "") : "";
-
                 const checkoutRef = db.collection("checkouts").doc();
                 batch.set(checkoutRef, {
                     tableNo: cleanTableId,
@@ -767,9 +698,6 @@
                     change: Math.round(totalReceived - net),
                     items: orderedItemsDetails, 
                     membersRewarded: memberPointsAssigned,
-                    customerName: primaryCustomerName,
-                    displayName: primaryCustomerName,
-                    pictureUrl: primaryPictureUrl,
                     activeMembers: currentTableMembers,
                     adults: tableAdults,
                     children: tableChildren,
@@ -788,21 +716,14 @@
                 batch.set(tableRef, {
                     status: "ว่าง",
                     activeMembers: [],
-                    adults: 0,
-                    children: 0,
-                    totalPeople: 0,
-                    packagePrice: 0,
-                    orderCount: 0, 
-                    pax: 0,
-                    customerCount: 0,
-                    peopleCount: 0,
+                    adults: 0, children: 0, totalPeople: 0, packagePrice: 0,
+                    orderCount: 0, pax: 0, customerCount: 0, peopleCount: 0,
                     pendingDiscount: firebase.firestore.FieldValue.delete(),
                     pendingPointsToDeduct: firebase.firestore.FieldValue.delete(),
                     redeemedByUID: firebase.firestore.FieldValue.delete()
                 }, { merge: true });
 
                 let pointAdjustments = {};
-
                 let inputs = document.querySelectorAll('.point-input');
                 inputs.forEach(inp => {
                     let uid = inp.getAttribute('data-uid');
