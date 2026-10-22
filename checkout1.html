@@ -232,7 +232,7 @@
                 }
                 // หากโหลดข้อมูลบิลมาแล้ว ให้สั่งคำนวณหน้าจอใหม่ทันทีเมื่อเปิด/ปิดโปร
                 if (rawItemsListForCalc.length > 0) {
-                    processAndRenderBillItems(rawItemsListForCalc);
+                    AndRenderBillItems(rawItemsListForCalc);
                 }
             });
 
@@ -462,7 +462,7 @@
                 }
 
                 rawItemsListForCalc = Object.values(groupedItemsMap);
-                processAndRenderBillItems(rawItemsListForCalc, activeMembers);
+                AndRenderBillItems(rawItemsListForCalc, activeMembers);
 
             } catch (error) {
                 console.error("Error loading bill:", error);
@@ -475,18 +475,24 @@
         // ฟังก์ชันประมวลผลคำนวณโปรโมชั่นเครื่องดื่ม (ซื้อ 3 ชิ้น ลด 50% ของ 1 ชิ้น แบบคละราคาและทวีคูณ) และเรนเดอร์บิล
         function processAndRenderBillItems(itemsList, activeMembers = []) {
     totalBillAmount = 0;
-    promoDrinkDiscountTotal = 0; // รีเซ็ตยอดส่วนลดโปรโมชั่น
+    promoDrinkDiscountTotal = 0; 
     
-    // คำนวณส่วนลดเฉพาะสินค้าประเภทเครื่องดื่ม (drink)
+    console.log("สถานะโปรโมชั่นเครื่องดื่ม (isDrinkPromoActive):", isDrinkPromoActive);
+    console.log("รายการสินค้าทั้งหมดที่รับมา:", itemsList);
+
+    // หากเปิดใช้งานโปรโมชั่น ให้คำนวณส่วนลด
     if (isDrinkPromoActive) {
         let drinkPriceGroups = {}; 
         itemsList.forEach(item => {
+            // เช็กว่าเป็นเครื่องดื่มและมีราคาต่อหน่วย
             if (item.type === 'drink' && item.unitPrice > 0) {
                 let p = item.unitPrice;
                 if (!drinkPriceGroups[p]) drinkPriceGroups[p] = 0;
                 drinkPriceGroups[p] += item.qty;
             }
         });
+
+        console.log("กลุ่มราคาเครื่องดื่มที่นำมาคำนวณโปร:", drinkPriceGroups);
 
         for (let [priceStr, totalQty] of Object.entries(drinkPriceGroups)) {
             let price = Number(priceStr);
@@ -497,6 +503,8 @@
             }
         }
     }
+
+    console.log("ยอดส่วนลดโปรโมชั่นที่คำนวณได้:", promoDrinkDiscountTotal);
 
     let headItems = itemsList.filter(i => i.type === 'head');
     let stoveItems = itemsList.filter(i => i.type === 'stove');
@@ -509,7 +517,6 @@
     let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
     let html = "";
     
-    // เรนเดอร์รายการสินค้าด้วยราคาเต็มปกติ
     finalOrderedItems.forEach(item => {
         totalBillAmount += item.totalAmt;
         let priceText = item.totalAmt > 0 ? Math.round(item.totalAmt).toLocaleString() + " บ." : "0 บ.";
@@ -530,7 +537,7 @@
     totalBillAmount = Math.round(totalBillAmount);
     document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
-    // คำนวณส่วนลดสุทธิ
+    // สั่งคำนวณยอดสุทธิและแสดงส่วนลดด้านล่าง
     calculateNetTotal();
     
     if (activeMembers.length > 0) {
