@@ -475,9 +475,9 @@
         // ฟังก์ชันประมวลผลคำนวณโปรโมชั่นเครื่องดื่ม (ซื้อ 3 ชิ้น ลด 50% ของ 1 ชิ้น แบบคละราคาและทวีคูณ) และเรนเดอร์บิล
         function processAndRenderBillItems(itemsList, activeMembers = []) {
     totalBillAmount = 0;
-    promoDrinkDiscountTotal = 0; // รีเซ็ตค่าทุกครั้งที่โหลดใหม่
+    promoDrinkDiscountTotal = 0; // รีเซ็ตยอดส่วนลดโปรโมชั่น
     
-    // คำนวณส่วนลดโปรโมชั่นเครื่องดื่มเก็บไว้ในตัวแปรกลาง
+    // คำนวณส่วนลดเฉพาะสินค้าประเภทเครื่องดื่ม (drink)
     if (isDrinkPromoActive) {
         let drinkPriceGroups = {}; 
         itemsList.forEach(item => {
@@ -509,7 +509,7 @@
     let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
     let html = "";
     
-    // แสดงรายการสินค้าทั้งหมดเป็นราคาเต็มปกติ (ไม่เอาส่วนลดมาแทรกในลิสต์รายการอาหาร)
+    // เรนเดอร์รายการสินค้าด้วยราคาเต็มปกติ
     finalOrderedItems.forEach(item => {
         totalBillAmount += item.totalAmt;
         let priceText = item.totalAmt > 0 ? Math.round(item.totalAmt).toLocaleString() + " บ." : "0 บ.";
@@ -530,7 +530,7 @@
     totalBillAmount = Math.round(totalBillAmount);
     document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
-    // สั่งคำนวณยอดสุทธิและรวมส่วนลดลงไปที่กล่องด้านล่าง
+    // คำนวณส่วนลดสุทธิ
     calculateNetTotal();
     
     if (activeMembers.length > 0) {
@@ -546,7 +546,7 @@ function calculateNetTotal() {
     if (discType === "%") manualDiscount = totalBillAmount * (discVal / 100);
     else manualDiscount = discVal;
 
-    // รวมส่วนลดทั้งหมด (ส่วนลดร้าน + แลกแต้ม + ส่วนลดโปรโมชั่นเครื่องดื่ม)
+    // รวมส่วนลดกรอกเอง + แลกแต้ม + โปรโมชั่นเครื่องดื่ม 3 ชิ้น
     let totalDiscount = manualDiscount + pendingDiscountAmount + promoDrinkDiscountTotal;
 
     let net = totalBillAmount - totalDiscount;
@@ -558,7 +558,6 @@ function calculateNetTotal() {
         discRow.style.display = 'flex';
         let txt = "-" + Math.round(totalDiscount).toLocaleString() + " บาท";
         
-        // ใส่รายละเอียดวงเล็บชี้แจงที่มาของส่วนลด
         let details = [];
         if (manualDiscount > 0) details.push("ส่วนลดร้าน");
         if (pendingDiscountAmount > 0) details.push("แลกแต้ม");
