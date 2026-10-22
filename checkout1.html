@@ -178,16 +178,18 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         const currentTableId = urlParams.get('table');
-        let totalBillAmount = 0;
+        
+        let totalBillAmount = 0; // ยอดรวมก่อนหักส่วนลด (Gross Total)
         let totalEarnedPoints = 0;
         
         let pendingDiscountAmount = 0;
         let pendingPointsToDeduct = 0;
         let redeemedByUID = "";
 
-        // ตัวแปรสำหรับเก็บสถานะโปรโมชั่นเครื่องดื่ม 3 ชิ้นลด 50%
+        // ตัวแปรควบคุมโปรโมชั่นเครื่องดื่ม
         let isDrinkPromoActive = false;
-        let rawItemsListForCalc = []; // เก็บรายการดิบไว้คำนวณโปรโมชั่นใหม่เมื่อสถานะสลับ
+        let rawItemsListForCalc = [];
+        let currentPromoDiscount = 0; // เก็บยอดส่วนลดโปรโมชั่นเพื่อนำไปรวมในโซนส่วนลด
 
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
 
@@ -220,14 +222,13 @@
 
             addPaymentRow('เงินโอน', '');
 
-            // ฟังสถานะโปรโมชั่นจาก Firestore แบบ Realtime (ซิงค์ตรงกับหน้า Owner)
+            // ฟังสถานะโปรโมชั่นจาก Firestore แบบ Realtime
             db.collection("settings").doc("promotions").onSnapshot((doc) => {
                 if (doc.exists) {
                     isDrinkPromoActive = doc.data().drink3ForHalfEnabled || false;
                 } else {
                     isDrinkPromoActive = false;
                 }
-                // หากโหลดข้อมูลบิลมาแล้ว ให้สั่งคำนวณหน้าจอใหม่ทันทีเมื่อเปิด/ปิดโปร
                 if (rawItemsListForCalc.length > 0) {
                     processAndRenderBillItems(rawItemsListForCalc);
                 }
@@ -406,7 +407,7 @@
 
                         if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ") ||
                             title.includes("เพิ่มลูกค้า") || details.includes("เพิ่มลูกค้า") ||
-                            title.includes("เพิ่มผู้ใหญ่") || title.includes("เพิ่มเด็ก")) {
+                            title.includes("เพิ่มผู้ใหญ่") || details.includes("เพิ่มเด็ก")) {
                             return; 
                         }
 
@@ -469,15 +470,13 @@
             }
         }
 
-        // ฟังก์ชันประมวลผลคำนวณโปรโมชั่นเครื่องดื่ม (ซื้อ 3 ชิ้น ลด 50% ของ 1 ชิ้น แบบคละราคาและทวีคูณ) และเรนเดอร์บิล
+        // ฟังก์ชันประมวลผลคำนวณและเรนเดอร์รายการ (แยกส่วนลดโปรโมชั่นไปไว้ในโซนส่วนลดด้านล่าง)
         function processAndRenderBillItems(itemsList, activeMembers = []) {
             totalBillAmount = 0;
-            let promoDrinkDiscountTotal = 0;
+            currentPromoDiscount = 0;
             
-            // หากเปิดใช้งานโปรโมชั่นเครื่องดื่ม ให้คำนวณส่วนลดแยกตามกลุ่มราคาเครื่องดื่ม
             if (isDrinkPromoActive) {
-                let drinkPriceGroups = {}; // เก็บจำนวนแก้วแยกตามราคาต่อหน่วยของเครื่องดื่ม
-
+                let drinkPriceGroups = {}; 
                 itemsList.forEach(item => {
                     if (item.type === 'drink' && item.unitPrice > 0) {
                         let p = item.unitPrice;
@@ -486,13 +485,12 @@
                     }
                 });
 
-                // คำนวณส่วนลด: ทุกๆ 3 ชิ้นในราคาเดียวกัน ลดไป 50% ของราคา 1 ชิ้น (ราคา / 2)
                 for (let [priceStr, totalQty] of Object.entries(drinkPriceGroups)) {
                     let price = Number(priceStr);
                     let setsOfThree = Math.floor(totalQty / 3);
                     if (setsOfThree > 0) {
                         let discountPerSet = price / 2;
-                        promoDrinkDiscountTotal += (setsOfThree * discountPerSet);
+                        currentPromoDiscount += (setsOfThree * discountPerSet);
                     }
                 }
             }
@@ -521,17 +519,6 @@
                         "</li>";
             });
 
-            // หากมีส่วนลดจากโปรโมชั่นเครื่องดื่ม ให้แสดงรายการหักส่วนลดโปรโมชั่นในใบเสร็จด้วย
-            if (promoDrinkDiscountTotal > 0) {
-                html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom text-success'>" +
-                            "<div>" +
-                                "<span class='fw-bold'>🎁 ส่วนลดโปรโมชั่นเครื่องดื่ม (3 ชิ้นลด 50%)</span>" +
-                            "</div>" +
-                            "<span class='fw-bold text-nowrap'>-" + Math.round(promoDrinkDiscountTotal).toLocaleString() + " บ.</span>" +
-                        "</li>";
-                totalBillAmount -= promoDrinkDiscountTotal;
-            }
-
             if (!html) html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
 
             document.getElementById('receiptItems').innerHTML = html;
@@ -539,9 +526,6 @@
             totalBillAmount = Math.round(totalBillAmount);
             document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
-            totalEarnedPoints = Math.floor(totalBillAmount / 100);
-            document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
-            
             if (activeMembers.length > 0) {
                 renderMembersList(activeMembers, totalEarnedPoints);
             }
@@ -581,26 +565,35 @@
             container.innerHTML = html;
         }
 
+        // ฟังก์ชันคำนวณยอดสุทธิ (นำส่วนลดโปรโมชั่นมารวมกับส่วนลดทั่วไปในช่อง "ส่วนลด" อัตโนมัติ)
         function calculateNetTotal() {
             let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
             let discType = document.getElementById('discountType').value;
-            let net = totalBillAmount;
-            let discountAmount = 0;
+            let manualDiscount = 0;
 
-            if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
-            else discountAmount = discVal;
+            if (discType === "%") manualDiscount = totalBillAmount * (discVal / 100);
+            else manualDiscount = discVal;
 
-            discountAmount += pendingDiscountAmount;
+            manualDiscount += pendingDiscountAmount;
 
-            net = totalBillAmount - discountAmount;
+            // รวมส่วนลดทั้งหมด (ส่วนลดโปรโมชั่นเครื่องดื่ม + ส่วนลดกรอกเอง + ส่วนลดแลกแต้ม)
+            let totalDiscountAmount = currentPromoDiscount + manualDiscount;
+            let net = totalBillAmount - totalDiscountAmount;
             net = net < 0 ? 0 : net;
             net = Math.round(net);
 
             let discRow = document.getElementById('discountRow');
-            if (discountAmount > 0) {
+            if (totalDiscountAmount > 0) {
                 discRow.style.display = 'flex';
-                let txt = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
-                if (pendingDiscountAmount > 0) txt += " (รวมแลกแต้ม)";
+                let txt = "-" + Math.round(totalDiscountAmount).toLocaleString() + " บาท";
+                
+                let detailNotes = [];
+                if (currentPromoDiscount > 0) detailNotes.push(`โปรเครื่องดื่ม -${Math.round(currentPromoDiscount)}฿`);
+                if (pendingDiscountAmount > 0) detailNotes.push(`แลกแต้ม -${pendingDiscountAmount}฿`);
+                
+                if (detailNotes.length > 0) {
+                    txt += ` (${detailNotes.join(', ')})`;
+                }
                 document.getElementById('discountTxt').innerText = txt;
             } else {
                 discRow.style.display = 'none';
@@ -705,7 +698,8 @@
                 const batch = db.batch();
                 let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
                 let discTypeVal = document.getElementById('discountType').value;
-                let discText = discVal > 0 ? (discVal + " " + discTypeVal) : "ไม่มี";
+                let discText = (discVal > 0 ? (discVal + " " + discTypeVal) : "") + (currentPromoDiscount > 0 ?  (รวมโปรเครื่องดื่ม -${currentPromoDiscount}฿) : "");
+                if(!discText) discText = "ไม่มี";
 
                 let orderedItemsDetails = [];
                 let receiptListItems = document.querySelectorAll('#receiptItems li');
