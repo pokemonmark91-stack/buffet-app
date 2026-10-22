@@ -184,6 +184,7 @@
 
         let isDrinkPromoActive = false;
         let rawItemsListForCalc = [];
+        let currentTableActiveMembers = [];
         let currentPromoDiscount = 0; 
 
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
@@ -208,6 +209,7 @@
 
             addPaymentRow('เงินโอน', '');
 
+            // ฟังสถานะโปรโมชั่นจาก Firestore แบบ Realtime
             db.collection("settings").doc("promotions").onSnapshot((doc) => {
                 if (doc.exists) {
                     isDrinkPromoActive = doc.data().drink3ForHalfEnabled || false;
@@ -215,7 +217,7 @@
                     isDrinkPromoActive = false;
                 }
                 if (rawItemsListForCalc.length > 0) {
-                    processAndRenderBillItems(rawItemsListForCalc);
+                    processAndRenderBillItems(rawItemsListForCalc, currentTableActiveMembers);
                 }
             });
 
@@ -295,7 +297,6 @@
         async function loadBillDetails() {
             try {
                 let groupedItemsMap = {};
-                let activeMembers = [];
                 let dbMenuPrices = {};
                 let dbMenuCategories = {}; 
 
@@ -339,7 +340,7 @@
                 const tableDoc = await db.collection("tables").doc(currentTableId).get();
                 if (tableDoc.exists) {
                     const tableData = tableDoc.data();
-                    activeMembers = tableData.activeMembers || [];
+                    currentTableActiveMembers = tableData.activeMembers || [];
                     const adults = parseInt(tableData.adults) || 0;
                     const children = parseInt(tableData.children) || 0;
                     const pkgPrice = parseFloat(tableData.packagePrice) || 0;
@@ -432,7 +433,7 @@
                 }
 
                 rawItemsListForCalc = Object.values(groupedItemsMap);
-                processAndRenderBillItems(rawItemsListForCalc, activeMembers);
+                processAndRenderBillItems(rawItemsListForCalc, currentTableActiveMembers);
 
             } catch (error) {
                 console.error("Error loading bill:", error);
@@ -496,10 +497,13 @@
             totalBillAmount = Math.round(totalBillAmount);
             document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
+            // คำนวณยอดสุทธิและเรนเดอร์รายชื่อสมาชิกพร้อมแต้ม
+            calculateNetTotal();
             if (activeMembers && activeMembers.length > 0) {
                 renderMembersList(activeMembers, totalEarnedPoints);
+            } else {
+                document.getElementById('membersList').innerHTML = "<div class='alert alert-light text-center small text-muted border'>ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>";
             }
-            calculateNetTotal();
         }
 
         function renderMembersList(members, totalPoints) {
