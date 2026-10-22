@@ -11,11 +11,7 @@
     
     <style>
         body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .receipt-card { 
-            background: white; 
-            border-radius: 12px; 
-            border-top: 6px solid #2c3e50; 
-        }
+        .receipt-card { background: white; border-radius: 12px; border-top: 6px solid #2c3e50; }
         .payment-card { background: white; border-radius: 12px; border-top: 6px solid #27ae60; }
         .dashed-line { border-bottom: 2px dashed #bbb; margin: 12px 0; }
 
@@ -32,7 +28,7 @@
 </head>
 <body class="container py-4">
 
-    <!-- Header (ซ่อนเวลาพิมพ์) -->
+    <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4 no-print">
         <button onclick="goBack()" class="btn btn-outline-secondary fw-bold">◀ ย้อนกลับไปโต๊ะ</button>
         <h3 class="fw-bold m-0 text-dark">💳 ชำระเงิน โต๊ะ <span id="displayTableNo" class="text-primary">-</span></h3>
@@ -40,12 +36,9 @@
     </div>
 
     <div class="row g-4">
-        
         <!-- ฝั่งซ้าย: สลิปใบเสร็จรับเงิน -->
         <div class="col-md-5">
             <div class="card receipt-card shadow-sm p-4" id="receiptCard">
-                
-                <!-- หัวใบเสร็จ -->
                 <div class="text-center mb-2">
                     <h4 class="fw-bold m-0 text-dark">ก๋วยเตี๋ยวบุฟเฟ่ต์99</h4>
                     <div class="text-muted small">ใบเสร็จรับเงิน / RECEIPT</div>
@@ -57,14 +50,12 @@
 
                 <div class="dashed-line"></div>
 
-                <!-- รายการอาหาร -->
                 <ul class="list-unstyled mb-0" id="receiptItems" style="font-size: 14px;">
                     <li class="text-center text-muted">กำลังโหลดรายการ...</li>
                 </ul>
 
                 <div class="dashed-line"></div>
 
-                <!-- สรุปยอดเงิน -->
                 <div class="d-flex justify-content-between mb-1" style="font-size: 14px;">
                     <span class="text-secondary">ยอดรวมก่อนส่วนลด:</span>
                     <span class="fw-bold" id="subTotalTxt">0 บาท</span>
@@ -80,26 +71,21 @@
                     <span class="fw-bold fs-4 text-success" id="receiptNetTotal">0 บาท</span>
                 </div>
 
-                <!-- ท้ายใบเสร็จ -->
                 <div class="text-center mt-3 pt-2 text-muted small border-top">
                     *** ขอบคุณที่อุดหนุนคะ ***
                 </div>
 
-                <!-- ปุ่มพิมพ์ใบเสร็จ -->
                 <div class="mt-3 no-print">
                     <button onclick="window.print()" class="btn btn-outline-primary w-100 fw-bold shadow-sm">
                         🖨️ พิมพ์ใบเสร็จ / บันทึก PDF
                     </button>
                 </div>
-
             </div>
         </div>
 
         <!-- ฝั่งขวา: รับชำระเงินและแจกแต้ม -->
         <div class="col-md-7 no-print">
             <div class="card payment-card shadow-sm p-4">
-                
-                <!-- 1. ส่วนลด -->
                 <h6 class="fw-bold text-dark mb-3">💡 ส่วนลด</h6>
                 <div class="row g-2 mb-4">
                     <div class="col-6">
@@ -113,13 +99,11 @@
                     </div>
                 </div>
 
-                <!-- 2. ยอดสุทธิ -->
                 <div class="alert alert-success d-flex justify-content-between align-items-center py-3 mb-4">
                     <span class="fw-bold fs-5 m-0 text-success">ยอดที่ต้องชำระ:</span>
                     <span id="netTotalTxt" class="fw-bold m-0 text-success" style="font-size: 28px;">0 บาท</span>
                 </div>
 
-                <!-- 3. ช่องทางการชำระเงิน -->
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="fw-bold text-dark m-0">💰 ช่องทางการชำระเงิน</h6>
                     <button type="button" onclick="addPaymentRow()" class="btn btn-sm btn-primary fw-bold">+ เพิ่มช่องชำระเงิน</button>
@@ -137,7 +121,6 @@
 
                 <div class="dashed-line"></div>
 
-                <!-- 4. แจกแต้มสมาชิก -->
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="fw-bold text-dark m-0">🎁 แจกแต้มสมาชิก</h6>
                     <span class="badge bg-primary" id="suggestedPoints">ได้แต้มรวม: 0 แต้ม</span>
@@ -146,13 +129,11 @@
                     <div class="text-muted small">กำลังโหลดข้อมูลสมาชิก...</div>
                 </div>
 
-                <!-- ปุ่มยืนยัน -->
                 <button id="btnConfirm" onclick="confirmPayment()" class="btn btn-success btn-lg w-100 fw-bold shadow">
                     ✅ ยืนยันรับชำระเงิน และปิดโต๊ะ
                 </button>
             </div>
         </div>
-
     </div>
 
     <!-- Firebase JS SDK -->
@@ -177,7 +158,6 @@
         
         let totalBillAmount = 0; 
         let totalEarnedPoints = 0;
-        
         let pendingDiscountAmount = 0;
         let pendingPointsToDeduct = 0;
         let redeemedByUID = "";
@@ -188,40 +168,48 @@
         let currentPromoDiscount = 0; 
 
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
-
         const defaultDrinkPrices = {
             "น้ำเปล่า": 10, "โซดา": 20, "เอสใหญ่": 30, "น้ำกระป๋อง": 30,
             "โคล่า": 15, "โค้ก": 15, "เป๊ปซี่": 15, "สไปรท์": 15,
             "น้ำส้ม": 15, "น้ำแดง": 15, "น้ำเขียว": 15, "น้ำแข็ง": 10
         };
 
-        window.onload = function() {
-            if (!currentTableId) {
-                alert("ไม่พบเลขโต๊ะ กรุณาเลือกโต๊ะใหม่");
-                window.location.href = "dashboard.html";
-                return;
+        // จัดลำดับการทำงานใน window.onload ใหม่ ป้องกันการชนกันของข้อมูล
+        window.onload = async function() {
+            try {
+                if (!currentTableId) {
+                    alert("ไม่พบเลขโต๊ะ กรุณาเลือกโต๊ะใหม่");
+                    window.location.href = "dashboard.html";
+                    return;
+                }
+                
+                // แสดงเลขโต๊ะทันที
+                document.getElementById('displayTableNo').innerText = currentTableId;
+                document.getElementById('receiptTableNo').innerText = currentTableId;
+                
+                const now = new Date();
+                document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
+
+                addPaymentRow('เงินโอน', '');
+
+                // 1. โหลดข้อมูลบิลและรายการอาหารให้เสร็จก่อน 100%
+                await loadBillDetails();
+
+                // 2. หลังจากโหลดข้อมูลเสร็จแล้วค่อยเริ่มฟังสถานะโปรโมชั่นแบบ Realtime
+                db.collection("settings").doc("promotions").onSnapshot((doc) => {
+                    if (doc.exists) {
+                        let newPromoState = doc.data().drink3ForHalfEnabled || false;
+                        if (isDrinkPromoActive !== newPromoState) {
+                            isDrinkPromoActive = newPromoState;
+                            if (rawItemsListForCalc.length > 0) {
+                                processAndRenderBillItems(rawItemsListForCalc, currentTableActiveMembers);
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Window onload error:", err);
             }
-            document.getElementById('displayTableNo').innerText = currentTableId;
-            document.getElementById('receiptTableNo').innerText = currentTableId;
-            
-            const now = new Date();
-            document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
-
-            addPaymentRow('เงินโอน', '');
-
-            // ฟังสถานะโปรโมชั่นจาก Firestore แบบ Realtime
-            db.collection("settings").doc("promotions").onSnapshot((doc) => {
-                if (doc.exists) {
-                    isDrinkPromoActive = doc.data().drink3ForHalfEnabled || false;
-                } else {
-                    isDrinkPromoActive = false;
-                }
-                if (rawItemsListForCalc.length > 0) {
-                    processAndRenderBillItems(rawItemsListForCalc, currentTableActiveMembers);
-                }
-            });
-
-            loadBillDetails();
         };
 
         function goBack() {
@@ -230,6 +218,7 @@
 
         function addPaymentRow(defaultMethod = 'เงินโอน', defaultAmount = '') {
             let container = document.getElementById('paymentRowsContainer');
+            if (!container) return;
             let rowId = 'pay_row_' + Date.now() + Math.floor(Math.random() * 1000);
 
             let rowDiv = document.createElement('div');
@@ -272,18 +261,15 @@
         function checkPointLimit(changedInput) {
             let inputs = document.querySelectorAll('.point-input');
             let totalAssigned = 0;
-            
             inputs.forEach(inp => {
                 if(inp !== changedInput) {
                     totalAssigned += parseInt(inp.value) || 0;
                 }
             });
-            
             let maxAllowed = totalEarnedPoints - totalAssigned;
             if (maxAllowed < 0) maxAllowed = 0;
 
             let currentValue = parseInt(changedInput.value) || 0;
-            
             if (currentValue > maxAllowed) {
                 changedInput.value = maxAllowed;
                 Swal.fire({
@@ -337,7 +323,7 @@
                     }
                 }
 
-                const tableDoc = await db.collection("tables").doc(currentTableId).get();
+                const tableDoc = await db.collection("tables").doc(String(currentTableId)).get();
                 if (tableDoc.exists) {
                     const tableData = tableDoc.data();
                     currentTableActiveMembers = tableData.activeMembers || [];
@@ -370,12 +356,12 @@
 
                 let ordersSnap;
                 try {
-                    ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
+                    ordersSnap = await db.collection("tables").doc(String(currentTableId)).collection("orders").orderBy("timestamp").get();
                 } catch (e) {
-                    ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
+                    ordersSnap = await db.collection("tables").doc(String(currentTableId)).collection("orders").get();
                 }
 
-                if (!ordersSnap.empty) {
+                if (ordersSnap && !ordersSnap.empty) {
                     ordersSnap.forEach(doc => {
                         let item = doc.data();
                         let orderAmt = parseFloat(item.amount || item.price || item.totalAmount) || 0;
@@ -437,9 +423,7 @@
 
             } catch (error) {
                 console.error("Error loading bill:", error);
-                if (typeof Swal !== "undefined") {
-                    Swal.fire("ข้อผิดพลาด", "ไม่สามารถดึงข้อมูลบิลได้: " + error.message, "error");
-                }
+                document.getElementById('receiptItems').innerHTML = "<li class='text-center text-danger'>เกิดข้อผิดพลาดในการโหลดรายการ</li>";
             }
         }
 
@@ -497,7 +481,6 @@
             totalBillAmount = Math.round(totalBillAmount);
             document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
 
-            // คำนวณยอดสุทธิและเรนเดอร์รายชื่อสมาชิกพร้อมแต้ม
             calculateNetTotal();
             if (activeMembers && activeMembers.length > 0) {
                 renderMembersList(activeMembers, totalEarnedPoints);
