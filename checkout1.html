@@ -163,9 +163,8 @@
         let redeemedByUID = "";
 
         let isDrinkPromoActive = false;
-        let rawItemsListForCalc = [];
+        let currentPromoDiscount = 0;
         let currentTableActiveMembers = [];
-        let currentPromoDiscount = 0; 
 
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
         const defaultDrinkPrices = {
@@ -174,42 +173,28 @@
             "น้ำส้ม": 15, "น้ำแดง": 15, "น้ำเขียว": 15, "น้ำแข็ง": 10
         };
 
-        // จัดลำดับการทำงานใน window.onload ใหม่ ป้องกันการชนกันของข้อมูล
-        window.onload = async function() {
-            try {
-                if (!currentTableId) {
-                    alert("ไม่พบเลขโต๊ะ กรุณาเลือกโต๊ะใหม่");
-                    window.location.href = "dashboard.html";
-                    return;
-                }
-                
-                // แสดงเลขโต๊ะทันที
-                document.getElementById('displayTableNo').innerText = currentTableId;
-                document.getElementById('receiptTableNo').innerText = currentTableId;
-                
-                const now = new Date();
-                document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
-
-                addPaymentRow('เงินโอน', '');
-
-                // 1. โหลดข้อมูลบิลและรายการอาหารให้เสร็จก่อน 100%
-                await loadBillDetails();
-
-                // 2. หลังจากโหลดข้อมูลเสร็จแล้วค่อยเริ่มฟังสถานะโปรโมชั่นแบบ Realtime
-                db.collection("settings").doc("promotions").onSnapshot((doc) => {
-                    if (doc.exists) {
-                        let newPromoState = doc.data().drink3ForHalfEnabled || false;
-                        if (isDrinkPromoActive !== newPromoState) {
-                            isDrinkPromoActive = newPromoState;
-                            if (rawItemsListForCalc.length > 0) {
-                                processAndRenderBillItems(rawItemsListForCalc, currentTableActiveMembers);
-                            }
-                        }
-                    }
-                });
-            } catch (err) {
-                console.error("Window onload error:", err);
+        // กลับมาใช้โครงสร้าง window.onload แบบดั้งเดิมที่เสถียรที่สุด
+        window.onload = function() {
+            if (!currentTableId) {
+                alert("ไม่พบเลขโต๊ะ กรุณาเลือกโต๊ะใหม่");
+                window.location.href = "dashboard.html";
+                return;
             }
+            document.getElementById('displayTableNo').innerText = currentTableId;
+            document.getElementById('receiptTableNo').innerText = currentTableId;
+            
+            const now = new Date();
+            document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
+
+            addPaymentRow('เงินโอน', '');
+
+            // โหลดข้อมูลบิลก่อน จากนั้นค่อยดึงสถานะโปรโมชั่นแบบ Realtime มาครอบ
+            loadBillDetails();
+
+            db.collection("settings").doc("promotions").onSnapshot((doc) => {
+                isDrinkPromoActive = doc.exists ? (doc.data().drink3ForHalfEnabled || false) : false;
+                loadBillDetails();
+            });
         };
 
         function goBack() {
@@ -282,7 +267,10 @@
 
         async function loadBillDetails() {
             try {
+                totalBillAmount = 0;
+                currentPromoDiscount = 0;
                 let groupedItemsMap = {};
+
                 let dbMenuPrices = {};
                 let dbMenuCategories = {}; 
 
@@ -418,74 +406,70 @@
                     });
                 }
 
-                rawItemsListForCalc = Object.values(groupedItemsMap);
-                processAndRenderBillItems(rawItemsListForCalc, currentTableActiveMembers);
+                let itemsList = Object.values(groupedItemsMap);
+
+                // คำนวณโปรโมชั่นเครื่องดื่ม (ซื้อครบ 3 ชิ้น ลด 50% ของ 1 ชิ้น)
+                if (isDrinkPromoActive) {
+                    let drinkPriceGroups = {}; 
+                    itemsList.forEach(item => {
+                        if (item.type === 'drink' && item.unitPrice > 0) {
+                            let p = item.unitPrice;
+                            if (!drinkPriceGroups[p]) drinkPriceGroups[p] = 0;
+                            drinkPriceGroups[p] += item.qty;
+                        }
+                    });
+
+                    for (let [priceStr, totalQty] of Object.entries(drinkPriceGroups)) {
+                        let price = Number(priceStr);
+                        let setsOfThree = Math.floor(totalQty / 3);
+                        if (setsOfThree > 0) {
+                            let discountPerSet = price / 2;
+                            currentPromoDiscount += (setsOfThree * discountPerSet);
+                        }
+                    }
+                }
+
+                let headItems = itemsList.filter(i => i.type === 'head');
+                let stoveItems = itemsList.filter(i => i.type === 'stove');
+                let drinkItems = itemsList.filter(i => i.type === 'drink');
+                let foodItems = itemsList.filter(i => i.type === 'food');
+
+                drinkItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
+                foodItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
+
+                let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
+                let html = "";
+                
+                finalOrderedItems.forEach(item => {
+                    totalBillAmount += item.totalAmt;
+                    let priceText = item.totalAmt > 0 ? Math.round(item.totalAmt).toLocaleString() + " บ." : "0 บ.";
+                    
+                    html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
+                                "<div>" +
+                                    "<span class='fw-bold'>" + item.name + "</span> " +
+                                    "<span class='badge bg-light text-dark border ms-1'>x " + item.qty + "</span>" +
+                                "</div>" +
+                                "<span class='fw-bold text-nowrap'>" + priceText + "</span>" +
+                            "</li>";
+                });
+
+                if (!html) html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
+
+                document.getElementById('receiptItems').innerHTML = html;
+                totalBillAmount = Math.round(totalBillAmount);
+                document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
+
+                calculateNetTotal();
+                
+                if (currentTableActiveMembers && currentTableActiveMembers.length > 0) {
+                    renderMembersList(currentTableActiveMembers, totalEarnedPoints);
+                } else {
+                    document.getElementById('membersList').innerHTML = "<div class='alert alert-light text-center small text-muted border'>ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>";
+                }
 
             } catch (error) {
                 console.error("Error loading bill:", error);
                 document.getElementById('receiptItems').innerHTML = "<li class='text-center text-danger'>เกิดข้อผิดพลาดในการโหลดรายการ</li>";
-            }
-        }
-
-        function processAndRenderBillItems(itemsList, activeMembers = []) {
-            totalBillAmount = 0;
-            currentPromoDiscount = 0;
-            
-            if (isDrinkPromoActive) {
-                let drinkPriceGroups = {}; 
-                itemsList.forEach(item => {
-                    if (item.type === 'drink' && item.unitPrice > 0) {
-                        let p = item.unitPrice;
-                        if (!drinkPriceGroups[p]) drinkPriceGroups[p] = 0;
-                        drinkPriceGroups[p] += item.qty;
-                    }
-                });
-
-                for (let [priceStr, totalQty] of Object.entries(drinkPriceGroups)) {
-                    let price = Number(priceStr);
-                    let setsOfThree = Math.floor(totalQty / 3);
-                    if (setsOfThree > 0) {
-                        let discountPerSet = price / 2;
-                        currentPromoDiscount += (setsOfThree * discountPerSet);
-                    }
-                }
-            }
-
-            let headItems = itemsList.filter(i => i.type === 'head');
-            let stoveItems = itemsList.filter(i => i.type === 'stove');
-            let drinkItems = itemsList.filter(i => i.type === 'drink');
-            let foodItems = itemsList.filter(i => i.type === 'food');
-
-            drinkItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
-            foodItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
-
-            let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
-            let html = "";
-            
-            finalOrderedItems.forEach(item => {
-                totalBillAmount += item.totalAmt;
-                let priceText = item.totalAmt > 0 ? Math.round(item.totalAmt).toLocaleString() + " บ." : "0 บ.";
-                
-                html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
-                            "<div>" +
-                                "<span class='fw-bold'>" + item.name + "</span> " +
-                                "<span class='badge bg-light text-dark border ms-1'>x " + item.qty + "</span>" +
-                            "</div>" +
-                            "<span class='fw-bold text-nowrap'>" + priceText + "</span>" +
-                        "</li>";
-            });
-
-            if (!html) html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
-
-            document.getElementById('receiptItems').innerHTML = html;
-            totalBillAmount = Math.round(totalBillAmount);
-            document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
-
-            calculateNetTotal();
-            if (activeMembers && activeMembers.length > 0) {
-                renderMembersList(activeMembers, totalEarnedPoints);
-            } else {
-                document.getElementById('membersList').innerHTML = "<div class='alert alert-light text-center small text-muted border'>ไม่มีสมาชิกสะสมแต้มในโต๊ะนี้</div>";
             }
         }
 
