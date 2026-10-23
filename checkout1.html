@@ -180,6 +180,9 @@
         const currentTableId = urlParams.get('table');
         let totalBillAmount = 0;
         let totalEarnedPoints = 0;
+        let promoDrinkDiscountTotal = 0; // 👈 เพิ่มตัวแปรเก็บยอดส่วนลดโปรโมชั่น
+        let isDrinkPromoActive = false;   // 👈 เพิ่มตัวแปรสถานะเปิด-ปิดโปรจาก Owner
+
         
         let pendingDiscountAmount = 0;
         let pendingPointsToDeduct = 0;
@@ -202,21 +205,61 @@
             "น้ำแข็ง": 10
         };
 
-        window.onload = function() {
-            if (!currentTableId) {
-                alert("ไม่พบเลขโต๊ะ กรุณาเลือกโต๊ะใหม่");
-                window.location.href = "dashboard.html";
-                return;
-            }
-            document.getElementById('displayTableNo').innerText = currentTableId;
-            document.getElementById('receiptTableNo').innerText = currentTableId;
-            
-            const now = new Date();
-            document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
+        window.onload = async function() {
+    if (!currentTableId) {
+        alert("ไม่พบเลขโต๊ะ กรุณาเลือกโต๊ะใหม่");
+        window.location.href = "dashboard.html";
+        return;
+    }
+    document.getElementById('displayTableNo').innerText = currentTableId;
+    document.getElementById('receiptTableNo').innerText = currentTableId;
+    
+    const now = new Date();
+    document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
 
-            addPaymentRow('เงินโอน', '');
-            loadBillDetails();
-        };
+    addPaymentRow('เงินโอน', '');
+
+    // ดึงสถานะโปรโมชั่นจาก Owner
+    try {
+        const promoDoc = await db.collection("settings").doc("promotions").get();
+        if (promoDoc.exists) {
+            isDrinkPromoActive = promoDoc.data().drink3ForHalfEnabled || false;
+        }
+    } catch (e) {
+        console.error("Error loading promo settings:", e);
+    }
+
+    loadBillDetails();
+};
+
+        // ฟังก์ชันคำนวณส่วนลดโปรโมชั่นเครื่องดื่ม (ซื้อ 3 ลด 50% ของ 1 ชิ้น)
+function calculateDrinkPromotion(drinkItems) {
+    if (!isDrinkPromoActive) return 0;
+    
+    let totalDiscount = 0;
+    let priceGroups = {};
+    
+    drinkItems.forEach(item => {
+        let p = item.unitPrice || 0;
+        if (p > 0) {
+            if (!priceGroups[p]) priceGroups[p] = 0;
+            priceGroups[p] += item.qty;
+        }
+    });
+
+    for (let price in priceGroups) {
+        let qty = priceGroups[price];
+        let sets = Math.floor(qty / 3); // ทุกๆ 3 ชิ้น
+        if (sets > 0) {
+            let discountPerSet = (parseFloat(price) / 2); // ลด 50% ของ 1 ชิ้น
+            totalDiscount += sets * discountPerSet;
+        }
+    }
+
+    return totalDiscount;
+}
+
+        
 
         function goBack() {
             window.location.href = "order.html?table=" + currentTableId;
@@ -454,7 +497,7 @@
             });
         }
 
-                // C. เตรียมแสดงผล
+                        // C. เตรียมแสดงผล
         let itemsList = Object.values(groupedItemsMap);
 
         let headItems = itemsList.filter(i => i.type === 'head');
@@ -462,11 +505,15 @@
         let drinkItems = itemsList.filter(i => i.type === 'drink');
         let foodItems = itemsList.filter(i => i.type === 'food');
 
+        // 🎯 [เพิ่มบรรทัดนี้ตรงนี้ครับ] คำนวณส่วนลดโปรโมชั่นเครื่องดื่ม 3 ชิ้นลด 50%
+        promoDrinkDiscountTotal = calculateDrinkPromotion(drinkItems);
+
         // เรียงลำดับเครื่องดื่ม: เรียงตาม "ราคา" ก่อน (มากไปน้อย) ถ้าเท่ากันเรียงตาม "จำนวน" (มากไปน้อย)
         drinkItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
 
-        // เรียงลำดับอาหารที่เหลือ: เรียงตาม "ราคา" ก่อน (มากไปน้อย) ถ้าเท่ากันเรียงตาม "จำนวน" (มากไปน้อย)
+        // เรียงลำดับอาหารที่เหลือ...
         foodItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
+
 
         let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
 
