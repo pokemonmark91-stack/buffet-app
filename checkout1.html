@@ -185,13 +185,6 @@
         let pendingPointsToDeduct = 0;
         let redeemedByUID = "";
 
-        // ตัวแปรสำหรับเก็บสถานะโปรโมชั่นเครื่องดื่ม 3 ชิ้นลด 50%
-        let isDrinkPromoActive = false;
-        let rawItemsListForCalc = []; 
-
-        // 🟢 นำมาวางไว้ตรงนี้ครับ
-        let promoDrinkDiscountTotal = 0;
-
         const drinkKeywords = ["น้ำ", "โซดา", "โคล่า", "ส้ม", "แดง", "เขียว", "เอส", "กระป๋อง", "โค้ก", "เป๊ปซี่", "สไปรท์", "ชา", "เบียร์", "แข็ง", "เครื่องดื่ม"];
 
         const defaultDrinkPrices = {
@@ -222,20 +215,6 @@
             document.getElementById('receiptDateTime').innerText = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'});
 
             addPaymentRow('เงินโอน', '');
-
-            // ฟังสถานะโปรโมชั่นจาก Firestore แบบ Realtime (ซิงค์ตรงกับหน้า Owner)
-            db.collection("settings").doc("promotions").onSnapshot((doc) => {
-                if (doc.exists) {
-                    isDrinkPromoActive = doc.data().drink3ForHalfEnabled || false;
-                } else {
-                    isDrinkPromoActive = false;
-                }
-                // หากโหลดข้อมูลบิลมาแล้ว ให้สั่งคำนวณหน้าจอใหม่ทันทีเมื่อเปิด/ปิดโปร
-                if (rawItemsListForCalc.length > 0) {
-                    AndRenderBillItems(rawItemsListForCalc);
-                }
-            });
-
             loadBillDetails();
         };
 
@@ -314,10 +293,10 @@
 
         async function loadBillDetails() {
     try {
+        totalBillAmount = 0;
         let groupedItemsMap = {};
-        let activeMembers = [];
 
-        // 1. ดึงข้อมูล Menu ทั้งหมดจากหน้า Owner (Collection: menu) มาเก็บไว้
+        // 1. โหลดราคาจาก Master Menu ใน Firebase (Collection: menu)
         let dbMenuPrices = {};
         let dbMenuCategories = {}; 
 
@@ -326,29 +305,30 @@
             if (!menuSnap.empty) {
                 menuSnap.forEach(doc => {
                     let data = doc.data();
-                    let mName = (data.name || data.menuName || "").trim(); // ชื่อเมนูจาก Owner
-                    let mPrice = parseFloat(data.price || data.amount) || 0; // ราคาจาก Owner
-                    let mCategory = (data.category || data.type || "").trim(); // หมวดหมู่จาก Owner
+                    let mName = (data.name || data.menuName || "").trim();
+                    let mPrice = parseFloat(data.price || data.amount) || 0;
+                    let mCategory = (data.category || data.type || "").trim();
                     
-                    if (mName) {
+                    if (mName && mPrice > 0) {
                         dbMenuPrices[mName] = mPrice;
                         dbMenuCategories[mName] = mCategory;
                     }
                 });
-                console.log("✅ ดึงข้อมูลจาก Owner สำเร็จ:", { dbMenuPrices, dbMenuCategories });
+                console.log("✅ โหลดราคา Master สำเร็จ:", dbMenuPrices);
             }
         } catch (err) {
-            console.warn("❌ ดึงข้อมูลจาก Owner ไม่สำเร็จ:", err);
+            console.warn("❌ โหลดราคา Master ไม่สำเร็จ:", err);
         }
 
-        // ฟังก์ชันช่วยรวมร่างสินค้าชื่อเดียวกัน
+        // ฟังก์ชันช่วยจัดกลุ่มสินค้าที่ชื่อเหมือนกัน (แก้ไขให้ใช้ชื่อเป็น Key หลักและเคลียร์ช่องว่างแฝง เพื่อไม่ให้ไส้อ่อนแยกบรรทัด)
         function addOrUpdateGroupItem(name, qty, unitPrice, fixedAmt, type) {
             name = name.trim().replace(/\s+/g, ' ').replace(/^[,\-\+\s]+/, '').trim();
             if (!name) return;
 
+            // ถ้ามีราคาต่อหน่วยจาก Master ส่งมา ให้ยึดราคานั้นเลย
             let finalUnitPrice = unitPrice > 0 ? unitPrice : (fixedAmt / qty || 0);
-            let key = name; 
             
+            let key = name; // ใช้ชื่อสินค้าเป็น Key หลัก เพื่อรวมร่างชื่อเดียวกันทั้งหมด
             if (groupedItemsMap[key]) {
                 groupedItemsMap[key].qty += qty;
                 groupedItemsMap[key].totalAmt += (finalUnitPrice * qty);
@@ -358,13 +338,15 @@
                     qty: qty, 
                     totalAmt: (finalUnitPrice * qty), 
                     type: type,
-                    unitPrice: finalUnitPrice 
+                    unitPrice: finalUnitPrice // เก็บราคาต่อหน่วยไว้ด้วย
                 };
             }
         }
 
-        // A. ดึงข้อมูลโต๊ะ
+        // A. ดึงข้อมูลโต๊ะ (ผู้ใหญ่, เด็ก, ส่วนลด)
         const tableDoc = await db.collection("tables").doc(currentTableId).get();
+        let activeMembers = [];
+        
         if (tableDoc.exists) {
             const tableData = tableDoc.data();
             activeMembers = tableData.activeMembers || [];
@@ -375,6 +357,14 @@
             pendingDiscountAmount = parseFloat(tableData.pendingDiscount) || 0;
             pendingPointsToDeduct = parseInt(tableData.pendingPointsToDeduct) || 0;
             redeemedByUID = tableData.redeemedByUID || "";
+
+            if (pendingDiscountAmount > 0 && typeof Swal !== "undefined") {
+                Swal.fire({
+                    toast: true, position: 'top-end', icon: 'info',
+                    title: `ลูกค้าใช้แต้มแลกส่วนลด ${pendingDiscountAmount} บาท!`,
+                    showConfirmButton: false, timer: 5000
+                });
+            }
                  
             if (adults > 0 && pkgPrice > 0) {
                 addOrUpdateGroupItem("บุฟเฟต์ผู้ใหญ่", adults, pkgPrice, adults * pkgPrice, "head");
@@ -387,7 +377,7 @@
             }
         }
 
-        // B. ดึงข้อมูลออเดอร์ในโต๊ะ
+        // B. ดึงข้อมูลออเดอร์ทั้งหมด
         let ordersSnap;
         try {
             ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
@@ -403,12 +393,14 @@
                 let details = item.details || "";
                 let category = item.category || item.type || ""; 
 
+                // ข้ามรายการที่เป็นแค่ log เปิดโต๊ะ
                 if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ") ||
                     title.includes("เพิ่มลูกค้า") || details.includes("เพิ่มลูกค้า") ||
                     title.includes("เพิ่มผู้ใหญ่") || title.includes("เพิ่มเด็ก")) {
                     return; 
                 }
 
+                // จัดการเตา/ซุป
                 if (title.includes("เตา") || details.includes("เตา") || details.includes("ซุป") || category.includes("เตา")) {
                     let name = details ? "สั่งเตา (" + details + ")" : title;
                     addOrUpdateGroupItem(name, 1, orderAmt, orderAmt, "stove");
@@ -418,6 +410,7 @@
                 let textToParse = details || title;
                 textToParse = textToParse.replace(/^สั่งอาหาร\s*[\(\-]?.*?[\)\-]?\s*/, '').trim();
 
+                // หั่นรายการอาหาร เช่น "น้ำเลม่อน x1 โออิชิ x1"
                 let regex = /([^\d\s][^xX×\n\r,]*?)\s*[xX×]\s*(\d+)/g;
                 let match;
                 let parsedItems = [];
@@ -428,294 +421,92 @@
                     if (itemName) parsedItems.push({ name: itemName, qty: itemQty });
                 }
 
+                // ถ้าไม่มีตัว x ให้ถือว่าเป็น 1 รายการ
                 if (parsedItems.length === 0 && textToParse) {
                     parsedItems.push({ name: textToParse, qty: 1 });
                 }
 
+                // โยนเข้าตะกร้าทีละรายการ
                 parsedItems.forEach(it => {
-                    let cleanName = it.name.trim();
-                    
-                    // 🎯 ดึงราคาและหมวดหมู่ตรงจากข้อมูลที่ Owner ตั้งไว้
-                    let unitPriceFromOwner = dbMenuPrices[cleanName] || 0;
-                    let categoryFromOwner = dbMenuCategories[cleanName] || "";
-
-                    // เช็กว่าเป็นเครื่องดื่มหรือไม่ (อิงจากหมวดหมู่ในหน้า Owner เป็นหลัก)
+                    let menuCategoryInDb = dbMenuCategories[it.name] || "";
                     let isDrink = (
-                        categoryFromOwner.includes("เครื่องดื่ม") || 
-                        categoryFromOwner.includes("Drink") || 
-                        categoryFromOwner.includes("น้ำ") ||
-                        category.includes("เครื่องดื่ม") ||
-                        cleanName.includes("เบียร์") || 
-                        cleanName.includes("สิงห์")
+                        category === "เครื่องดื่ม" || 
+                        category.includes("Drink") || 
+                        category.includes("น้ำ") || 
+                        menuCategoryInDb.includes("เครื่องดื่ม") || 
+                        menuCategoryInDb.includes("Drink") ||
+                        (typeof drinkKeywords !== "undefined" && drinkKeywords.some(kw => details.includes(kw) || title.includes(kw) || it.name.includes(kw)))
                     );
 
                     let type = isDrink ? "drink" : "food";
                     
-                    // ถ้าร้านตั้งราคาในหน้า Owner ให้ใช้ราคานั้นทันที ถ้าไม่มีค่อยหารจากยอดรวม
-                    let finalUnitPrice = unitPriceFromOwner > 0 ? unitPriceFromOwner : (orderAmt / it.qty || 0);
+                    // หากราคาต่อหน่วย
+                    let unitPriceFromDB = dbMenuPrices[it.name] || 0;
+                    if (unitPriceFromDB === 0 && typeof defaultDrinkPrices !== "undefined") {
+                        unitPriceFromDB = defaultDrinkPrices[it.name] || 0;
+                    }
 
-                    addOrUpdateGroupItem(cleanName, it.qty, finalUnitPrice, orderAmt, type);
+                    // ถ้าใน 1 ออเดอร์สั่งของอย่างเดียว ให้เอา orderAmt มาใช้เป็นราคาสำรอง
+                    let fallbackFixedAmt = (parsedItems.length === 1 && orderAmt > 0) ? orderAmt : 0;
+                    
+                    addOrUpdateGroupItem(it.name, it.qty, unitPriceFromDB, fallbackFixedAmt, type);
                 });
             });
         }
 
-        rawItemsListForCalc = Object.values(groupedItemsMap);
-        processAndRenderBillItems(rawItemsListForCalc, activeMembers);
+                // C. เตรียมแสดงผล
+        let itemsList = Object.values(groupedItemsMap);
+
+        let headItems = itemsList.filter(i => i.type === 'head');
+        let stoveItems = itemsList.filter(i => i.type === 'stove');
+        let drinkItems = itemsList.filter(i => i.type === 'drink');
+        let foodItems = itemsList.filter(i => i.type === 'food');
+
+        // เรียงลำดับเครื่องดื่ม: เรียงตาม "ราคา" ก่อน (มากไปน้อย) ถ้าเท่ากันเรียงตาม "จำนวน" (มากไปน้อย)
+        drinkItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
+
+        // เรียงลำดับอาหารที่เหลือ: เรียงตาม "ราคา" ก่อน (มากไปน้อย) ถ้าเท่ากันเรียงตาม "จำนวน" (มากไปน้อย)
+        foodItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
+
+        let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
+
+        let html = "";
+        
+        finalOrderedItems.forEach(item => {
+            // บวกยอดรวมทั้งหมด
+            totalBillAmount += item.totalAmt;
+            
+            let priceText = item.totalAmt > 0 ? Math.round(item.totalAmt).toLocaleString() + " บ." : "0 บ.";
+            
+            html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
+                        "<div>" +
+                            "<span class='fw-bold'>" + item.name + "</span> " +
+                            "<span class='badge bg-light text-dark border ms-1'>x " + item.qty + "</span>" +
+                        "</div>" +
+                        "<span class='fw-bold text-nowrap'>" + priceText + "</span>" +
+                    "</li>";
+        });
+
+        if (!html) html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
+
+        document.getElementById('receiptItems').innerHTML = html;
+        
+        totalBillAmount = Math.round(totalBillAmount);
+        document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
+
+        totalEarnedPoints = Math.floor(totalBillAmount / 100);
+        document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
+        
+        if (typeof renderMembersList === "function") renderMembersList(activeMembers, totalEarnedPoints);
+        if (typeof calculateNetTotal === "function") calculateNetTotal();
 
     } catch (error) {
         console.error("Error loading bill:", error);
-    }
-}
-                function addOrUpdateGroupItem(name, qty, unitPrice, fixedAmt, type) {
-                    name = name.trim().replace(/\s+/g, ' ').replace(/^[,\-\+\s]+/, '').trim();
-                    if (!name) return;
-
-                    let finalUnitPrice = unitPrice > 0 ? unitPrice : (fixedAmt / qty || 0);
-                    let key = name; 
-                    
-                    if (groupedItemsMap[key]) {
-                        groupedItemsMap[key].qty += qty;
-                        groupedItemsMap[key].totalAmt += (finalUnitPrice * qty);
-                    } else {
-                        groupedItemsMap[key] = { 
-                            name: name, 
-                            qty: qty, 
-                            totalAmt: (finalUnitPrice * qty), 
-                            type: type,
-                            unitPrice: finalUnitPrice 
-                        };
-                    }
-                }
-
-                const tableDoc = await db.collection("tables").doc(currentTableId).get();
-                
-                if (tableDoc.exists) {
-                    const tableData = tableDoc.data();
-                    activeMembers = tableData.activeMembers || [];
-                    const adults = parseInt(tableData.adults) || 0;
-                    const children = parseInt(tableData.children) || 0;
-                    const pkgPrice = parseFloat(tableData.packagePrice) || 0;
-
-                    pendingDiscountAmount = parseFloat(tableData.pendingDiscount) || 0;
-                    pendingPointsToDeduct = parseInt(tableData.pendingPointsToDeduct) || 0;
-                    redeemedByUID = tableData.redeemedByUID || "";
-
-                    if (pendingDiscountAmount > 0 && typeof Swal !== "undefined") {
-                        Swal.fire({
-                            toast: true, position: 'top-end', icon: 'info',
-                            title: `ลูกค้าใช้แต้มแลกส่วนลด ${pendingDiscountAmount} บาท!`,
-                            showConfirmButton: false, timer: 5000
-                        });
-                    }
-                         
-                    if (adults > 0 && pkgPrice > 0) {
-                        addOrUpdateGroupItem("บุฟเฟต์ผู้ใหญ่", adults, pkgPrice, adults * pkgPrice, "head");
-                    }
-                    if (children > 0) {
-                        const childPrice = parseFloat(tableData.childPackagePrice || tableData.childPrice) || (pkgPrice / 2);
-                        if (childPrice > 0) {
-                            addOrUpdateGroupItem("บุฟเฟต์เด็ก", children, childPrice, children * childPrice, "head");
-                        }
-                    }
-                }
-
-                let ordersSnap;
-                try {
-                    ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").orderBy("timestamp").get();
-                } catch (e) {
-                    ordersSnap = await db.collection("tables").doc(currentTableId).collection("orders").get();
-                }
-
-                if (!ordersSnap.empty) {
-                    ordersSnap.forEach(doc => {
-                        let item = doc.data();
-                        let orderAmt = parseFloat(item.amount || item.price || item.totalAmount) || 0;
-                        let title = item.action || item.menuName || item.name || "";
-                        let details = item.details || "";
-                        let category = item.category || item.type || ""; 
-
-                        if (title.includes("เปิดโต๊ะ") || details.includes("เปิดโต๊ะ") ||
-                            title.includes("เพิ่มลูกค้า") || details.includes("เพิ่มลูกค้า") ||
-                            title.includes("เพิ่มผู้ใหญ่") || title.includes("เพิ่มเด็ก")) {
-                            return; 
-                        }
-
-                        if (title.includes("เตา") || details.includes("เตา") || details.includes("ซุป") || category.includes("เตา")) {
-                            let name = details ? "สั่งเตา (" + details + ")" : title;
-                            addOrUpdateGroupItem(name, 1, orderAmt, orderAmt, "stove");
-                            return;
-                        }
-
-                        let textToParse = details || title;
-                        textToParse = textToParse.replace(/^สั่งอาหาร\s*[\(\-]?.*?[\)\-]?\s*/, '').trim();
-
-                        let regex = /([^\d\s][^xX×\n\r,]*?)\s*[xX×]\s*(\d+)/g;
-                        let match;
-                        let parsedItems = [];
-
-                        while ((match = regex.exec(textToParse)) !== null) {
-                            let itemName = match[1].replace(/^[,\-\+\s]+/, '').trim();
-                            let itemQty = parseInt(match[2]) || 1;
-                            if (itemName) parsedItems.push({ name: itemName, qty: itemQty });
-                        }
-
-                        if (parsedItems.length === 0 && textToParse) {
-                            parsedItems.push({ name: textToParse, qty: 1 });
-                        }
-
-                        parsedItems.forEach(it => {
-                            let menuCategoryInDb = dbMenuCategories[it.name] || "";
-                            let isDrink = (
-                                category === "เครื่องดื่ม" || 
-                                category.includes("Drink") || 
-                                category.includes("น้ำ") || 
-                                menuCategoryInDb.includes("เครื่องดื่ม") || 
-                                menuCategoryInDb.includes("Drink") ||
-                                (typeof drinkKeywords !== "undefined" && drinkKeywords.some(kw => details.includes(kw) || title.includes(kw) || it.name.includes(kw)))
-                            );
-
-                            let type = isDrink ? "drink" : "food";
-                            
-                            let unitPriceFromDB = dbMenuPrices[it.name] || 0;
-                            if (unitPriceFromDB === 0 && typeof defaultDrinkPrices !== "undefined") {
-                                unitPriceFromDB = defaultDrinkPrices[it.name] || 0;
-                            }
-
-                            let fallbackFixedAmt = (parsedItems.length === 1 && orderAmt > 0) ? orderAmt : 0;
-                            
-                            addOrUpdateGroupItem(it.name, it.qty, unitPriceFromDB, fallbackFixedAmt, type);
-                        });
-                    });
-                }
-
-                rawItemsListForCalc = Object.values(groupedItemsMap);
-                AndRenderBillItems(rawItemsListForCalc, activeMembers);
-
-            } catch (error) {
-                console.error("Error loading bill:", error);
-                if (typeof Swal !== "undefined") {
-                    Swal.fire("ข้อผิดพลาด", "ไม่สามารถดึงข้อมูลบิลได้: " + error.message, "error");
-                }
-            }
-        }
-
-        // ฟังก์ชันประมวลผลคำนวณโปรโมชั่นเครื่องดื่ม (ซื้อ 3 ชิ้น ลด 50% ของ 1 ชิ้น แบบคละราคาและทวีคูณ) และเรนเดอร์บิล
-        function processAndRenderBillItems(itemsList, activeMembers = []) {
-    totalBillAmount = 0;
-    promoDrinkDiscountTotal = 0; 
-    
-    console.log("สถานะโปรโมชั่นเครื่องดื่ม (isDrinkPromoActive):", isDrinkPromoActive);
-    console.log("รายการสินค้าทั้งหมดที่รับมา:", itemsList);
-
-    // หากเปิดใช้งานโปรโมชั่น ให้คำนวณส่วนลด
-    if (isDrinkPromoActive) {
-        let drinkPriceGroups = {}; 
-        itemsList.forEach(item => {
-            // เช็กว่าเป็นเครื่องดื่มและมีราคาต่อหน่วย
-            if (item.type === 'drink' && item.unitPrice > 0) {
-                let p = item.unitPrice;
-                if (!drinkPriceGroups[p]) drinkPriceGroups[p] = 0;
-                drinkPriceGroups[p] += item.qty;
-            }
-        });
-
-        console.log("กลุ่มราคาเครื่องดื่มที่นำมาคำนวณโปร:", drinkPriceGroups);
-
-        for (let [priceStr, totalQty] of Object.entries(drinkPriceGroups)) {
-            let price = Number(priceStr);
-            let setsOfThree = Math.floor(totalQty / 3);
-            if (setsOfThree > 0) {
-                let discountPerSet = price / 2;
-                promoDrinkDiscountTotal += (setsOfThree * discountPerSet);
-            }
+        if (typeof Swal !== "undefined") {
+            Swal.fire("ข้อผิดพลาด", "ไม่สามารถดึงข้อมูลบิลได้: " + error.message, "error");
         }
     }
-
-    console.log("ยอดส่วนลดโปรโมชั่นที่คำนวณได้:", promoDrinkDiscountTotal);
-
-    let headItems = itemsList.filter(i => i.type === 'head');
-    let stoveItems = itemsList.filter(i => i.type === 'stove');
-    let drinkItems = itemsList.filter(i => i.type === 'drink');
-    let foodItems = itemsList.filter(i => i.type === 'food');
-
-    drinkItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
-    foodItems.sort((a, b) => (b.unitPrice - a.unitPrice) || (b.qty - a.qty));
-
-    let finalOrderedItems = [...headItems, ...stoveItems, ...drinkItems, ...foodItems];
-    let html = "";
-    
-    finalOrderedItems.forEach(item => {
-        totalBillAmount += item.totalAmt;
-        let priceText = item.totalAmt > 0 ? Math.round(item.totalAmt).toLocaleString() + " บ." : "0 บ.";
-        
-        html += "<li class='d-flex justify-content-between align-items-start mb-2 pb-1 border-bottom'>" +
-                    "<div>" +
-                        "<span class='fw-bold'>" + item.name + "</span> " +
-                        "<span class='badge bg-light text-dark border ms-1'>x " + item.qty + "</span>" +
-                    "</div>" +
-                    "<span class='fw-bold text-nowrap'>" + priceText + "</span>" +
-                "</li>";
-    });
-
-    if (!html) html = "<li class='text-center text-danger'>ไม่พบรายการสั่งอาหารสำหรับโต๊ะนี้</li>";
-
-    document.getElementById('receiptItems').innerHTML = html;
-    
-    totalBillAmount = Math.round(totalBillAmount);
-    document.getElementById('subTotalTxt').innerText = totalBillAmount.toLocaleString() + " บาท";
-
-    // สั่งคำนวณยอดสุทธิและแสดงส่วนลดด้านล่าง
-    calculateNetTotal();
-    
-    if (activeMembers.length > 0) {
-        renderMembersList(activeMembers, totalEarnedPoints);
-    }
 }
-
-function calculateNetTotal() {
-    let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-    let discType = document.getElementById('discountType').value;
-    let manualDiscount = 0;
-
-    if (discType === "%") manualDiscount = totalBillAmount * (discVal / 100);
-    else manualDiscount = discVal;
-
-    // รวมส่วนลดกรอกเอง + แลกแต้ม + โปรโมชั่นเครื่องดื่ม 3 ชิ้น
-    let totalDiscount = manualDiscount + pendingDiscountAmount + promoDrinkDiscountTotal;
-
-    let net = totalBillAmount - totalDiscount;
-    net = net < 0 ? 0 : net;
-    net = Math.round(net);
-
-    let discRow = document.getElementById('discountRow');
-    if (totalDiscount > 0) {
-        discRow.style.display = 'flex';
-        let txt = "-" + Math.round(totalDiscount).toLocaleString() + " บาท";
-        
-        let details = [];
-        if (manualDiscount > 0) details.push("ส่วนลดร้าน");
-        if (pendingDiscountAmount > 0) details.push("แลกแต้ม");
-        if (promoDrinkDiscountTotal > 0) details.push("โปรเครื่องดื่ม 3 ชิ้น");
-        
-        if (details.length > 0) {
-            txt += ` (${details.join(', ')})`;
-        }
-        
-        document.getElementById('discountTxt').innerText = txt;
-    } else {
-        discRow.style.display = 'none';
-    }
-
-    document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
-    document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
-    document.getElementById('netTotalTxt').dataset.net = net; 
-
-    totalEarnedPoints = Math.floor(net / 100); 
-    document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
-
-    calculateSplitPayment();
-}
-        
         function renderMembersList(members, totalPoints) {
             let container = document.getElementById('membersList');
             if (!members || members.length === 0) {
@@ -750,40 +541,53 @@ function calculateNetTotal() {
         }
 
         function calculateNetTotal() {
-            let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-            let discType = document.getElementById('discountType').value;
-            let net = totalBillAmount;
-            let discountAmount = 0;
+    let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
+    let discType = document.getElementById('discountType').value;
+    let manualDiscount = 0;
 
-            if (discType === "%") discountAmount = totalBillAmount * (discVal / 100);
-            else discountAmount = discVal;
+    // 1. คำนวณส่วนลดที่แคชเชียร์กรอกเอง
+    if (discType === "%") manualDiscount = totalBillAmount * (discVal / 100);
+    else manualDiscount = discVal;
 
-            discountAmount += pendingDiscountAmount;
+    // 2. รวมส่วนลดทั้งหมดเข้าด้วยกัน (ส่วนลดกรอกเอง + แลกแต้ม + โปรเครื่องดื่ม)
+    let totalDiscount = manualDiscount + pendingDiscountAmount + promoDrinkDiscountTotal;
 
-            net = totalBillAmount - discountAmount;
-            net = net < 0 ? 0 : net;
-            net = Math.round(net);
+    let net = totalBillAmount - totalDiscount;
+    net = net < 0 ? 0 : net;
+    net = Math.round(net);
 
-            let discRow = document.getElementById('discountRow');
-            if (discountAmount > 0) {
-                discRow.style.display = 'flex';
-                let txt = "-" + Math.round(discountAmount).toLocaleString() + " บาท";
-                if (pendingDiscountAmount > 0) txt += " (รวมแลกแต้ม)";
-                document.getElementById('discountTxt').innerText = txt;
-            } else {
-                discRow.style.display = 'none';
-            }
-
-            document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
-            document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
-            document.getElementById('netTotalTxt').dataset.net = net; 
-
-            totalEarnedPoints = Math.floor(net / 100); 
-            document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
-
-            calculateSplitPayment();
+    // 3. แสดงผลแถบส่วนลดและกำกับรายละเอียด
+    let discRow = document.getElementById('discountRow');
+    if (totalDiscount > 0) {
+        discRow.style.display = 'flex';
+        let txt = "-" + Math.round(totalDiscount).toLocaleString() + " บาท";
+        
+        // เขียนข้อความกำกับว่าได้ส่วนลดจากทางไหนบ้าง
+        let details = [];
+        if (manualDiscount > 0) details.push("ส่วนลดร้าน");
+        if (pendingDiscountAmount > 0) details.push("แลกแต้ม");
+        if (promoDrinkDiscountTotal > 0) details.push("โปรเครื่องดื่ม 3 ชิ้น");
+        
+        if (details.length > 0) {
+            txt += ` (${details.join(', ')})`;
         }
+        
+        document.getElementById('discountTxt').innerText = txt;
+    } else {
+        discRow.style.display = 'none';
+    }
 
+    // 4. แสดงยอดชำระสุทธิ
+    document.getElementById('netTotalTxt').innerText = net.toLocaleString() + " บาท";
+    document.getElementById('receiptNetTotal').innerText = net.toLocaleString() + " บาท";
+    document.getElementById('netTotalTxt').dataset.net = net; 
+
+    // 5. คำนวณแต้มสะสมใหม่จากยอดสุทธิหลังหักส่วนลดทั้งหมด
+    totalEarnedPoints = Math.floor(net / 100); 
+    document.getElementById('suggestedPoints').innerText = "ได้แต้มรวม: " + totalEarnedPoints + " แต้ม";
+
+    calculateSplitPayment();
+}
         function calculateSplitPayment() {
             let net = parseFloat(document.getElementById('netTotalTxt').dataset.net) || 0;
             let totalReceived = 0;
@@ -945,6 +749,7 @@ function calculateNetTotal() {
                     displayName: primaryCustomerName,
                     pictureUrl: primaryPictureUrl,
                     activeMembers: currentTableMembers,
+                    // ✅ เพิ่มข้อมูลจำนวนคนและแพ็กเกจส่งให้ Dashboard
                     adults: tableAdults,
                     children: tableChildren,
                     customerCount: tableTotalPeople,
