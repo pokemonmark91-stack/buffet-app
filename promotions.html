@@ -212,7 +212,9 @@
             activePromos.forEach(p => {
                 let imageUrl = p.imageUrl || "https://via.placeholder.com/400x200?text=No+Image";
                 let badge = p.badge ? <div class="promo-badge">${p.badge}</div> : "";
-                let expiryText = p.expiry ? 📅 หมดเขต: ${p.expiry} : "";
+                
+                // 🛠️ แยกเขียนเงื่อนไขวันหมดเขตข้างนอก เพื่อป้องกัน Backtick ชนกัน
+                let expiryHtml = p.expiry ? <div class="promo-date">📅 หมดเขต: ${p.expiry}</div> : "";
 
                 html += `
                     <div class="promo-card">
@@ -222,7 +224,7 @@
                         <div class="promo-content">
                             <h3 class="promo-title">${p.title || "โปรโมชั่นพิเศษ"}</h3>
                             <p class="promo-desc">${p.description || ""}</p>
-                            ${p.expiry ? <div class="promo-date">${expiryText}</div> : ""}
+                            ${expiryHtml}
                         </div>
                     </div>
                 `;
