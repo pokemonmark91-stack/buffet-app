@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>จัดการโปรโมชั่น - Owner Panel</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .promo-edit-card { background: white; border-radius: 12px; border-left: 5px solid #ff7e5f; box-shadow: 0 2px 6px rgba(0,0,0,0.05); margin-bottom: 20px; padding: 20px; }
+        .preview-img { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd; background: #eee; }
+    </style>
+</head>
+<body class="py-4">
+
+    <div class="container" style="max-width: 800px;">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <a href="dashboard.html" class="btn btn-outline-secondary fw-bold"><i class="bi bi-arrow-left"></i> กลับหน้าหลัก</a>
+            <h3 class="fw-bold m-0 text-dark">⚙️ จัดการโปรโมชั่นร้าน</h3>
+            <button onclick="savePromotions()" class="btn btn-success fw-bold" id="btnSave">
+                <i class="bi bi-save"></i> บันทึกการเปลี่ยนแปลง
+            </button>
+        </div>
+
+        <!-- คำแนะนำ -->
+        <div class="alert alert-info small mb-4">
+            💡 คุณสามารถเพิ่มโปรโมชั่นได้หลายรายการ กรอกข้อความ เลือกรูปภาพจากเครื่อง และกดสวิตช์เปิด/ปิดการแสดงผล จากนั้นกดปุ่ม <b>"บันทึกการเปลี่ยนแปลง"</b> ด้านบนขวา
+        </div>
+
+        <!-- พื้นที่แสดงรายการโปรโมชั่น -->
+        <div id="promoListContainer">
+            <div class="text-center py-5 text-muted">กำลังโหลดข้อมูลโปรโมชั่น...</div>
+        </div>
+
+        <!-- ปุ่มเพิ่มโปรโมชั่น -->
+        <button onclick="addPromoCard()" class="btn btn-outline-primary w-100 py-3 fw-bold border-dashed shadow-sm mb-5">
+            <i class="bi bi-plus-circle-fill fs-5"></i> + เพิ่มโปรโมชั่นใหม่
+        </button>
+    </div>
+
+    <!-- Firebase JS SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+            authDomain: "buffet-system-9b165.firebaseapp.com",
+            projectId: "buffet-system-9b165",
+            storageBucket: "buffet-system-9b165.firebasestorage.app",
+            messagingSenderId: "144497251618",
+            appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+            measurementId: "G-82JK3EL1HL"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        let loadedPromos = [];
+
+        window.onload = function() {
+            loadPromotions();
+        };
+
+        // โหลดข้อมูลโปรโมชั่นเดิมจาก Firestore
+        async function loadPromotions() {
+            try {
+                const docRef = db.collection("settings").doc("promotions");
+                const docSnap = await docRef.get();
+                
+                if (docSnap.exists && docSnap.data().list) {
+                    loadedPromos = docSnap.data().list;
+                } else {
+                    loadedPromos = [];
+                }
+                renderPromoCards();
+            } catch (err) {
+                console.error("Error loading promotions:", err);
+                Swal.fire("ข้อผิดพลาด", "ไม่สามารถโหลดข้อมูลโปรโมชั่นได้", "error");
+            }
+        }
+
+        // เรนเดอร์การ์ดโปรโมชั่นทั้งหมดลงหน้าจอ
+        function renderPromoCards() {
+            const container = document.getElementById('promoListContainer');
+            if (loadedPromos.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-muted bg-white rounded shadow-sm mb-3">ยังไม่มีโปรโมชั่น กดปุ่มด้านล่างเพื่อเพิ่มได้เลยครับ</div>';
+                return;
+            }
+
+            let html = "";
+            loadedPromos.forEach((p, index) => {
+                let badgeText = p.badge || "HOT 🔥";
+                let title = p.title || "";
+                let desc = p.description || "";
+                let expiry = p.expiry || "";
+                let imageUrl = p.imageUrl || "https://via.placeholder.com/150";
+                let activeChecked = p.active !== false ? "checked" : "";
+
+                html += `
+                    <div class="promo-edit-card" id="promo_card_${index}">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="fw-bold text-secondary">โปรโมชั่นที่ #${index + 1}</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="active_${index}" ${activeChecked} onchange="updatePromoData(${index}, 'active', this.checked)">
+                                    <label class="form-check-label small fw-bold" for="active_${index}">เปิดใช้งาน</label>
+                                </div>
+                                <button class="btn btn-outline-danger btn-sm" onclick="removePromoCard(${index})" title="ลบโปรโมชั่นนี้">🗑️ ลบ</button>
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-3 text-center">
+                                <label class="form-label small fw-bold d-block text-start">รูปภาพโปรโมชั่น</label>
+                                <img src="${imageUrl}" class="preview-img mb-2" id="preview_${index}"><br>
+                                <input type="file" class="form-control form-control-sm" id="file_${index}" accept="image/*" onchange="previewImage(event, ${index})">
+                            </div>
+                            <div class="col-md-9">
+                                <div class="row g-2">
+                                    <div class="col-sm-8">
+                                        <label class="form-label small fw-bold">หัวข้อโปรโมชั่น (Title)</label>
+                                        <input type="text" class="form-control form-control-sm" id="title_${index}" value="${title}" oninput="updatePromoData(${index}, 'title', this.value)" placeholder="เช่น เบียร์ 3 ขวด ลด 50%">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label class="form-label small fw-bold">ป้ายกำกับ (Badge)</label>
+                                        <input type="text" class="form-control form-control-sm" id="badge_${index}" value="${badgeText}" oninput="updatePromoData(${index}, 'badge', this.value)" placeholder="เช่น HOT 🔥">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-bold">รายละเอียด / เงื่อนไข</label>
+                                        <textarea class="form-control form-control-sm" rows="2" id="desc_${index}" oninput="updatePromoData(${index}, 'description', this.value)" placeholder="รายละเอียดโปรโมชั่น...">${desc}</textarea>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small fw-bold">วันหมดเขต / ระยะเวลา</label>
+                                        <input type="text" class="form-control form-control-sm" id="expiry_${index}" value="${expiry}" oninput="updatePromoData(${index}, 'expiry', this.value)" placeholder="เช่น 31 ธันวาคม 2569">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // เพิ่มการ์ดโปรโมชั่นใหม่
+        function addPromoCard() {
+            loadedPromos.push({
+                title: "",
+                description: "",
+                badge: "HOT 🔥",
+                expiry: "",
+                imageUrl: "",
+                active: true,
+                newFile: null
+            });
+            renderPromoCards();
+        }
+
+        // ลบการ์ดโปรโมชั่น
+        function removePromoCard(index) {
+            Swal.fire({
+                title: "ยืนยันการลบ?",
+                text: "ต้องการลบโปรโมชั่นนี้ใช่หรือไม่",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "ลบ",
+                cancelButtonText: "ยกเลิก"
+            }).then((res) => {
+                if (res.isConfirmed) {
+                    loadedPromos.splice(index, 1);
+                    renderPromoCards();
+                }
+            });
+        }
+
+        // อัปเดตข้อมูลแบบ Real-time ลงในอาเรย์ชั่วคราว
+        function updatePromoData(index, field, value) {
+            loadedPromos[index][field] = value;
+        }
+
+        // พรีวิวรูปภาพจากเครื่อง
+        function previewImage(event, index) {
+            let file = event.target.files[0];
+            if (file) {
+                loadedPromos[index].newFile = file; // เก็บไฟล์จริงไว้รออัปโหลดตอนกดบันทึก
+                let reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById(`preview_${index}`).src = e.target.result;
+                    loadedPromos[index].imageUrl = e.target.result; // แสดงชั่วคราว
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // บันทึกข้อมูลทั้งหมดลง Firebase
+        async function savePromotions() {
+            const btn = document.getElementById('btnSave');
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> กำลังบันทึก...`;
+
+            try {
+                // วนลูปเช็กเพื่ออัปโหลดรูปภาพใหม่ขึ้น Firebase Storage (ถ้ามีเลือกไฟล์ใหม่มา)
+                for (let i = 0; i < loadedPromos.length; i++) {
+                    if (loadedPromos[i].newFile) {
+                        let file = loadedPromos[i].newFile;
+                        let storageRef = storage.ref(`promotions/${Date.now()}_${file.name}`);
+                        let snapshot = await storageRef.put(file);
+                        let downloadUrl = await snapshot.ref.getDownloadURL();
+                        
+                        loadedPromos[i].imageUrl = downloadUrl;
+                        delete loadedPromos[i].newFile; // ลบตัวไฟล์ชั่วคราวก่อนบันทึก
+                    }
+                }
+
+                // บันทึกลง Firestore
+                await db.collection("settings").doc("promotions").set({
+                    list: loadedPromos,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                Swal.fire("สำเร็จ!", "บันทึกโปรโมชั่นเรียบร้อยแล้ว", "success");
+                loadHistoryData(); // โหลดใหม่
+            } catch (err) {
+                console.error("Save error:", err);
+                Swal.fire("เกิดข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้: " + err.message, "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="bi bi-save"></i> บันทึกการเปลี่ยนแปลง`;
+            }
+        }
+
+        function loadHistoryData() {
+            loadPromotions();
+        }
+    </script>
+</body>
+</html>
