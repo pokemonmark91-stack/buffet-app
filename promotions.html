@@ -99,7 +99,7 @@
             color: #666;
             line-height: 1.5;
             margin-bottom: 10px;
-            white-space: pre-line; /* รองรับการขึ้นบรรทัดใหม่ */
+            white-space: pre-line;
         }
 
         .promo-date {
@@ -146,13 +146,12 @@
         <p>สิทธิพิเศษและส่วนลดสำหรับลูกค้าคนสำคัญ</p>
     </div>
 
-    <!-- รายการโปรโมชั่น (ดึงจาก Firebase อัตโนมัติ) -->
+    <!-- รายการโปรโมชั่น -->
     <div class="promo-container" id="promoContainer">
         <div class="text-center text-muted py-5">กำลังโหลดข้อมูลโปรโมชั่น...</div>
     </div>
 
     <script>
-        // ⚠️ ตั้งค่า Firebase และ LIFF ID
         const firebaseConfig = {
             apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
             authDomain: "buffet-system-9b165.firebaseapp.com",
@@ -168,22 +167,29 @@
         const LIFF_ID = "2011490016-ri1occKX"; 
 
         async function initializeApp() {
+            const safetyTimer = setTimeout(() => {
+                const loader = document.getElementById('loading');
+                if (loader) loader.style.display = 'none';
+            }, 4000);
+
             try {
-                // 1. เริ่มต้น LIFF
-                await liff.init({ liffId: LIFF_ID });
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                    return;
+                try {
+                    await liff.init({ liffId: LIFF_ID });
+                    if (!liff.isLoggedIn() && /Mobi|Android/i.test(navigator.userAgent)) {
+                        liff.login();
+                        return;
+                    }
+                } catch (liffErr) {
+                    console.warn("LIFF Init warning:", liffErr);
                 }
 
-                // 2. โหลดข้อมูลโปรโมชั่นจาก Firestore
                 await loadDynamicPromotions();
 
             } catch (err) {
                 console.error('Initialization Error:', err);
                 document.getElementById('promoContainer').innerHTML = '<div class="text-center text-danger py-4">ไม่สามารถโหลดข้อมูลโปรโมชั่นได้</div>';
             } finally {
-                // ซ่อนหน้าจอ Loading
+                clearTimeout(safetyTimer);
                 document.getElementById('loading').style.display = 'none';
             }
         }
@@ -200,7 +206,6 @@
             }
 
             let promos = docSnap.data().list;
-            // กรองเอาเฉพาะโปรโมชั่นที่เปิดใช้งาน (active: true หรือไม่ได้ปิด)
             let activePromos = promos.filter(p => p.active !== false);
 
             if (activePromos.length === 0) {
@@ -211,10 +216,8 @@
             let html = "";
             activePromos.forEach(p => {
                 let imageUrl = p.imageUrl || "https://via.placeholder.com/400x200?text=No+Image";
-                let badge = p.badge ? <div class="promo-badge">${p.badge}</div> : "";
-                
-                // 🛠️ แยกเขียนเงื่อนไขวันหมดเขตข้างนอก เพื่อป้องกัน Backtick ชนกัน
-                let expiryHtml = p.expiry ? <div class="promo-date">📅 หมดเขต: ${p.expiry}</div> : "";
+                let badge = p.badge ? `<div class="promo-badge">${p.badge}</div>` : "";
+                let expiryHtml = p.expiry ? `<div class="promo-date">📅 หมดเขต: ${p.expiry}</div>` : "";
 
                 html += `
                     <div class="promo-card">
@@ -233,7 +236,6 @@
             container.innerHTML = html;
         }
 
-        // เริ่มการทำงานเมื่อเปิดหน้าเว็บ
         window.onload = initializeApp;
     </script>
 </body>
