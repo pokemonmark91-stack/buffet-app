@@ -46,7 +46,6 @@
     <!-- Firebase JS SDK (Compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
 
     <script>
         const firebaseConfig = {
@@ -60,7 +59,6 @@
         };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const storage = firebase.storage();
 
         let loadedPromos = [];
 
@@ -157,8 +155,7 @@
                 badge: "HOT 🔥",
                 expiry: "",
                 imageUrl: "",
-                active: true,
-                newFile: null
+                active: true
             });
             renderPromoCards();
         }
@@ -185,48 +182,39 @@
             loadedPromos[index][field] = value;
         }
 
-        // พรีวิวรูปภาพจากเครื่อง
+        // แปลงไฟล์รูปเป็น Base64 ทันทีที่เลือก
         function previewImage(event, index) {
             let file = event.target.files[0];
             if (file) {
-                loadedPromos[index].newFile = file; // เก็บไฟล์จริงไว้รออัปโหลดตอนกดบันทึก
                 let reader = new FileReader();
                 reader.onload = function(e) {
                     document.getElementById(`preview_${index}`).src = e.target.result;
-                    loadedPromos[index].imageUrl = e.target.result; // แสดงชั่วคราว
+                    loadedPromos[index].imageUrl = e.target.result; // บันทึกเก็บไว้ในตัวแปรทันที
                 }
                 reader.readAsDataURL(file);
             }
         }
 
-        // บันทึกข้อมูลทั้งหมดลง Firebase
+        // บันทึกข้อมูลทั้งหมดลง Firestore โดยตรง
         async function savePromotions() {
             const btn = document.getElementById('btnSave');
             btn.disabled = true;
             btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> กำลังบันทึก...`;
 
             try {
-                // วนลูปเช็กเพื่ออัปโหลดรูปภาพใหม่ขึ้น Firebase Storage (ถ้ามีเลือกไฟล์ใหม่มา)
-                for (let i = 0; i < loadedPromos.length; i++) {
-                    if (loadedPromos[i].newFile) {
-                        let file = loadedPromos[i].newFile;
-                        let storageRef = storage.ref(`promotions/${Date.now()}_${file.name}`);
-                        let snapshot = await storageRef.put(file);
-                        let downloadUrl = await snapshot.ref.getDownloadURL();
-                        
-                        loadedPromos[i].imageUrl = downloadUrl;
-                        delete loadedPromos[i].newFile; // ลบตัวไฟล์ชั่วคราวก่อนบันทึก
-                    }
-                }
-
-                // บันทึกลง Firestore
                 await db.collection("settings").doc("promotions").set({
                     list: loadedPromos,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                Swal.fire("สำเร็จ!", "บันทึกโปรโมชั่นเรียบร้อยแล้ว", "success");
-                loadHistoryData(); // โหลดใหม่
+                Swal.fire({
+                    title: "สำเร็จ!",
+                    text: "บันทึกโปรโมชั่นเรียบร้อยแล้ว",
+                    icon: "success",
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+                loadPromotions();
             } catch (err) {
                 console.error("Save error:", err);
                 Swal.fire("เกิดข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้: " + err.message, "error");
@@ -234,10 +222,6 @@
                 btn.disabled = false;
                 btn.innerHTML = `<i class="bi bi-save"></i> บันทึกการเปลี่ยนแปลง`;
             }
-        }
-
-        function loadHistoryData() {
-            loadPromotions();
         }
     </script>
 </body>
