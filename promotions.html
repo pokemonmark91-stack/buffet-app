@@ -62,14 +62,16 @@
             transition: transform 0.2s;
         }
 
-        .promo-image {
+            .promo-image {
             width: 100%;
-            height: 180px;
-            background-color: #eee;
-            background-size: cover;
+            aspect-ratio: 2 / 1; /* ล็อกสัดส่วนแบนเนอร์แนวนอนให้อัตโนมัติ */
+            background-color: #ffffff; /* พื้นหลังสีขาวรองรับขอบว่าง */
+            background-size: contain;  /* 👈 เปลี่ยนจาก cover เป็น contain เพื่อให้เห็นรูปครบทั้งใบ */
+            background-repeat: no-repeat;
             background-position: center;
             position: relative;
         }
+
 
         .promo-badge {
             position: absolute;
