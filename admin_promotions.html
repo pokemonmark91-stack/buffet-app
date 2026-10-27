@@ -29,7 +29,7 @@
 
         <!-- คำแนะนำ -->
         <div class="alert alert-info small mb-4">
-            💡 คุณสามารถเพิ่มโปรโมชั่นได้หลายรายการ กรอกข้อความ เลือกรูปภาพจากเครื่อง และกดสวิตช์เปิด/ปิดการแสดงผล จากนั้นกดปุ่ม <b>"บันทึกการเปลี่ยนแปลง"</b> ด้านบนขวา
+            💡 ระบบมีระบบย่อขนาดรูปภาพให้อัตโนมัติ สามารถเพิ่มโปรโมชั่น เลือกรูปจากเครื่อง และกดบันทึกได้ทันทีครับ
         </div>
 
         <!-- พื้นที่แสดงรายการโปรโมชั่น -->
@@ -118,7 +118,7 @@
                             <div class="col-md-3 text-center">
                                 <label class="form-label small fw-bold d-block text-start">รูปภาพโปรโมชั่น</label>
                                 <img src="${imageUrl}" class="preview-img mb-2" id="preview_${index}"><br>
-                                <input type="file" class="form-control form-control-sm" id="file_${index}" accept="image/*" onchange="previewImage(event, ${index})">
+                                <input type="file" class="form-control form-control-sm" id="file_${index}" accept="image/*" onchange="compressAndPreviewImage(event, ${index})">
                             </div>
                             <div class="col-md-9">
                                 <div class="row g-2">
@@ -182,14 +182,46 @@
             loadedPromos[index][field] = value;
         }
 
-        // แปลงไฟล์รูปเป็น Base64 ทันทีที่เลือก
-        function previewImage(event, index) {
+        // 🌟 ฟังก์ชันย่อขนาดและบีบอัดรูปภาพอัตโนมัติ (แก้ปัญหาไฟล์ใหญ่เกินไป)
+        function compressAndPreviewImage(event, index) {
             let file = event.target.files[0];
             if (file) {
                 let reader = new FileReader();
                 reader.onload = function(e) {
-                    document.getElementById(`preview_${index}`).src = e.target.result;
-                    loadedPromos[index].imageUrl = e.target.result; // บันทึกเก็บไว้ในตัวแปรทันที
+                    let img = new Image();
+                    img.src = e.target.result;
+                    img.onload = function() {
+                        let canvas = document.createElement('canvas');
+                        let ctx = canvas.getContext('2d');
+                        
+                        // กำหนดขนาดกว้างสูงสุดไม่เกิน 800px เพื่อให้ไฟล์มีขนาดเล็กกำลังดี
+                        let maxWidth = 800;
+                        let maxHeight = 800;
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        if (width > height) {
+                            if (width > maxWidth) {
+                                height *= maxWidth / width;
+                                width = maxWidth;
+                            }
+                        } else {
+                            if (height > maxHeight) {
+                                width *= maxHeight / height;
+                                height = maxHeight;
+                            }
+                        }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // บีบอัดเป็นไฟล์ JPEG คุณภาพ 0.7 (ขนาดจะลดลงเหลือไม่กี่ KB)
+                        let compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                        
+                        document.getElementById(`preview_${index}`).src = compressedDataUrl;
+                        loadedPromos[index].imageUrl = compressedDataUrl;
+                    }
                 }
                 reader.readAsDataURL(file);
             }
