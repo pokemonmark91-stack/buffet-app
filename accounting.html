@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บัญชีรายรับ-รายจ่าย - Owner Panel</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .summary-card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s; }
+        .summary-card:hover { transform: translateY(-3px); }
+        .table-card { background: white; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); padding: 20px; }
+        .badge-income { background-color: #d1e7dd; color: #0f5132; }
+        .badge-expense { background-color: #f8d7da; color: #842029; }
+    </style>
+</head>
+<body class="py-4">
+
+    <div class="container" style="max-width: 1000px;">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <a href="dashboard.html" class="btn btn-outline-secondary fw-bold"><i class="bi bi-arrow-left"></i> กลับหน้าหลัก</a>
+            <h3 class="fw-bold m-0 text-dark">📊 บัญชีรายรับ-รายจ่าย</h3>
+            <div class="d-flex gap-2">
+                <button onclick="openTransactionModal('income')" class="btn btn-success fw-bold"><i class="bi bi-plus-circle"></i> บันทึกรายรับ</button>
+                <button onclick="openTransactionModal('expense')" class="btn btn-danger fw-bold"><i class="bi bi-dash-circle"></i> บันทึกรายจ่าย</button>
+            </div>
+        </div>
+
+        <!-- แถบกรองวันที่ & ปุ่มพิเศษ -->
+        <div class="card shadow-sm border-0 mb-4 p-3 rounded-3">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">📅 ตั้งแต่วันที่</label>
+                    <input type="date" id="startDate" class="form-control form-control-sm" onchange="loadTransactions()">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">📅 ถึงวันที่</label>
+                    <input type="date" id="endDate" class="form-control form-control-sm" onchange="loadTransactions()">
+                </div>
+                <div class="col-md-4 text-md-end pt-3">
+                    <button onclick="exportToCSV()" class="btn btn-outline-primary btn-sm fw-bold me-1"><i class="bi bi-file-earmark-excel"></i> Export CSV</button>
+                    <button onclick="openCashDrawerModal()" class="btn btn-outline-dark btn-sm fw-bold"><i class="bi bi-cash-stack"></i> ปิดกะ/นับเงินสด</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- การ์ดสรุปภาพรวม -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card summary-card p-3 bg-white border-start border-success border-4">
+                    <span class="text-muted small fw-bold">รายรับรวม (Income)</span>
+                    <h3 class="fw-bold text-success mt-1 mb-0" id="totalIncome">0.00 ฿</h3>
+                    <div class="small text-muted mt-2">เงินสด: <span id="incomeCash">0.00</span> | เงินโอน: <span id="incomeTransfer">0.00</span></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card summary-card p-3 bg-white border-start border-danger border-4">
+                    <span class="text-muted small fw-bold">รายจ่ายรวม (Expense)</span>
+                    <h3 class="fw-bold text-danger mt-1 mb-0" id="totalExpense">0.00 ฿</h3>
+                    <div class="small text-muted mt-2">เงินสด: <span id="expenseCash">0.00</span> | เงินโอน: <span id="expenseTransfer">0.00</span></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card summary-card p-3 bg-white border-start border-primary border-4">
+                    <span class="text-muted small fw-bold">กำไรสุทธิ (Net Profit)</span>
+                    <h3 class="fw-bold text-primary mt-1 mb-0" id="netProfit">0.00 ฿</h3>
+                    <div class="small text-muted mt-2">รายรับ - รายจ่ายทั้งหมด</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ตารางประวัติรายการ -->
+        <div class="table-card">
+            <h5 class="fw-bold mb-3 text-secondary"><i class="bi bi-clock-history"></i> ประวัติรายการย้อนหลัง</h5>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>วันที่/เวลา</th>
+                                <th>ประเภท</th>
+                                <th>หัวข้อ / รายละเอียด</th>
+                                <th>ช่องทางชำระ</th>
+                                <th class="text-end">จำนวนเงิน</th>
+                                <th class="text-center">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionTableBody">
+                            <tr><td colspan="6" class="text-center py-4 text-muted">กำลังโหลดข้อมูล...</td></tr>
+                        </tbody>
+                    </table>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal บันทึก รายรับ/รายจ่าย -->
+    <div class="modal fade" id="transactionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="modalTitle">บันทึกรายการ</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="transType">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">หัวข้อ / รายละเอียด</label>
+                        <input type="text" id="transTitle" class="form-control" placeholder="เช่น ค่าเนื้อสด, ค่าแก๊ส, ขายหน้าร้าน">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">จำนวนเงิน (บาท)</label>
+                        <input type="number" id="transAmount" class="form-control" placeholder="0.00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">ช่องทางการชำระเงิน / แหล่งเงิน</label>
+                        <select id="transMethod" class="form-select">
+                            <option value="cash">เงินสด (Cash)</option>
+                            <option value="transfer">เงินโอน (Transfer)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="button" class="btn btn-primary fw-bold" onclick="saveTransaction()">บันทึกข้อมูล</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal นับเงินสดปิดกะ -->
+    <div class="modal fade" id="cashDrawerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-cash-stack"></i> ตรวจนับเงินสดในเก๊ะ (Cash Drawer)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">ระบบจะคำนวณเงินสดรับสุทธิ - เงินสดจ่ายสุทธิ ในช่วงวันที่เลือก</p>
+                    <div class="mb-3 p-3 bg-light rounded">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>ยอดเงินสดในระบบควรมี:</span>
+                            <strong id="expectedCash" class="text-primary">0.00 ฿</strong>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">นับเงินสดจริงในเก๊ะได้ (บาท)</label>
+                        <input type="number" id="actualCash" class="form-control form-control-lg" placeholder="0.00" oninput="calculateCashDiff()">
+                    </div>
+                    <div class="p-3 rounded text-center fw-bold" id="cashDiffBox" style="background: #e9ecef;">
+                        ผลต่าง: กรุณากรอกจำนวนเงินจริง
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCcSSovygMSoS6PYX_sS8T-7i62qvw_Agk",
+            authDomain: "buffet-system-9b165.firebaseapp.com",
+            projectId: "buffet-system-9b165",
+            storageBucket: "buffet-system-9b165.firebasestorage.app",
+            messagingSenderId: "144497251618",
+            appId: "1:144497251618:web:cf9e2984e4c6a11a3dc17b",
+            measurementId: "G-82JK3EL1HL"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        let allTransactions = [];
+        let transModal;
+
+        window.onload = function() {
+            transModal = new bootstrap.Modal(document.getElementById('transactionModal'));
+            
+            // ตั้งค่าวันที่เริ่มต้นเป็นวันแรกของเดือน และวันสิ้นสุดเป็นวันนี้
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const today = now.toISOString().split('T')[0];
+            
+            document.getElementById('startDate').value = firstDay;
+            document.getElementById('endDate').value = today;
+
+            loadTransactions();
+        };
+
+        // โหลดข้อมูลจาก Firestore ตามช่วงวันที่เลือก
+        async function loadTransactions() {
+            const startStr = document.getElementById('startDate').value;
+            const endStr = document.getElementById('endDate').value;
+
+            try {
+                const snapshot = await db.collection("accounting").orderBy("timestamp", "desc").get();
+                allTransactions = [];
+
+                snapshot.forEach(doc => {
+                    let data = doc.data();
+                    data.id = doc.id;
+                    allTransactions.push(data);
+                });
+
+                // กรองตามวันที่
+                let filtered = allTransactions.filter(item => {
+                    if (!item.timestamp) return false;
+                    let itemDate = item.timestamp.toDate().toISOString().split('T')[0];
+                    return itemDate >= startStr && itemDate <= endStr;
+                });
+
+                renderTable(filtered);
+                calculateSummary(filtered);
+
+            } catch (err) {
+                console.error("Load error:", err);
+                Swal.fire("ข้อผิดพลาด", "ไม่สามารถโหลดข้อมูลบัญชีได้", "error");
+            }
+        }
+
+        // แสดงผลตาราง
+        function renderTable(list) {
+            const tbody = document.getElementById('transactionTableBody');
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">ไม่พบรายการในช่วงเวลาดังกล่าว</td></tr>`;
+                return;
+            }
+
+            let html = "";
+            list.forEach(item => {
+                let dateObj = item.timestamp ? item.timestamp.toDate() : new Date();
+                let dateStr = dateObj.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+                
+                let typeBadge = item.type === 'income' 
+                    ? `<span class="badge badge-income px-2 py-1">รายรับ</span>` 
+                    : `<span class="badge badge-expense px-2 py-1">รายจ่าย</span>`;
+                
+                let methodText = item.method === 'cash' ? '💵 เงินสด' : '💳 เงินโอน';
+                let amountColor = item.type === 'income' ? 'text-success' : 'text-danger';
+                let prefix = item.type === 'income' ? '+' : '-';
+
+                html += `
+                    <tr>
+                        <td>${dateStr}</td>
+                        <td>${typeBadge}</td>
+                        <td class="fw-bold">${item.title || '-'}</td>
+                        <td>${methodText}</td>
+                        <td class="text-end fw-bold ${amountColor}">${prefix}${Number(item.amount).toLocaleString('th-TH', {minimumFractionDigits: 2})} ฿</td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-danger btn-sm" onclick="deleteTransaction('${item.id}')" title="ลบรายการ"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // คำนวณสรุปยอด
+        function calculateSummary(list) {
+            let incCash = 0, incTrans = 0, expCash = 0, expTrans = 0;
+
+            list.forEach(item => {
+                let amt = Number(item.amount) || 0;
+                if (item.type === 'income') {
+                    if (item.method === 'cash') incCash += amt;
+                    else incTrans += amt;
+                } else {
+                    if (item.method === 'cash') expCash += amt;
+                    else expTrans += amt;
+                }
+            });
+
+            let totalInc = incCash + incTrans;
+            let totalExp = expCash + expTrans;
+            let net = totalInc - totalExp;
+
+            document.getElementById('totalIncome').innerText = totalInc.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
+            document.getElementById('incomeCash').innerText = incCash.toLocaleString('th-TH', {minimumFractionDigits: 2});
+            document.getElementById('incomeTransfer').innerText = incTrans.toLocaleString('th-TH', {minimumFractionDigits: 2});
+
+            document.getElementById('totalExpense').innerText = totalExp.toLocaleString('th-TH', {minimumFractionDigits: 2});
+            document.getElementById('expenseCash').innerText = expCash.toLocaleString('th-TH', {minimumFractionDigits: 2});
+            document.getElementById('expenseTransfer').innerText = expTrans.toLocaleString('th-TH', {minimumFractionDigits: 2});
+
+            let netProfitEl = document.getElementById('netProfit');
+            netProfitEl.innerText = net.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
+            netProfitEl.className = net >= 0 ? "fw-bold text-success mt-1 mb-0" : "fw-bold text-danger mt-1 mb-0";
+        }
+
+        // เปิด Modal บันทึก
+        function openTransactionModal(type) {
+            document.getElementById('transType').value = type;
+            document.getElementById('modalTitle').innerText = type === 'income' ? '💰 บันทึกรายรับ' : '💸 บันทึกรายจ่าย';
+            document.getElementById('transTitle').value = '';
+            document.getElementById('transAmount').value = '';
+            document.getElementById('transMethod').value = 'cash';
+            transModal.show();
+        }
+
+        // บันทึกลง Firestore
+        async function saveTransaction() {
+            let type = document.getElementById('transType').value;
+            let title = document.getElementById('transTitle').value.trim();
+            let amount = parseFloat(document.getElementById('transAmount').value);
+            let method = document.getElementById('transMethod').value;
+
+            if (!title || isNaN(amount) || amount <= 0) {
+                Swal.fire("แจ้งเตือน", "กรุณากรอกหัวข้อและจำนวนเงินให้ถูกต้อง", "warning");
+                return;
+            }
+
+            try {
+                await db.collection("accounting").add({
+                    type: type,
+                    title: title,
+                    amount: amount,
+                    method: method,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                transModal.hide();
+                Swal.fire({ title: "สำเร็จ", icon: "success", timer: 1200, showConfirmButton: false });
+                loadTransactions();
+            } catch (err) {
+                console.error("Save error:", err);
+                Swal.fire("ข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้", "error");
+            }
+        }
+
+        // ลบรายการ
+        async function deleteTransaction(id) {
+            Swal.fire({
+                title: "ยืนยันการลบ?",
+                text: "ต้องการลบรายการนี้ใช่หรือไม่",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "ลบ",
+                cancelButtonText: "ยกเลิก"
+            }).then(async (res) => {
+                if (res.isConfirmed) {
+                    try {
+                        await db.collection("accounting").doc(id).delete();
+                        loadTransactions();
+                        Swal.fire({ title: "ลบสำเร็จ", icon: "success", timer: 1000, showConfirmButton: false });
+                    } catch (err) {
+                        Swal.fire("ข้อผิดพลาด", "ไม่สามารถลบข้อมูลได้", "error");
+                    }
+                }
+            });
+        }
+
+        // ฟังก์ชันเปิดตารางตรวจนับเงินสดปิดกะ
+        function openCashDrawerModal() {
+            let startStr = document.getElementById('startDate').value;
+            let endStr = document.getElementById('endDate').value;
+
+            let filtered = allTransactions.filter(item => {
+                if (!item.timestamp) return false;
+                let itemDate = item.timestamp.toDate().toISOString().split('T')[0];
+                return itemDate >= startStr && itemDate <= endStr;
+            });
+
+            let cashInc = 0;
+            let cashExp = 0;
+            filtered.forEach(item => {
+                if (item.method === 'cash') {
+                    if (item.type === 'income') cashInc += Number(item.amount) || 0;
+                    else cashExp += Number(item.amount) || 0;
+                }
+            });
+
+            let expected = cashInc - cashExp;
+            document.getElementById('expectedCash').innerText = expected.toLocaleString('th-TH', {minimumFractionDigits: 2}) + ' ฿';
+            document.getElementById('actualCash').value = '';
+            document.getElementById('cashDiffBox').innerHTML = 'ผลต่าง: กรุณากรอกจำนวนเงินจริง';
+            document.getElementById('cashDiffBox').style.background = '#e9ecef';
+
+            window.expectedCashDrawer = expected;
+            new bootstrap.Modal(document.getElementById('cashDrawerModal')).show();
+        }
+
+        // คำนวณผลต่างเงินสด
+        function calculateCashDiff() {
+            let actual = parseFloat(document.getElementById('actualCash').value) || 0;
+            let expected = window.expectedCashDrawer || 0;
+            let diff = actual - expected;
+
+            let box = document.getElementById('cashDiffBox');
+            if (diff === 0) {
+                box.innerHTML = `✅ เงินสดตรงกันพอดีเป๊ะ!`;
+                box.style.background = '#d1e7dd';
+                box.style.color = '#0f5132';
+            } else if (diff > 0) {
+                box.innerHTML = `⚠️ เงินเกินมา: +${diff.toLocaleString('th-TH', {minimumFractionDigits: 2})} ฿`;
+                box.style.background = '#fff3cd';
+                box.style.color = '#856404';
+            } else {
+                box.innerHTML = `❌ เงินขาดไป: ${diff.toLocaleString('th-TH', {minimumFractionDigits: 2})} ฿`;
+                box.style.background = '#f8d7da';
+                box.style.color = '#842029';
+            }
+        }
+
+        // Export เป็น CSV
+        function exportToCSV() {
+            if (allTransactions.length === 0) {
+                Swal.fire("แจ้งเตือน", "ไม่มีข้อมูลสำหรับ Export", "warning");
+                return;
+            }
+
+            let csvContent = "\uFEFF" + "Date,Type,Title,Method,Amount\n";
+            allTransactions.forEach(item => {
+                let dateStr = item.timestamp ? item.timestamp.toDate().toISOString() : '';
+                let type = item.type;
+                let title = `"${(item.title || '').replace(/"/g, '""')}"`;
+                let method = item.method;
+                let amount = item.amount;
+                csvContent += `${dateStr},${type},${title},${method},${amount}\n`;
+            });
+
+            let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = `accounting_report_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>
